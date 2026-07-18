@@ -1,0 +1,312 @@
+{
+  "schema_version": 1,
+  "roadmap": "Phase 0.5 through Phase 4",
+  "projects": {
+    "TabOut": {
+      "video": "E:\\Projects\\IP\\HongRun\\videos\\tabout-browser-extension\\variants\\preserve-v2\\exports\\tabout-preserve-v2-social-normalized.mp4",
+      "probe": {
+        "duration": 372.1,
+        "dimensions": [
+          1920,
+          1080
+        ],
+        "orientation": "landscape",
+        "audio_present": true
+      },
+      "platforms": [
+        {
+          "platform": "douyin",
+          "passed": true,
+          "recommendation_warnings": [],
+          "preset_version": "2026.07.12-1",
+          "preset_verified_on": "2026-07-12",
+          "media": "E:\\Projects\\IP\\HongRun\\videos\\tabout-browser-extension\\variants\\preserve-v2\\exports\\tabout-preserve-v2-social-normalized.mp4"
+        },
+        {
+          "platform": "wechat_channels",
+          "passed": true,
+          "recommendation_warnings": [],
+          "preset_version": "2026.07.12-1",
+          "preset_verified_on": "2026-07-12",
+          "media": "E:\\Projects\\IP\\HongRun\\videos\\tabout-browser-extension\\variants\\preserve-v2\\exports\\tabout-preserve-v2-social-normalized.mp4"
+        }
+      ],
+      "hyperframes": {
+        "ok": true,
+        "strict": false,
+        "lint": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 2,
+          "infoCount": 0,
+          "findings": [
+            {
+              "code": "timeline_track_too_dense",
+              "severity": "warning",
+              "message": "Track 4 has 5 timed elements in this HTML file. Smaller sub-compositions keep timelines easier to read, iterate on, and diff.",
+              "selector": "[data-composition-id]",
+              "dataAttributes": {},
+              "sourceFile": "E:\\Projects\\IP\\HongRun\\videos\\tabout-browser-extension\\variants\\preserve-v2\\hyperframes\\index.html",
+              "bbox": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              },
+              "time": 0,
+              "fixHint": "Move coherent scene groups into separate .html files under compositions/ and mount them from the parent with data-composition-src so the timeline stays easier to inspect, revise, and validate."
+            },
+            {
+              "code": "timeline_track_too_dense",
+              "severity": "warning",
+              "message": "Track 5 has 35 timed elements in this HTML file. Smaller sub-compositions keep timelines easier to read, iterate on, and diff.",
+              "selector": "[data-composition-id]",
+              "dataAttributes": {},
+              "sourceFile": "E:\\Projects\\IP\\HongRun\\videos\\tabout-browser-extension\\variants\\preserve-v2\\hyperframes\\index.html",
+              "bbox": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              },
+              "time": 0,
+              "fixHint": "Move coherent scene groups into separate .html files under compositions/ and mount them from the parent with data-composition-src so the timeline stays easier to inspect, revise, and validate."
+            }
+          ],
+          "filesScanned": 1
+        },
+        "runtime": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "infoCount": 0,
+          "findings": []
+        },
+        "layout": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "infoCount": 0,
+          "findings": [],
+          "duration": 371.99,
+          "samples": [
+            20.666,
+            61.998,
+            103.331,
+            144.663,
+            185.995,
+            227.327,
+            268.659,
+            309.992,
+            351.324
+          ],
+          "transitionSamples": [],
+          "transitionSamplesDropped": 0,
+          "tolerance": 2,
+          "totalIssueCount": 0,
+          "truncated": false
+        },
+        "motion": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "infoCount": 0,
+          "findings": [],
+          "enabled": true,
+          "specPath": "E:\\Projects\\IP\\HongRun\\videos\\tabout-browser-extension\\variants\\preserve-v2\\hyperframes\\index.motion.json",
+          "samples": 300
+        },
+        "contrast": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "infoCount": 0,
+          "findings": [],
+          "enabled": true,
+          "samples": [
+            20.666,
+            103.331,
+            185.995,
+            268.659,
+            351.324
+          ],
+          "checked": 11,
+          "passed": 11
+        },
+        "snapshots": {
+          "enabled": false,
+          "files": [],
+          "times": [],
+          "findingFiles": []
+        },
+        "_meta": {
+          "version": "0.7.55",
+          "latestVersion": "0.7.55",
+          "updateAvailable": false
+        },
+        "process_exit_code": 0
+      }
+    },
+    "talk-with-gpt-live": {
+      "video": "E:\\Projects\\IP\\HongRun\\videos\\talk-with-gpt-live\\exports\\talk-with-gpt-live-social-normalized.mp4",
+      "probe": {
+        "duration": 392.301,
+        "dimensions": [
+          1080,
+          1920
+        ],
+        "orientation": "portrait",
+        "audio_present": true
+      },
+      "platforms": [
+        {
+          "platform": "douyin",
+          "passed": true,
+          "recommendation_warnings": [],
+          "preset_version": "2026.07.12-1",
+          "preset_verified_on": "2026-07-12",
+          "media": "E:\\Projects\\IP\\HongRun\\videos\\talk-with-gpt-live\\exports\\talk-with-gpt-live-social-normalized.mp4"
+        },
+        {
+          "platform": "wechat_channels",
+          "passed": true,
+          "recommendation_warnings": [],
+          "preset_version": "2026.07.12-1",
+          "preset_verified_on": "2026-07-12",
+          "media": "E:\\Projects\\IP\\HongRun\\videos\\talk-with-gpt-live\\exports\\talk-with-gpt-live-social-normalized.mp4"
+        }
+      ],
+      "hyperframes": {
+        "ok": true,
+        "strict": false,
+        "lint": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 1,
+          "infoCount": 0,
+          "findings": [
+            {
+              "code": "timeline_track_too_dense",
+              "severity": "warning",
+              "message": "Track 4 has 5 timed elements in this HTML file. Smaller sub-compositions keep timelines easier to read, iterate on, and diff.",
+              "selector": "[data-composition-id]",
+              "dataAttributes": {},
+              "sourceFile": "E:\\Projects\\IP\\HongRun\\videos\\talk-with-gpt-live\\hyperframes\\index.html",
+              "bbox": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              },
+              "time": 0,
+              "fixHint": "Move coherent scene groups into separate .html files under compositions/ and mount them from the parent with data-composition-src so the timeline stays easier to inspect, revise, and validate."
+            }
+          ],
+          "filesScanned": 1
+        },
+        "runtime": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "infoCount": 0,
+          "findings": []
+        },
+        "layout": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "infoCount": 0,
+          "findings": [],
+          "duration": 392.255,
+          "samples": [
+            21.792,
+            65.376,
+            108.96,
+            152.544,
+            196.128,
+            239.711,
+            283.295,
+            326.879,
+            370.463
+          ],
+          "transitionSamples": [],
+          "transitionSamplesDropped": 0,
+          "tolerance": 2,
+          "totalIssueCount": 0,
+          "truncated": false
+        },
+        "motion": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "infoCount": 0,
+          "findings": [],
+          "enabled": false,
+          "samples": 0
+        },
+        "contrast": {
+          "ok": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "infoCount": 0,
+          "findings": [],
+          "enabled": true,
+          "samples": [
+            21.792,
+            108.96,
+            196.128,
+            283.295,
+            370.463
+          ],
+          "checked": 4,
+          "passed": 4
+        },
+        "snapshots": {
+          "enabled": false,
+          "files": [],
+          "times": [],
+          "findingFiles": []
+        },
+        "_meta": {
+          "version": "0.7.55",
+          "latestVersion": "0.7.55",
+          "updateAvailable": false
+        },
+        "process_exit_code": 0
+      }
+    }
+  },
+  "checks": {
+    "opposite_orientations": true,
+    "both_videos_over_six_minutes_with_audio": true,
+    "both_hyperframes_projects_pass": true,
+    "both_platform_packages_pass_without_recommendation_warnings": true,
+    "both_covers_use_reference_guided_generation": true,
+    "both_generative_cover_ab_reports_pass": true,
+    "design_tokens_exist_for_both": true,
+    "tabout_components_and_motion_qa_pass": true,
+    "talk_subject_tracking_and_reference_guided_cover_exist": true,
+    "cache_interruption_resumed_without_extraction": true,
+    "approved_preferences_applied_to_both": true,
+    "preserve_pacing_audits_do_not_change_edl": true,
+    "publishing_remains_explicit": true
+  },
+  "review_warnings": [
+    {
+      "project": "TabOut",
+      "kind": "optional_platform_ui_template",
+      "finding_count": 3,
+      "evidence": "E:\\Projects\\IP\\HongRun\\videos\\tabout-browser-extension\\variants\\preserve-v2\\edit\\reports\\occlusion-wechat-channels.json",
+      "action": "review caption and facecam against the current WeChat Channels UI before publishing"
+    },
+    {
+      "project": "talk-with-gpt-live",
+      "kind": "optional_platform_ui_template",
+      "finding_count": 2,
+      "evidence": "E:\\Projects\\IP\\HongRun\\videos\\talk-with-gpt-live\\edit\\reports\\occlusion-douyin.json",
+      "action": "review burned captions against the current Douyin description and action zones before publishing"
+    }
+  ],
+  "passed": true,
+  "external_actions_performed": []
+}

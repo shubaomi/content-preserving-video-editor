@@ -1,0 +1,28 @@
+version: 1
+profile_id: example-person
+display_name: Example Person
+
+paths:
+  root: E:\Media\IP\ExamplePerson
+  character: shared\character
+  generated_assets: shared\generated
+  intro: shared\brand\intro
+  outro: shared\brand\outro
+  motion_presets: shared\brand\motion-presets
+  audio: shared\audio
+  fonts: shared\fonts
+  hyperframes_templates: shared\templates\hyperframes
+  videos: videos
+
+character:
+  main_anchor: shared\character\01-character-main-anchor.png
+  spec_board: shared\character\02-character-spec-board.png
+  action_sheet: shared\character\03-action-expression-small-scene.png
+  status: confirmed
+
+video_defaults:
+  edit_mode: preserve
+  aspect_ratio: "16:9"
+  resolution: 1920x1080
+  fps: 30
+

@@ -1,0 +1,14 @@
+version: 1
+video_id: legacy-project
+paths:
+  root: .
+  work: work
+  edit: edit
+  exports: exports
+source:
+  primary_video: source/input.mp4
+  input_mode: raw
+editing:
+  mode: preserve
+delivery:
+  output: exports/legacy-project-universal.mp4

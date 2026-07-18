@@ -1,0 +1,118 @@
+schema_version: 3
+version: 3
+video_id: example-video
+title: Example Video
+profile: ..\..\profile.yaml
+
+paths:
+  root: E:\Media\IP\ExamplePerson\videos\example-video
+  source: source
+  edit: edit
+  hyperframes: hyperframes
+  scripts: scripts
+  work: work
+  exports: exports
+
+source:
+  primary_video: source\input.mp4
+
+workflow:
+  input_mode: source_first
+
+editing:
+  mode: preserve
+  require_cut_report: true
+  require_tail_coverage_check: true
+  allow_long_semantic_deletion_without_confirmation: false
+
+analysis:
+  transcription:
+    preferred: local_faster_whisper
+    optional: [funclip_funasr]
+  cut_candidates:
+    auto_editor:
+      enabled: auto
+      analysis_only: true
+  nle:
+    video_use: conditional
+
+visuals:
+  ip_opportunity_audit_required: true
+  theme_asset_mode: content_specific
+  character_reference_only: true
+  generated_asset_root: edit\assets\ip-generated
+  generated_aspect_ratio: match_video_canvas
+  semantic_dedup_required: true
+  default_integration_mode: pip-card
+  full_canvas_only_for_chapter_bridge: true
+  match_design_tokens: true
+  prefer_transparent_or_scene_matched_background: true
+
+layout:
+  orientation: auto_from_display_metadata
+  preserve_source_orientation: true
+  standard_canvas: auto
+
+delivery:
+  mode: autonomous_pre_publish
+  max_automatic_repairs: 2
+  render_after_automated_qa: true
+  manual_finish:
+    enabled: false
+    backend: none
+    returned_final: null
+    modifications: []
+    assets: {}
+
+qa:
+  preview_render_parity:
+    tolerances:
+      position_px: 4.0
+      size_px: 4.0
+      time_seconds: 0.05
+
+cover:
+  enabled: true
+  identity_mode: authorized_real_photo
+  style: cinematic_movie_poster
+  aspect_ratio: "9:16"
+  hand_drawn_ip: optional
+  preserve_original_face_pixels: true
+  generate_background_separately: true
+  identity_qa_before_aesthetic_qa: true
+
+hyperframes:
+  studio_entry: hyperframes\index.html
+  overlay_source: hyperframes\overlay-source.html.txt
+
+audio:
+  sfx:
+    enabled: true
+    volume: 0.28
+    max_cues_per_minute: 6
+    max_event_ratio: 0.35
+    same_file_cooldown_seconds: 20
+  bgm:
+    enabled_by_default: true
+    optional: true
+    asset: null
+    providers: [heygen, minimax, musicgen]
+    stop_after_first_success: true
+    preview_volume: 0.1
+    ducking:
+      enabled: true
+      method: sidechaincompress
+      threshold: 0.03
+      ratio: 8
+      attack_ms: 200
+      release_ms: 400
+
+editable_motion:
+  require_separate_layout_and_motion_layers: true
+  profile: adaptive_dynamic
+  event_rate_policy: advisory_ceiling
+  recommended_events_per_minute:
+    screen_tutorial: [4, 10]
+    polish_existing: [3, 7]
+  maximum_visual_quiet_gap_seconds: 12
+  anchor_repeat_cooldown_seconds: 40

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "principle": "Choose a compact high-confidence semantic purpose first, then use a renderer-implemented family and variant; never rotate only to satisfy variety or density.",
+  "families": {
+    "kinetic_text": {
+      "variants": ["keyword_sweep", "weight_pulse", "scale_pop", "underline_draw", "count_up", "contrast_split"],
+      "best_for": ["conclusion", "contrast", "number", "key_term"]
+    },
+    "semantic_icon": {
+      "variants": ["icon_pop", "icon_orbit", "icon_path", "badge_reveal"],
+      "best_for": ["tool", "action", "status"]
+    },
+    "ui_attention": {
+      "variants": ["cursor_click", "focus_ring", "spotlight_follow", "tooltip_attach", "progress_step"],
+      "best_for": ["click", "ui_verb", "popup", "page_change"]
+    },
+    "camera_motion": {
+      "variants": ["micro_push", "micro_pan", "focus_drift", "freeze_emphasis"],
+      "best_for": ["detail", "reaction", "key_screen_region"]
+    },
+    "structure": {
+      "variants": ["step_rail", "chapter_chip", "compare_split", "cause_effect_link", "checklist_tick"],
+      "best_for": ["steps", "causality", "structure"]
+    },
+    "ip_visual": {
+      "variants": ["transparent_character_peek", "diagram_card", "mini_scene_window", "thought_bubble"],
+      "best_for": ["mental_model", "abstract_concept", "chapter_bridge"]
+    },
+    "chapter_transition": {
+      "variants": ["soft_wipe", "card_flip", "line_travel", "section_reveal"],
+      "best_for": ["chapter_boundary", "topic_shift"]
+    }
+  },
+  "renderer_contract": {
+    "nesting": ["host", "motion_wrapper", "editable_surface"],
+    "timing_attributes": ["data-start", "data-duration", "data-track-index", "clip"],
+    "forbid": ["one-size-fits-all entrance", "name-only variant without renderer behavior", "density filler", "unresolved geometry", "layout overflow or occlusion opt-out", "full_canvas_topic_image_except_chapter_bridge", "nondeterministic_timing"]
+  }
+}

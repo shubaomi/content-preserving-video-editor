@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "template_version": "2026.07.12-1",
+  "verified_on": "2026-07-12",
+  "templates": {
+    "douyin": {
+      "portrait": [
+        {"id": "right-actions", "x0": 0.78, "y0": 0.34, "x1": 1.0, "y1": 0.88},
+        {"id": "description", "x0": 0.0, "y0": 0.76, "x1": 0.86, "y1": 1.0},
+        {"id": "top-controls", "x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 0.1}
+      ],
+      "landscape": [
+        {"id": "right-actions", "x0": 0.88, "y0": 0.24, "x1": 1.0, "y1": 0.9},
+        {"id": "description", "x0": 0.0, "y0": 0.78, "x1": 0.8, "y1": 1.0}
+      ]
+    },
+    "wechat_channels": {
+      "portrait": [
+        {"id": "right-actions", "x0": 0.82, "y0": 0.36, "x1": 1.0, "y1": 0.86},
+        {"id": "description", "x0": 0.0, "y0": 0.78, "x1": 0.9, "y1": 1.0}
+      ],
+      "landscape": [
+        {"id": "right-actions", "x0": 0.9, "y0": 0.28, "x1": 1.0, "y1": 0.88},
+        {"id": "description", "x0": 0.0, "y0": 0.8, "x1": 0.84, "y1": 1.0}
+      ]
+    }
+  },
+  "status": "optional_engineering_templates_not_platform_guarantees"
+}

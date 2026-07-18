@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "license_policy": "Only local, generated, or explicitly authorized assets may be used. Final plans contain local frozen paths and hashes, never remote URLs.",
+  "mix_policy": {
+    "target_lufs": -24,
+    "true_peak_dbtp": -3,
+    "trim_leading_silence": true,
+    "same_file_cooldown_seconds": 20,
+    "target_cues_per_minute": [3, 6],
+    "visual_event_sound_ratio": [0.35, 0.55],
+    "speech_priority": "duck_or_skip_when_speech_masking_risk"
+  },
+  "families": {
+    "click_switch": {"variants": ["click-soft-a.wav", "switch-soft-b.wav"], "uses": ["cursor_click", "toggle", "page_change"]},
+    "pop_pluck": {"variants": ["pop-soft-a.wav", "pluck-soft-b.wav"], "uses": ["icon_pop", "badge_reveal", "keyword"]},
+    "short_whoosh": {"variants": ["whoosh-up-a.wav", "whoosh-side-b.wav"], "uses": ["entrance", "transition"]},
+    "tick": {"variants": ["tick-a.wav", "tick-b.wav"], "uses": ["checklist", "count", "progress_step"]},
+    "marker_scratch": {"variants": ["marker-a.wav", "marker-b.wav"], "uses": ["underline_draw", "annotation"]},
+    "soft_impact": {"variants": ["impact-soft-a.wav", "impact-soft-b.wav"], "uses": ["conclusion", "freeze_emphasis"]},
+    "chime": {"variants": ["chime-bright-a.wav", "chime-soft-b.wav"], "uses": ["success", "chapter"]},
+    "riser_downlifter": {"variants": ["riser-short-a.wav", "downlifter-soft-b.wav"], "uses": ["chapter_transition"]},
+    "subtle_glitch": {"variants": ["glitch-subtle-a.wav", "glitch-subtle-b.wav"], "uses": ["actual_error_state_only"]}
+  }
+}

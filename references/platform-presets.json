@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "preset_version": "2026.07.12-1",
+  "verified_on": "2026-07-12",
+  "platforms": {
+    "douyin": {
+      "canvas_policy": "preserve_source_orientation",
+      "minimum_short_edge": 720,
+      "accepted_ratio_range": [0.454545, 2.2],
+      "video": {"container": "mp4", "codec": "h264", "pixel_format": "yuv420p", "fps": [25, 30], "crf_range": [18, 23], "recommended_max_bitrate_mbps": 10},
+      "audio": {"codec": "aac", "sample_rate": 48000, "channels": 2, "loudness_lufs": -14, "true_peak_dbtp": -1.5},
+      "caption_safe_zone": {"x0": 0.08, "y0": 0.08, "x1": 0.78, "y1": 0.78},
+      "cover": {"ratio": "9:16", "width": 1080, "height": 1920, "center_safe": {"x0": 0.0833, "y0": 0.08, "x1": 0.9167, "y1": 0.92}},
+      "file_size_warning_bytes": 4294967296,
+      "metadata": {"title_max_recommendation": 55, "hashtags_max_recommendation": 5},
+      "sources": [
+        {"url": "https://open.douyin.com/platform/resource/docs/openapi/video-management/douyin/create/upload/", "publisher": "Douyin Open Platform", "verified_on": "2026-07-12", "supports": ["mp4_or_webm", "720p_or_above", "duration_up_to_15_minutes_for_api", "direct_upload_128MB", "chunked_upload_up_to_4GB"]},
+        {"url": "https://open.douyin.com/platform/resource/docs/develop/share/ios-share-with-douyin", "publisher": "Douyin Open Platform", "verified_on": "2026-07-12", "supports": ["ratio_between_1_over_2_2_and_2_2", "duration_over_3_seconds"]}
+      ],
+      "recommendation_fields": ["recommended_max_bitrate_mbps", "loudness_lufs", "true_peak_dbtp", "caption_safe_zone", "cover", "metadata"]
+    },
+    "wechat_channels": {
+      "canvas_policy": "preserve_source_orientation",
+      "minimum_short_edge": 720,
+      "accepted_ratio_range": [0.454545, 2.2],
+      "video": {"container": "mp4", "codec": "h264", "pixel_format": "yuv420p", "fps": [25, 30], "crf_range": [18, 23], "recommended_max_bitrate_mbps": 10},
+      "audio": {"codec": "aac", "sample_rate": 48000, "channels": 2, "loudness_lufs": -14, "true_peak_dbtp": -1.5},
+      "caption_safe_zone": {"x0": 0.08, "y0": 0.08, "x1": 0.86, "y1": 0.78},
+      "cover": {"ratio": "9:16", "width": 1080, "height": 1920, "center_safe": {"x0": 0.0833, "y0": 0.08, "x1": 0.9167, "y1": 0.92}},
+      "file_size_warning_bytes": 2147483648,
+      "metadata": {"title_max_recommendation": 50, "hashtags_max_recommendation": 3},
+      "sources": [
+        {"url": "https://channels.weixin.qq.com/", "publisher": "WeChat Channels", "verified_on": "2026-07-12", "supports": ["official_creator_entry"], "public_spec_status": "complete_current_upload_limits_not_publicly_available_without_authenticated_UI"}
+      ],
+      "recommendation_fields": ["minimum_short_edge", "accepted_ratio_range", "video", "audio", "caption_safe_zone", "cover", "file_size_warning_bytes", "metadata"]
+    }
+  }
+}

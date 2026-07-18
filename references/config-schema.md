@@ -1,0 +1,170 @@
+# Configuration Schema
+
+Use versioned YAML and relative asset paths where practical. Resolve relative paths from the declaring file.
+
+## Versioning and migration
+
+The current project schema is version 3. New projects write both
+`schema_version: 3` and `version: 3`. Legacy projects that only contain
+`version: 1` or `version: 2` are deep-copied and migrated in memory before
+validation or execution. Migration adds defaults but never rewrites the user's
+existing `project.yaml`. Reject unknown future versions rather than guessing.
+
+## Profile
+
+Require `version`, `profile_id`, `paths.root`, and `paths.videos`. Optionally declare shared character, generated assets, intro, outro, motion presets, audio, fonts, and HyperFrames templates.
+
+Allow `character.main_anchor`, `spec_board`, `action_sheet`, `avatar`, `identity`, and `status`. Treat a status beginning with `confirmed` as approved provenance; reject identity-sensitive generation when files are missing or status is unconfirmed.
+When `main_anchor`, `spec_board`, or `action_sheet` is declared, resolve it from `paths.root` and require the file to exist before generation.
+
+## Project
+
+Require `schema_version`, `version`, `video_id`, `paths.root`, `paths.source`, `paths.edit`, `paths.hyperframes`, `paths.work`, `paths.exports`, `source.primary_video`, and `editing.mode` for new projects. Legacy projects may omit `schema_version` and receive it in memory.
+
+Accept only `preserve`, `balanced`, or `tight`. Default to `preserve`. Resolve `profile` relative to `project.yaml`; resolve media relative to `paths.root`.
+
+Allow `profile: null` for generic videos and skip IP-specific steps.
+
+Allow `workflow.input_mode: source_first` or `polish_existing`. Use `polish_existing` for already edited or published masters. In that mode, preserve the supplied timeline and require explicit reasons for replacing existing captions, BGM, cover, or cuts.
+
+Allow `editing.caption_punctuation: spoken_clean`, `source`, or `none`. Default
+to `spoken_clean`: punctuation still controls semantic sentence boundaries, but
+displayed commas, full stops, semicolons, and colons are hidden; question and
+exclamation marks remain when they carry spoken tone. `none` is an explicit
+project choice and removes all displayed punctuation without changing word
+timings or sentence segmentation.
+
+## Audio
+
+Allow project-level `audio.sfx` and `audio.bgm` settings. Recommended defaults:
+
+- `sfx.enabled: true`, volume `0.2–0.35`, a default ceiling of 6 selected visual
+  events per minute, and `max_event_ratio: 1.0` because the ratio applies only
+  after the semantic planner has accepted an event;
+- `sfx.target_event_coverage: 1.0`; require a cue decision for every non-quiet
+  event, with `intentionally_silent` reserved for evidenced exceptions;
+- `sfx.minimum_unique_asset_ratio: 0.8`,
+  `minimum_cue_duration_seconds: 0.8`,
+  `minimum_post_gain_mean_dbfs: -34`, and
+  `maximum_post_gain_mean_dbfs: -18`;
+- `bgm.enabled_by_default: true`, `optional: true`, preview volume `0.08–0.12` for speech video;
+- `bgm.asset: null` until the director's licensed-media resolver selects a local file;
+- `bgm.ducking.enabled: true`, with provider and parameters recorded;
+- `bgm.providers: [heygen, minimax, musicgen]`, tried in order after approved cache;
+- `bgm.stop_after_first_success: true` to avoid unnecessary quota use;
+- original speech always has priority.
+
+`source.has_existing_bgm` is a declaration, not presence evidence. An
+`embedded_source` plan must include measured presence analysis. A configured
+authorized asset that is enabled by default may be disabled only by an explicit
+project/user decision; otherwise final composition mixes it with
+`sidechaincompress`.
+
+Missing BGM must not fail the video. A missing or unmatched SFX cue for a
+selected non-quiet event is blocking unless that event has an evidenced
+`intentionally_silent` decision.
+
+## Editable motion
+
+Declare or document separate selectors for `layout_host`, `motion_wrapper`, and `editable_surface`. Studio edits belong to the layout host or editable surface. Animation timelines may transform only the motion wrapper.
+
+Set `editable_motion.profile` to `calm`, `balanced`, or `adaptive_dynamic`. The adaptive profile records advisory ranges (`screen_tutorial: [4,10]`, `polish_existing: [3,7]`) whose upper values are blocking ceilings, plus `maximum_visual_quiet_gap_seconds: 12`, `anchor_repeat_cooldown_seconds: 40`, and distinct semantic/layout/SFX checks. Audio SFX accepts `max_cues_per_minute`, `max_event_ratio`, `target_event_coverage`, `minimum_unique_asset_ratio`, `minimum_cue_duration_seconds`, and `same_file_cooldown_seconds`. Default cue coverage to every selected non-quiet event; reduce event count at the semantic planner instead of leaving approved motion silent. BGM remains independently optional.
+
+For route-, branch-, dependency-, and flow-based visuals, add
+`geometry_contract.connector_contract` with `required_connector_count`,
+semantic `relations`, and attachment intent. The matching aesthetic review must
+store observed count, endpoint attachment, optical alignment, clipping status,
+and a real snapshot path.
+
+## Analysis backends
+
+Keep backend choice separate from editing policy:
+
+- `transcription.preferred: local_faster_whisper`;
+- `transcription.optional: [funclip_funasr]` when Chinese hotwords, speakers, or text-selected candidates are valuable;
+- `cut_candidates.auto_editor.analysis_only: true` when silence, motion, loudness, or subtitle evidence is useful;
+- `nle.video_use: conditional` for complex timeline and boundary work.
+
+No backend may approve semantic deletion. Store candidate ranges separately from the approved EDL.
+
+## Topic IP visuals
+
+- `visuals.ip_opportunity_audit_required: true`;
+- `visuals.theme_asset_mode: content_specific`;
+- `visuals.character_reference_only: true`;
+- `visuals.generated_asset_root: edit/assets/ip-generated`.
+- `visuals.mid_video_ip_mode: conditional`;
+- `visuals.outro_ip_mode: branded_topic_variant`.
+
+The opportunity score guides review; it is not a forced image quota.
+
+For generated topic visuals, allow:
+
+- `visuals.semantic_dedup_required: true`;
+- `visuals.default_integration_mode: pip-card`;
+- `visuals.full_canvas_only_for_chapter_bridge: true`;
+- `visuals.match_design_tokens: true`;
+- `visuals.prefer_transparent_or_scene_matched_background: true`;
+- `audio.one_transient_per_visual_beat: true`.
+
+## Delivery and cover
+
+Recommended defaults:
+
+- `delivery.mode: autonomous_pre_publish` when the user asks for one-shot completion;
+- `delivery.max_automatic_repairs: 2`;
+- `delivery.render_after_automated_qa: true` in autonomous mode;
+- `cover.enabled: true`;
+- `cover.identity_mode: authorized_real_photo`;
+- `cover.style: cinematic_movie_poster`;
+- `layout.orientation: auto_from_display_metadata`;
+- `layout.preserve_source_orientation: true`;
+- `layout.standard_canvas: auto` (`9:16`, `16:9`, or `1:1` after inspection);
+- `visuals.generated_aspect_ratio: match_video_canvas`;
+- `cover.aspect_ratio: 9:16` for Douyin and WeChat Channels, independent of video orientation;
+- `cover.hand_drawn_ip: optional`.
+- `cover.preserve_original_face_pixels: true`;
+- `cover.generate_background_separately: true`;
+- `cover.identity_qa_before_aesthetic_qa: true`.
+
+The optional human-finishing configuration is:
+
+```yaml
+delivery:
+  manual_finish:
+    enabled: false
+    backend: none # none | opencut | other_nle
+    returned_final: null
+    modifications: []
+    assets:
+      clean_a_roll: null
+      captions: null
+      transparent_motion_layer: null
+      bgm_stem: null
+      sfx_stems: []
+      cover: null
+```
+
+Keep it disabled by default. `enabled: false` or backend `none` leaves the
+automatic one-shot workflow unchanged. `opencut` and `other_nle` mean only that
+a human will use that finishing surface; they do not authorize or imply an API,
+CLI, MCP, or headless integration. Resolve declared asset and return paths from
+`paths.root`. The returned path must differ from the automatic master path.
+Missing optional assets are legal and must be represented as `unavailable` in
+the handoff manifest.
+
+Configure the blocking Studio/render parity tolerance as follows:
+
+```yaml
+qa:
+  preview_render_parity:
+    tolerances:
+      position_px: 4.0
+      size_px: 4.0
+      time_seconds: 0.05
+```
+
+These values are migration defaults and project-level maximums. A parity report
+may use stricter values but cannot relax them.
+
+Rendering permission does not authorize uploading or publishing. External publication remains a separate hard gate.
