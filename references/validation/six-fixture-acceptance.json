@@ -1,0 +1,650 @@
+{
+  "schema_version": 1,
+  "evidence_boundary": "Six structured short-fixture contracts exercise routing and shared automated gates; they do not replace human aesthetic, identity, or real-platform review.",
+  "required_types": [
+    "landscape_screen_tutorial",
+    "noisy_audio_hotwords",
+    "portrait_talking_head",
+    "published_edit_polish",
+    "screen_camera_mixed",
+    "two_person_interview"
+  ],
+  "fixture_source": "tests/fixtures/acceptance-scenarios.json",
+  "fixture_source_sha256": "de8caaed91228f242f12000c8096e38489b11d6a76e2258cc1952600a125caa7",
+  "implementation": "scripts/fixture_acceptance.py",
+  "implementation_sha256": "dbc81a616e3930693fd28ed017a65699437aedf30e02b36761bdfe0415554e03",
+  "implementation_dependencies": {
+    "scripts/fixture_acceptance.py": "dbc81a616e3930693fd28ed017a65699437aedf30e02b36761bdfe0415554e03",
+    "scripts/asr_router.py": "4e45b7ae994ad56111e3ec19d9172fe91a4be626a4d9e30532601d584750e303",
+    "scripts/hyperframes_router.py": "d9dc36257565f596d29bb86972e9260afce0d741126c147b2da7ad1d184debf4",
+    "scripts/director_contracts.py": "aea5ff84786e7e8ee3c1a71aa1eb9af2aa1b47fd84b9609c0063a5704c892dfc"
+  },
+  "missing_types": [],
+  "duplicate_types": [],
+  "duplicate_ids": [],
+  "scenario_count": 6,
+  "scenarios": [
+    {
+      "id": "screen-16x9",
+      "fixture_type": "landscape_screen_tutorial",
+      "evidence_kind": "synthetic_short_fixture_contract",
+      "scenario_evidence_sha256": "c6820acf382eea4d346cda9794f7aa35ce025edb1355b2afc29e33f347644ae5",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected general-video"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected local_faster_whisper"
+        }
+      ],
+      "routing": {
+        "hyperframes": {
+          "schema_version": 1,
+          "route": "general-video",
+          "route_reason": "screen, mixed, tutorial, or unclassified video",
+          "renderer": "hyperframes",
+          "renderer_reason": "default motion renderer",
+          "optional_event_renderer": null,
+          "remotion_event_ids": [],
+          "capability_skills": [
+            "hyperframes",
+            "hyperframes-core",
+            "hyperframes-creative",
+            "hyperframes-animation",
+            "hyperframes-cli",
+            "general-video"
+          ],
+          "semantic_selection_owner": "director_with_llm",
+          "fixed_card_count": false,
+          "density_formula_authority": false,
+          "catalog_policy": "components require semantic relevance, target-frame geometry, safe-zone, and parity gates",
+          "license_boundary": "HyperFrames used through its public Skill/CLI contract"
+        },
+        "asr": {
+          "schema_version": 1,
+          "selected_backend": "local_faster_whisper",
+          "reason": "stable local default",
+          "fallbacks": [],
+          "evidence": {
+            "language": "zh",
+            "hotwords": [],
+            "speaker_count": 1,
+            "precise_word_alignment": false,
+            "speaker_labels": false
+          },
+          "semantic_deletion_authority": false,
+          "output_contract": "video-use top-level word timestamps"
+        }
+      }
+    },
+    {
+      "id": "talk-9x16",
+      "fixture_type": "portrait_talking_head",
+      "evidence_kind": "synthetic_short_fixture_contract",
+      "scenario_evidence_sha256": "67e61f884d7603606d1a5e8d8a9879cb7f16440d28eb1524cf3e1ef998fe7050",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected talking-head-recut"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected local_faster_whisper"
+        }
+      ],
+      "routing": {
+        "hyperframes": {
+          "schema_version": 1,
+          "route": "talking-head-recut",
+          "route_reason": "face-led speech content",
+          "renderer": "hyperframes",
+          "renderer_reason": "default motion renderer",
+          "optional_event_renderer": null,
+          "remotion_event_ids": [],
+          "capability_skills": [
+            "hyperframes",
+            "hyperframes-core",
+            "hyperframes-creative",
+            "hyperframes-animation",
+            "hyperframes-cli",
+            "talking-head-recut"
+          ],
+          "semantic_selection_owner": "director_with_llm",
+          "fixed_card_count": false,
+          "density_formula_authority": false,
+          "catalog_policy": "components require semantic relevance, target-frame geometry, safe-zone, and parity gates",
+          "license_boundary": "HyperFrames used through its public Skill/CLI contract"
+        },
+        "asr": {
+          "schema_version": 1,
+          "selected_backend": "local_faster_whisper",
+          "reason": "stable local default",
+          "fallbacks": [],
+          "evidence": {
+            "language": "zh",
+            "hotwords": [],
+            "speaker_count": 1,
+            "precise_word_alignment": false,
+            "speaker_labels": false
+          },
+          "semantic_deletion_authority": false,
+          "output_contract": "video-use top-level word timestamps"
+        }
+      }
+    },
+    {
+      "id": "polish-existing",
+      "fixture_type": "published_edit_polish",
+      "evidence_kind": "synthetic_short_fixture_contract",
+      "scenario_evidence_sha256": "cd74ba4d506bb234fc6a3dc7c6ab32e6a95335d766d9ae8ad28d7a4352b74b1e",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected general-video"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected local_faster_whisper"
+        }
+      ],
+      "routing": {
+        "hyperframes": {
+          "schema_version": 1,
+          "route": "general-video",
+          "route_reason": "screen, mixed, tutorial, or unclassified video",
+          "renderer": "hyperframes",
+          "renderer_reason": "default motion renderer",
+          "optional_event_renderer": null,
+          "remotion_event_ids": [],
+          "capability_skills": [
+            "hyperframes",
+            "hyperframes-core",
+            "hyperframes-creative",
+            "hyperframes-animation",
+            "hyperframes-cli",
+            "general-video"
+          ],
+          "semantic_selection_owner": "director_with_llm",
+          "fixed_card_count": false,
+          "density_formula_authority": false,
+          "catalog_policy": "components require semantic relevance, target-frame geometry, safe-zone, and parity gates",
+          "license_boundary": "HyperFrames used through its public Skill/CLI contract"
+        },
+        "asr": {
+          "schema_version": 1,
+          "selected_backend": "local_faster_whisper",
+          "reason": "stable local default",
+          "fallbacks": [],
+          "evidence": {
+            "language": "zh",
+            "hotwords": [],
+            "speaker_count": 1,
+            "precise_word_alignment": false,
+            "speaker_labels": false
+          },
+          "semantic_deletion_authority": false,
+          "output_contract": "video-use top-level word timestamps"
+        }
+      }
+    },
+    {
+      "id": "interview-two",
+      "fixture_type": "two_person_interview",
+      "evidence_kind": "synthetic_short_fixture_contract",
+      "scenario_evidence_sha256": "72103766466cb6f3168bfa1945ef5fdbef9c5290f747c5778801ab135f90dda4",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected talking-head-recut"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected whisperx"
+        }
+      ],
+      "routing": {
+        "hyperframes": {
+          "schema_version": 1,
+          "route": "talking-head-recut",
+          "route_reason": "face-led speech content",
+          "renderer": "hyperframes",
+          "renderer_reason": "default motion renderer",
+          "optional_event_renderer": null,
+          "remotion_event_ids": [],
+          "capability_skills": [
+            "hyperframes",
+            "hyperframes-core",
+            "hyperframes-creative",
+            "hyperframes-animation",
+            "hyperframes-cli",
+            "talking-head-recut"
+          ],
+          "semantic_selection_owner": "director_with_llm",
+          "fixed_card_count": false,
+          "density_formula_authority": false,
+          "catalog_policy": "components require semantic relevance, target-frame geometry, safe-zone, and parity gates",
+          "license_boundary": "HyperFrames used through its public Skill/CLI contract"
+        },
+        "asr": {
+          "schema_version": 1,
+          "selected_backend": "whisperx",
+          "reason": "multiple speakers or precise word alignment requested",
+          "fallbacks": [],
+          "evidence": {
+            "language": "zh",
+            "hotwords": [],
+            "speaker_count": 2,
+            "precise_word_alignment": true,
+            "speaker_labels": false
+          },
+          "semantic_deletion_authority": false,
+          "output_contract": "video-use top-level word timestamps"
+        }
+      }
+    },
+    {
+      "id": "noisy-hotwords",
+      "fixture_type": "noisy_audio_hotwords",
+      "evidence_kind": "synthetic_short_fixture_contract",
+      "scenario_evidence_sha256": "f2fc4d0f54479e0b19bb6c5dced53d875c45f1f47eab5055f2af179656f66b3e",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected general-video"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected funasr"
+        }
+      ],
+      "routing": {
+        "hyperframes": {
+          "schema_version": 1,
+          "route": "general-video",
+          "route_reason": "screen, mixed, tutorial, or unclassified video",
+          "renderer": "hyperframes",
+          "renderer_reason": "default motion renderer",
+          "optional_event_renderer": null,
+          "remotion_event_ids": [],
+          "capability_skills": [
+            "hyperframes",
+            "hyperframes-core",
+            "hyperframes-creative",
+            "hyperframes-animation",
+            "hyperframes-cli",
+            "general-video"
+          ],
+          "semantic_selection_owner": "director_with_llm",
+          "fixed_card_count": false,
+          "density_formula_authority": false,
+          "catalog_policy": "components require semantic relevance, target-frame geometry, safe-zone, and parity gates",
+          "license_boundary": "HyperFrames used through its public Skill/CLI contract"
+        },
+        "asr": {
+          "schema_version": 1,
+          "selected_backend": "funasr",
+          "reason": "Chinese hotwords or speaker labels requested",
+          "fallbacks": [],
+          "evidence": {
+            "language": "zh-cn",
+            "hotwords": [
+              "ExplainIt",
+              "RAG"
+            ],
+            "speaker_count": 1,
+            "precise_word_alignment": false,
+            "speaker_labels": false
+          },
+          "semantic_deletion_authority": false,
+          "output_contract": "video-use top-level word timestamps"
+        }
+      }
+    },
+    {
+      "id": "screen-camera",
+      "fixture_type": "screen_camera_mixed",
+      "evidence_kind": "synthetic_short_fixture_contract",
+      "scenario_evidence_sha256": "2e724f45509e330ec64e17b7d2e05b724bd4f00099ca4eefec8e44e4f3307ca8",
+      "status": "pass",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected general-video"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected local_faster_whisper"
+        }
+      ],
+      "routing": {
+        "hyperframes": {
+          "schema_version": 1,
+          "route": "general-video",
+          "route_reason": "screen, mixed, tutorial, or unclassified video",
+          "renderer": "hyperframes",
+          "renderer_reason": "default motion renderer",
+          "optional_event_renderer": null,
+          "remotion_event_ids": [],
+          "capability_skills": [
+            "hyperframes",
+            "hyperframes-core",
+            "hyperframes-creative",
+            "hyperframes-animation",
+            "hyperframes-cli",
+            "general-video"
+          ],
+          "semantic_selection_owner": "director_with_llm",
+          "fixed_card_count": false,
+          "density_formula_authority": false,
+          "catalog_policy": "components require semantic relevance, target-frame geometry, safe-zone, and parity gates",
+          "license_boundary": "HyperFrames used through its public Skill/CLI contract"
+        },
+        "asr": {
+          "schema_version": 1,
+          "selected_backend": "local_faster_whisper",
+          "reason": "stable local default",
+          "fallbacks": [],
+          "evidence": {
+            "language": "zh",
+            "hotwords": [],
+            "speaker_count": 1,
+            "precise_word_alignment": false,
+            "speaker_labels": false
+          },
+          "semantic_deletion_authority": false,
+          "output_contract": "video-use top-level word timestamps"
+        }
+      }
+    }
+  ],
+  "status": "pass"
+}

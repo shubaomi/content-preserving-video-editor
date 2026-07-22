@@ -50,7 +50,7 @@ moving projects.
 
 Load legacy project YAML through the versioned in-memory migrator. Never rewrite
 an existing `project.yaml` merely to add defaults. New projects use project
-schema version 3; migrated legacy projects receive disabled manual finishing and
+schema version 6; migrated legacy projects receive disabled optional adapters, disabled manual finishing, and
 the current preview/render parity tolerances in memory.
 
 ## Use the single entry
@@ -59,9 +59,13 @@ Run the director from the Skill root:
 
 ```powershell
 python scripts/director.py run --project <project.yaml> --until sample_qa
+python scripts/director.py resume --project <project.yaml>
 python scripts/director.py status --project <project.yaml>
+python scripts/director.py open-preview --project <project.yaml>
+python scripts/director.py open-studio --project <project.yaml>
 python scripts/director.py approve-sample --project <project.yaml> --approved-by <name>
 python scripts/director.py authorize-final-render --project <project.yaml> --authorized-by <name>
+python scripts/director.py deliver --project <project.yaml>
 ```
 
 The state lives at `<project>/work/director/director-state.json`. Resume with the
@@ -70,6 +74,16 @@ same `run` command. Do not manually assemble the legacy script collection.
 When `action-required.json` appears, execute exactly the capability owner named
 there, create the expected artifact, and resume. Do not bypass a stage by marking
 it complete. A failed stage must retain its exact error and artifacts.
+
+`inspect` must write `capability-inventory.json` and
+`toolchain-compatibility.json`. Each capability records its owner, version,
+dependencies, inputs, outputs, optionality, cache key, failure fallback,
+configuration route, and actual maturity. Never describe `documented` or
+`utility_implemented` work as part of the one-shot workflow. Do not silently
+install or update video-use, HyperFrames, media-use, OpenCut, or Remotion.
+The compatibility report must resolve all five required HyperFrames Skills
+individually; one base `hyperframes` directory is not evidence that core,
+creative, animation, and CLI contracts are present.
 
 Do not pass `--approve-final-render` or `--execute-external` until the 60–90
 second sample and its aesthetic QA have passed and the user has approved full
@@ -139,6 +153,13 @@ Keep transcripts cached and subtitles last in the edit stack.
 
 ## Author meaning before motion
 
+Before semantic planning, run `evidence_acquisition`. Bind its bundle to the
+exact source and word-transcript hashes. Record display rotation/aspect,
+representative frames, scenes, subject/face/UI/caption regions, OCR when
+enabled, design tokens, and existing edit/audio/caption/cover evidence.
+PySceneDetect, MediaPipe, and PaddleOCR are optional command adapters and remain
+disabled for legacy projects unless explicitly enabled.
+
 Have the LLM read the raw word transcript and necessary evidence frames. First
 identify chapters, claims, causal links, contrasts, steps, numbers/results,
 demonstration actions, and emotion. Then write `semantic-brief.json` with direct
@@ -165,6 +186,21 @@ Do not use keyword scoring or event quotas as semantic authors. For a medium
 starting reference, not a quota.
 
 ## Require real HyperFrames variety
+
+Route the task through `talking-head-recut`, `embedded-captions`,
+`general-video`, or `motion-graphics` from content evidence. HyperFrames remains
+the composition owner. An explicitly configured media-use/Registry/Catalog
+adapter may resolve evidence-backed `asset_request` entries; missing commands
+must be reported as unavailable, never represented as downloaded assets.
+Pass requests through the generated, hash-bound
+`work/director/media-catalog-requests/<request-set-sha256>.json`; each request
+set has an immutable manifest so concurrent jobs cannot overwrite one another.
+Require the adapter command to accept its
+`{request_manifest}` placeholder and require every decision to echo the request
+hash, query, purpose, asset hash, provenance, and rights basis. Never allow an
+asset request to override its canonical semantic event ID.
+Remotion may render only named events backed by existing React components; it
+must not replace HyperFrames or cause a second full-video render.
 
 Have HyperFrames translate the approved brief into `frame.md`, `storyboard.json`,
 and `index.html`. Each declared variant must differ in all five dimensions:
@@ -285,6 +321,18 @@ the pre-encode mix. Treat unsafe true peak as blocking. Leave encoding headroom
 (the reference final-compose target is -1.5 dBTP) and require the delivered file
 to remeasure at or below -1 dBTP before platform approval.
 
+When `audio.normalization.enabled=true`, compose to a private intermediate,
+perform two-pass EBU R128 normalization, copy the video stream into the final
+universal MP4, and bind pre/post measurements plus source/output hashes in
+`audio-normalization-report.json`. A successful BGM provider result in the full
+`audio-plan.json` must flow automatically into final composition; do not require
+the user to copy its path back into `project.yaml`.
+Bind the pre-normalized composition to the current motion render, selected BGM,
+full audio plan, exact FFmpeg arguments, schema, and Director version. Reuse it
+only when both that signature and its output hash match. Validate first-pass and
+post-normalization measurements plus target tolerances; a nominal `pass` field
+alone is insufficient.
+
 For a real-person cinematic cover, use multiple authorized photos as identity
 references to regenerate a topic-specific scene, pose, wardrobe, expression,
 lighting, and depth. Do not paste a cutout onto a generic gradient. Prefer
@@ -328,6 +376,26 @@ perform a full decode, and require fresh caption, audio, representative visual,
 video-use final-edit-correctness, aesthetic, and platform checks against those
 exact bytes. A missing, changed, or stale return reopens the manual stage and
 `delivery_qa`.
+
+Before declaring this Skill implementation complete, run the six-type fixture
+suite in `tests/fixtures/acceptance-scenarios.json`. It covers landscape screen
+tutorial, portrait talking head, published-edit polish, two-person interview,
+noisy/hotword audio, and screen-plus-camera mixed footage. The suite checks
+captions, preservation, semantics, repetition, geometry, SFX/BGM, parity, and
+small-correction cost. It is an automated contract fixture, not evidence of
+human aesthetic quality, personal likeness, or live platform performance.
+The retained report must match the current fixture-source and evaluator hashes,
+all evaluator dependency hashes, and the freshly recomputed complete eleven-check
+contract. It must contain six unique fixture types and IDs and scenario evidence
+hashes. A copied, truncated, or manually edited `status: pass` report is not
+completion evidence. In addition, generate a real short MP4 for every required
+type and run decode, probe, audio, and representative-frame technical QA.
+Retain the six-media manifest with current media, report, sampled-frame, and
+implementation hashes. Retain a zero-skip full-test receipt bound to the current
+scripts/tests tree and required regressions. Completion audit must freshly
+rebuild capability/toolchain discovery, verify all five HyperFrames Skill file
+hashes, and validate Director-generated strict-check/render receipts; a copied
+render or a standalone `pass` field is not execution evidence.
 
 ## Legacy compatibility
 

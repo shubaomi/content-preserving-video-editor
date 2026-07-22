@@ -1,0 +1,812 @@
+{
+  "schema_version": 2,
+  "status": "pass",
+  "required_types": [
+    "landscape_screen_tutorial",
+    "noisy_audio_hotwords",
+    "portrait_talking_head",
+    "published_edit_polish",
+    "screen_camera_mixed",
+    "two_person_interview"
+  ],
+  "scenario_count": 6,
+  "skipped": 0,
+  "implementation_dependencies": {
+    "scripts/six_media_acceptance.py": "d7aeeb555e18ec9ef5f6999eeb15c931d4e4934482d1ca4f5842617115ca3a12",
+    "scripts/technical_qa.py": "414895cfe0bcd34eb2ca2caf1dfbd8655345fdd0ecc988e9d1c0c281efa73484",
+    "scripts/validate_platform_export.py": "3067e6c6fa4e71aa36abd8767ab7ba8acfa693cb43a52fe6480b91439111b85c"
+  },
+  "scenarios": [
+    {
+      "fixture_type": "landscape_screen_tutorial",
+      "evidence_kind": "generated_type_specific_short_media_technical_fixture",
+      "dimensions": [
+        320,
+        180
+      ],
+      "media": "six-media/landscape_screen_tutorial.mp4",
+      "media_sha256": "4dd57f17ac8af65e0540c3269cf79339947af53da43a22ccdadd84ab96a996eb",
+      "technical_report": "six-media/landscape_screen_tutorial-technical-qa.json",
+      "technical_report_sha256": "0c505b2ddf05aa0ce10f0ee30ee3ae1729f406b7eafcbaea6f2febf532ed998d",
+      "generation_command": [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=0x102030:size=320x180:rate=12:duration=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.065*sin(2*PI*440*t):s=48000:d=2",
+        "-vf",
+        "drawbox=x=0:y=0:w=iw:h=20:color=0x1b263b:t=fill,drawbox=x=8:y=28:w=76:h=144:color=0x26354d:t=fill,drawbox=x=92:y=28:w=220:h=94:color=0xe8eef5:t=fill,drawbox=x=92:y=130:w=104:h=42:color=0x4c78ff:t=fill,drawbox=x=204:y=130:w=108:h=42:color=0x2d3748:t=fill,drawbox=x='108+70*t':y='55+20*t':w=6:h=10:color=white:t=fill",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "landscape_screen_tutorial.mp4"
+      ],
+      "characteristic_evidence": {
+        "schema_version": 1,
+        "fixture_type": "landscape_screen_tutorial",
+        "status": "pass",
+        "visual_fingerprint": "59ae7d6d6d59f268e665b9f52de86b4bb3142977c550612d0b0af7e73f2e94ad",
+        "audio_fingerprint": "cb1c953f5c03a9897e44d6e79d13ebd331ff4ab27aa758a7094efd9b3b153836",
+        "observations": {
+          "dimensions": [
+            320,
+            180
+          ],
+          "pixels": {
+            "toolbar": [
+              27,
+              36,
+              59
+            ],
+            "sidebar": [
+              38,
+              51,
+              77
+            ],
+            "tutorial_canvas": [
+              231,
+              236,
+              244
+            ],
+            "cursor_early": [
+              231,
+              236,
+              244
+            ],
+            "cursor_late": [
+              231,
+              236,
+              244
+            ]
+          },
+          "audio": {
+            "rms": 0.045838,
+            "zero_crossing_rate": 0.110024,
+            "tone_amplitudes": {
+              "180": 3e-06,
+              "220": 2e-06,
+              "330": 5e-06,
+              "360": 1.5e-05,
+              "440": 0.064734,
+              "520": 2.4e-05,
+              "640": 2e-06,
+              "700": 1e-06,
+              "880": 1e-06,
+              "1040": 0.0
+            },
+            "hotword_pulse_rms_ratio": 1.002308,
+            "noise_residual_rms": 0.045838
+          }
+        },
+        "checks": [
+          {
+            "id": "landscape_orientation",
+            "passed": true,
+            "observed": [
+              320,
+              180
+            ],
+            "expectation": "width greater than height"
+          },
+          {
+            "id": "screen_toolbar",
+            "passed": true,
+            "observed": [
+              27,
+              36,
+              59
+            ],
+            "expectation": "dark application toolbar"
+          },
+          {
+            "id": "screen_panel_contrast",
+            "passed": true,
+            "observed": 545,
+            "expectation": "sidebar and work canvas visibly separated"
+          },
+          {
+            "id": "moving_cursor",
+            "passed": true,
+            "observed": [
+              [
+                231,
+                236,
+                244
+              ],
+              [
+                231,
+                236,
+                244
+              ]
+            ],
+            "expectation": "white cursor occupies different positions over time"
+          },
+          {
+            "id": "tutorial_tone",
+            "passed": true,
+            "observed": 0.064734,
+            "expectation": "audible 440 Hz tutorial cue"
+          }
+        ]
+      }
+    },
+    {
+      "fixture_type": "portrait_talking_head",
+      "evidence_kind": "generated_type_specific_short_media_technical_fixture",
+      "dimensions": [
+        180,
+        320
+      ],
+      "media": "six-media/portrait_talking_head.mp4",
+      "media_sha256": "2c711f4f93e4ebb3c65369f2a0d7828c9e2fddbba0bd2108e36f2221e531358b",
+      "technical_report": "six-media/portrait_talking_head-technical-qa.json",
+      "technical_report_sha256": "067e0b44db510c44e52cc527dd11827cc1dfe0042dab4734fe5397d5edd7b902",
+      "generation_command": [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=0x415a77:size=180x320:rate=12:duration=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.055*sin(2*PI*180*t)+0.025*sin(2*PI*360*t):s=48000:d=2",
+        "-vf",
+        "drawbox=x=34:y=214:w=112:h=106:color=0x274c77:t=fill,drawbox=x=54:y=58:w=72:h=116:color=0xe2a878:t=fill,drawbox=x=54:y=58:w=72:h=25:color=0x3b2f2f:t=fill,drawbox=x=67:y=105:w=8:h=7:color=0x202020:t=fill,drawbox=x=105:y=105:w=8:h=7:color=0x202020:t=fill,drawbox=x=76:y=144:w=28:h=8:color=0x8b1e3f:t=fill",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "portrait_talking_head.mp4"
+      ],
+      "characteristic_evidence": {
+        "schema_version": 1,
+        "fixture_type": "portrait_talking_head",
+        "status": "pass",
+        "visual_fingerprint": "bb3ec1b5ef12efa98b4336d17911a622de0654928bc0fc06070aa47b50cfbdd2",
+        "audio_fingerprint": "c0ad48727214e5d3334e8b9e31c2fc667d86455a632eb04394ede7861172c882",
+        "observations": {
+          "dimensions": [
+            180,
+            320
+          ],
+          "pixels": {
+            "center_face": [
+              225,
+              166,
+              118
+            ],
+            "mouth": [
+              139,
+              28,
+              61
+            ],
+            "shoulders": [
+              38,
+              74,
+              117
+            ]
+          },
+          "audio": {
+            "rms": 0.042633,
+            "zero_crossing_rate": 0.045693,
+            "tone_amplitudes": {
+              "180": 0.054813,
+              "220": 4.3e-05,
+              "330": 1.1e-05,
+              "360": 0.024907,
+              "440": 6e-06,
+              "520": 2e-06,
+              "640": 1e-06,
+              "700": 0.0,
+              "880": 1e-06,
+              "1040": 1e-06
+            },
+            "hotword_pulse_rms_ratio": 0.995726,
+            "noise_residual_rms": 0.042633
+          }
+        },
+        "checks": [
+          {
+            "id": "portrait_orientation",
+            "passed": true,
+            "observed": [
+              180,
+              320
+            ],
+            "expectation": "height greater than width"
+          },
+          {
+            "id": "centered_face",
+            "passed": true,
+            "observed": [
+              225,
+              166,
+              118
+            ],
+            "expectation": "centered skin-tone face region"
+          },
+          {
+            "id": "visible_mouth",
+            "passed": true,
+            "observed": [
+              139,
+              28,
+              61
+            ],
+            "expectation": "contrasting mouth feature"
+          },
+          {
+            "id": "talking_head_shoulders",
+            "passed": true,
+            "observed": [
+              38,
+              74,
+              117
+            ],
+            "expectation": "shoulders below face"
+          },
+          {
+            "id": "voice_band_fundamental",
+            "passed": true,
+            "observed": {
+              "180": 0.054813,
+              "440": 6e-06
+            },
+            "expectation": "voice-like 180 Hz fundamental dominates unrelated tone"
+          }
+        ]
+      }
+    },
+    {
+      "fixture_type": "published_edit_polish",
+      "evidence_kind": "generated_type_specific_short_media_technical_fixture",
+      "dimensions": [
+        320,
+        180
+      ],
+      "media": "six-media/published_edit_polish.mp4",
+      "media_sha256": "e83ebb707fe08acdd5a9917e633b85d3f21d0c0fa6f575a280949590e82f1c0f",
+      "technical_report": "six-media/published_edit_polish-technical-qa.json",
+      "technical_report_sha256": "0c36f5d081d5c679c5bdcf80cd766d517b728333961a8a075dd3563c341963fd",
+      "generation_command": [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=0x38618c:size=320x180:rate=12:duration=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.05*sin(2*PI*520*t)+0.022*sin(2*PI*1040*t):s=48000:d=2",
+        "-vf",
+        "drawbox=x=0:y=0:w=iw:h=ih:color=0x9d4edd:t=fill:enable='gte(t,1)',drawbox=x=0:y=0:w=iw:h=12:color=black:t=fill,drawbox=x=0:y=168:w=iw:h=12:color=black:t=fill,drawbox=x=18:y=126:w=190:h=30:color=0xf9c74f:t=fill,drawbox=x=285:y=22:w=20:h=20:color=white:t=fill",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "published_edit_polish.mp4"
+      ],
+      "characteristic_evidence": {
+        "schema_version": 1,
+        "fixture_type": "published_edit_polish",
+        "status": "pass",
+        "visual_fingerprint": "de0c1141e3590289fe394ff2dc06009cee3a32849fdec0abcea7ae4294d09e90",
+        "audio_fingerprint": "fe52f705f1c28a19c05f83e3c849fa4f9e264037e09df3d3db7fdad20a32d7d4",
+        "observations": {
+          "dimensions": [
+            320,
+            180
+          ],
+          "pixels": {
+            "early_scene": [
+              55,
+              96,
+              139
+            ],
+            "late_scene": [
+              156,
+              76,
+              219
+            ],
+            "lower_third": [
+              249,
+              197,
+              78
+            ],
+            "letterbox": [
+              0,
+              0,
+              0
+            ]
+          },
+          "audio": {
+            "rms": 0.038585,
+            "zero_crossing_rate": 0.130657,
+            "tone_amplitudes": {
+              "180": 3e-06,
+              "220": 8e-06,
+              "330": 2.9e-05,
+              "360": 3.5e-05,
+              "440": 4.6e-05,
+              "520": 0.049863,
+              "640": 3.9e-05,
+              "700": 3.9e-05,
+              "880": 1.4e-05,
+              "1040": 0.021927
+            },
+            "hotword_pulse_rms_ratio": 1.003208,
+            "noise_residual_rms": 0.038585
+          }
+        },
+        "checks": [
+          {
+            "id": "edited_scene_change",
+            "passed": true,
+            "observed": 201,
+            "expectation": "distinct picture treatment across edit point"
+          },
+          {
+            "id": "lower_third_graphic",
+            "passed": true,
+            "observed": [
+              249,
+              197,
+              78
+            ],
+            "expectation": "persistent polished lower-third graphic"
+          },
+          {
+            "id": "cinematic_letterbox",
+            "passed": true,
+            "observed": [
+              0,
+              0,
+              0
+            ],
+            "expectation": "black framing bar"
+          },
+          {
+            "id": "polish_music_layers",
+            "passed": true,
+            "observed": {
+              "520": 0.049863,
+              "1040": 0.021927
+            },
+            "expectation": "two audible harmonic polish layers"
+          }
+        ]
+      }
+    },
+    {
+      "fixture_type": "two_person_interview",
+      "evidence_kind": "generated_type_specific_short_media_technical_fixture",
+      "dimensions": [
+        320,
+        180
+      ],
+      "media": "six-media/two_person_interview.mp4",
+      "media_sha256": "e69b859b5c55962a76e3bc8ba701a71fe4573fd4ce8e5df8e4027db1a5f9be43",
+      "technical_report": "six-media/two_person_interview-technical-qa.json",
+      "technical_report_sha256": "8db2a54d22ad525f206d714b5eff577556f454fd56c1889a528fddc2a2d1e116",
+      "generation_command": [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=0x20252b:size=320x180:rate=12:duration=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.05*sin(2*PI*220*t)+0.05*sin(2*PI*330*t):s=48000:d=2",
+        "-vf",
+        "drawbox=x=0:y=0:w=157:h=ih:color=0x1d7874:t=fill,drawbox=x=163:y=0:w=157:h=ih:color=0x7d2941:t=fill,drawbox=x=0:y=0:w=iw:h=14:color=0x171a1f:t=fill,drawbox=x=54:y=43:w=48:h=67:color=0xe0a878:t=fill,drawbox=x=218:y=43:w=48:h=67:color=0xc98f65:t=fill,drawbox=x=38:y=118:w=80:h=62:color=0x264653:t=fill,drawbox=x=202:y=118:w=80:h=62:color=0x5a2333:t=fill",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "two_person_interview.mp4"
+      ],
+      "characteristic_evidence": {
+        "schema_version": 1,
+        "fixture_type": "two_person_interview",
+        "status": "pass",
+        "visual_fingerprint": "7dd19a204e7189883debc4af9f14b4cec735036fa13793ebb7d6cd8194345500",
+        "audio_fingerprint": "6782cd3a8489e3a3cc6434107600a8f7d6aa3783af79cea0d15b76971af09f4f",
+        "observations": {
+          "dimensions": [
+            320,
+            180
+          ],
+          "pixels": {
+            "left_background": [
+              27,
+              118,
+              115
+            ],
+            "right_background": [
+              123,
+              39,
+              63
+            ],
+            "left_face": [
+              223,
+              167,
+              120
+            ],
+            "right_face": [
+              200,
+              143,
+              101
+            ],
+            "split_divider": [
+              31,
+              36,
+              42
+            ]
+          },
+          "audio": {
+            "rms": 0.049908,
+            "zero_crossing_rate": 0.082845,
+            "tone_amplitudes": {
+              "180": 3.2e-05,
+              "220": 0.049868,
+              "330": 0.049804,
+              "360": 5.5e-05,
+              "440": 5e-06,
+              "520": 2e-06,
+              "640": 0.0,
+              "700": 0.0,
+              "880": 0.0,
+              "1040": 0.0
+            },
+            "hotword_pulse_rms_ratio": 0.992284,
+            "noise_residual_rms": 0.049908
+          }
+        },
+        "checks": [
+          {
+            "id": "two_distinct_sides",
+            "passed": true,
+            "observed": 227,
+            "expectation": "contrasting left and right interview panels"
+          },
+          {
+            "id": "two_visible_people",
+            "passed": true,
+            "observed": [
+              [
+                223,
+                167,
+                120
+              ],
+              [
+                200,
+                143,
+                101
+              ]
+            ],
+            "expectation": "two separate face regions"
+          },
+          {
+            "id": "split_screen_divider",
+            "passed": true,
+            "observed": [
+              31,
+              36,
+              42
+            ],
+            "expectation": "center divider between people"
+          },
+          {
+            "id": "two_voice_bands",
+            "passed": true,
+            "observed": {
+              "220": 0.049868,
+              "330": 0.049804,
+              "ratio": 1.001285
+            },
+            "expectation": "two similarly present voice-band fundamentals"
+          }
+        ]
+      }
+    },
+    {
+      "fixture_type": "noisy_audio_hotwords",
+      "evidence_kind": "generated_type_specific_short_media_technical_fixture",
+      "dimensions": [
+        320,
+        180
+      ],
+      "media": "six-media/noisy_audio_hotwords.mp4",
+      "media_sha256": "bd0d72849fe1716cb378d9ac640f3effada0978827931011143b5d968569680b",
+      "technical_report": "six-media/noisy_audio_hotwords-technical-qa.json",
+      "technical_report_sha256": "34a3307d5136404eeb4ae6f1b698981b323cb366cdda3d7b221979f0849a601d",
+      "generation_command": [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=0x241f31:size=320x180:rate=12:duration=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.025*random(0)+0.095*sin(2*PI*880*t)*lt(mod(t\\,0.6)\\,0.12):s=48000:d=2",
+        "-vf",
+        "drawbox=x=14:y=16:w=292:h=148:color=0x302a40:t=fill,drawbox=x=32:y=85:w=20:h=42:color=0xf8961e:t=fill,drawbox=x=70:y=60:w=20:h=67:color=0xf9c74f:t=fill,drawbox=x=108:y=38:w=20:h=89:color=0xf94144:t=fill,drawbox=x=146:y=72:w=20:h=55:color=0x90be6d:t=fill,drawbox=x=184:y=48:w=20:h=79:color=0x43aa8b:t=fill,drawbox=x=222:y=67:w=20:h=60:color=0x577590:t=fill,drawbox=x=260:y=91:w=20:h=36:color=0xf3722c:t=fill",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "noisy_audio_hotwords.mp4"
+      ],
+      "characteristic_evidence": {
+        "schema_version": 1,
+        "fixture_type": "noisy_audio_hotwords",
+        "status": "pass",
+        "visual_fingerprint": "d406e0fb947421beab24b806786756c90d7a45eeb86c0dade6f555806b1296d8",
+        "audio_fingerprint": "f7e2c5d8fc2866e13af6b9d9e42528e3ca1cf1b99ecdb01bd8c222c8e8ae82ae",
+        "observations": {
+          "dimensions": [
+            320,
+            180
+          ],
+          "pixels": {
+            "warning_bar": [
+              248,
+              63,
+              66
+            ],
+            "audio_panel": [
+              47,
+              41,
+              64
+            ]
+          },
+          "audio": {
+            "rms": 0.035021,
+            "zero_crossing_rate": 0.053734,
+            "tone_amplitudes": {
+              "180": 6.2e-05,
+              "220": 4.5e-05,
+              "330": 6.7e-05,
+              "360": 0.000146,
+              "440": 0.000156,
+              "520": 0.000124,
+              "640": 0.00019,
+              "700": 0.000384,
+              "880": 0.022546,
+              "1040": 0.000202
+            },
+            "hotword_pulse_rms_ratio": 5.19246,
+            "noise_residual_rms": 0.031182
+          }
+        },
+        "checks": [
+          {
+            "id": "audio_meter_visual",
+            "passed": true,
+            "observed": [
+              248,
+              63,
+              66
+            ],
+            "expectation": "high red audio-meter bar"
+          },
+          {
+            "id": "meter_panel",
+            "passed": true,
+            "observed": [
+              47,
+              41,
+              64
+            ],
+            "expectation": "dark audio analysis panel"
+          },
+          {
+            "id": "measured_noise_floor",
+            "passed": true,
+            "observed": 0.031182,
+            "expectation": "decoded broadband residual above noise threshold"
+          },
+          {
+            "id": "hotword_tone_marker",
+            "passed": true,
+            "observed": 0.022546,
+            "expectation": "decoded 880 Hz hotword marker energy"
+          },
+          {
+            "id": "hotword_pulse_envelope",
+            "passed": true,
+            "observed": 5.19246,
+            "expectation": "marker window louder than intervening noise"
+          },
+          {
+            "id": "broadband_zero_crossings",
+            "passed": true,
+            "observed": 0.053734,
+            "expectation": "noise produces high decoded zero-crossing rate"
+          }
+        ]
+      }
+    },
+    {
+      "fixture_type": "screen_camera_mixed",
+      "evidence_kind": "generated_type_specific_short_media_technical_fixture",
+      "dimensions": [
+        320,
+        180
+      ],
+      "media": "six-media/screen_camera_mixed.mp4",
+      "media_sha256": "cb295063b3224b65207175b2ded4b1f79ad314e658fe2e2da9382b98d9ba37b5",
+      "technical_report": "six-media/screen_camera_mixed-technical-qa.json",
+      "technical_report_sha256": "364006f3b6dddf4d71634967cef7e3e28fb0b0f1d144032b721c7221081376de",
+      "generation_command": [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=0x0b132b:size=320x180:rate=12:duration=2",
+        "-f",
+        "lavfi",
+        "-i",
+        "aevalsrc=0.06*sin(2*PI*640*t):s=48000:d=2",
+        "-vf",
+        "drawbox=x=0:y=0:w=iw:h=20:color=0x1c2541:t=fill,drawbox=x=8:y=28:w=70:h=144:color=0x253658:t=fill,drawbox=x=86:y=28:w=226:h=144:color=0xdce6f2:t=fill,drawbox=x=226:y=92:w=86:h=80:color=white:t=fill,drawbox=x=232:y=98:w=74:h=68:color=0x38618c:t=fill,drawbox=x=251:y=106:w=36:h=36:color=0xe2a878:t=fill,drawbox=x=242:y=145:w=54:h=21:color=0x274c77:t=fill",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-shortest",
+        "screen_camera_mixed.mp4"
+      ],
+      "characteristic_evidence": {
+        "schema_version": 1,
+        "fixture_type": "screen_camera_mixed",
+        "status": "pass",
+        "visual_fingerprint": "6e3936185bff3242231b27e4f7f0c7d444f45f543cd1b84854e21eb1c05dd535",
+        "audio_fingerprint": "c4e4710e4ed12ffebe38268bb96a672436b869c1b49187b032d3bc2c968357bc",
+        "observations": {
+          "dimensions": [
+            320,
+            180
+          ],
+          "pixels": {
+            "screen_canvas": [
+              220,
+              229,
+              242
+            ],
+            "screen_sidebar": [
+              36,
+              53,
+              86
+            ],
+            "camera_border": [
+              255,
+              255,
+              250
+            ],
+            "camera_face": [
+              225,
+              166,
+              118
+            ]
+          },
+          "audio": {
+            "rms": 0.042325,
+            "zero_crossing_rate": 0.160578,
+            "tone_amplitudes": {
+              "180": 3e-06,
+              "220": 2e-06,
+              "330": 6e-06,
+              "360": 2e-06,
+              "440": 4e-06,
+              "520": 1.4e-05,
+              "640": 0.059775,
+              "700": 5e-06,
+              "880": 7e-06,
+              "1040": 4e-06
+            },
+            "hotword_pulse_rms_ratio": 0.996895,
+            "noise_residual_rms": 0.042325
+          }
+        },
+        "checks": [
+          {
+            "id": "mixed_screen_layout",
+            "passed": true,
+            "observed": 516,
+            "expectation": "application canvas and sidebar are distinct"
+          },
+          {
+            "id": "camera_pip_border",
+            "passed": true,
+            "observed": [
+              255,
+              255,
+              250
+            ],
+            "expectation": "bright PiP camera border"
+          },
+          {
+            "id": "camera_pip_face",
+            "passed": true,
+            "observed": [
+              225,
+              166,
+              118
+            ],
+            "expectation": "skin-tone face inside PiP region"
+          },
+          {
+            "id": "mixed_audio_cue",
+            "passed": true,
+            "observed": 0.059775,
+            "expectation": "audible mixed-presentation cue"
+          }
+        ]
+      }
+    }
+  ]
+}

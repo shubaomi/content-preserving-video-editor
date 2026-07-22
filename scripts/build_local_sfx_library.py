@@ -110,6 +110,14 @@ def build_for_storyboard(storyboard: Path, output: Path, asset_prefix: str) -> d
     assets, decisions = [], []
     for index, event in enumerate(events, 1):
         event_id = str(event.get("id") or f"event-{index:03d}")
+        audio_decision = event.get("audio_decision") or {}
+        if audio_decision.get("type") == "intentionally_silent":
+            reason = str(audio_decision.get("reason") or "").strip()
+            if not reason:
+                raise ValueError(f"event {event_id} intentionally_silent requires a reason")
+            decisions.append({"event_id": event_id, "decision": "intentionally_silent",
+                              "reason": reason})
+            continue
         filename = f"event-{index:03d}-{_event_id(event_id)}.wav"
         path = output / filename
         family, chain, planned_duration = event_filter(event, index)

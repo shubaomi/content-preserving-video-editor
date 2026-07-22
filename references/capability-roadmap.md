@@ -11,6 +11,37 @@ This file is the implementation source of truth for advanced automation. A writt
 
 Never describe `policy-only` or `partial` work as automatic. Update this file only after evidence passes the stated gate.
 
+## 2026-07-21 Director integration checkpoint
+
+All capability rows now have a versioned adapter contract and are at least
+`director_integrated`; the authoritative machine-readable matrix is generated
+as `capability-inventory.json`. This means every listed ability has a Director
+route, configuration/migration behavior, cache/failure contract, and tests. It
+does not mean every optional third-party backend is installed or that every
+capability has been validated on a new real project.
+
+New integration evidence includes:
+
+- hash-bound evidence acquisition and semantic-plan binding;
+- routed ASR, OTIO, HyperFrames task families, selected-event Remotion, and
+  evidence-backed media-use/Catalog requests passed through a hash-bound request
+  manifest with per-decision provenance and rights checks;
+- real audio/IP/cover production stages, BGM provider-to-final-mix continuity,
+  and optional two-pass final normalization;
+- render-cache execution, technical QA, platform occlusion, same-file platform
+  validation, preferences, publishing copy, manual NLE handoff, and metrics import;
+- six structured short-fixture contracts with 66 shared checks plus seeded
+  negative cases, source/evaluator hashes, unique-type/ID enforcement, and
+  per-scenario evidence hashes, stored at
+  `references/validation/six-fixture-acceptance.json`.
+- six retained real short-media fixtures with decode/probe/audio/frame evidence,
+  Director-generated HyperFrames execution receipts, deep toolchain/Skill hash
+  verification, and a source-bound zero-skip full-test receipt.
+
+The six-fixture result is `fixture_validated` evidence for routing and shared
+contract gates only. Human aesthetics, generated-person likeness, and live
+Douyin/WeChat Channels behavior remain manual or real-project gates.
+
 ## Phase 0 — Current foundation
 
 Status: `implemented`, with real TabOut validation.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -13,8 +14,8 @@ import yaml
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from director import Director, ROLE_CONTRACT, approve_sample, authorize_final_render  # noqa: E402
-from director_contracts import DirectorContractError, VISUAL_VOCABULARY, sha256_file  # noqa: E402
+from director import Director, ROLE_CONTRACT, _json_sha256, approve_sample, authorize_final_render  # noqa: E402
+from director_contracts import DirectorContractError, STAGES, VISUAL_VOCABULARY, sha256_file  # noqa: E402
 
 
 class DirectorTests(unittest.TestCase):
@@ -41,7 +42,22 @@ class DirectorTests(unittest.TestCase):
         project.mkdir(parents=True)
         transcript = director.video_use_dir / "transcripts" / f"{director.context.source_video.stem}.json"
         transcript.parent.mkdir(parents=True, exist_ok=True)
-        transcript.write_text(json.dumps({"words": [{"type": "word", "text": "proof", "start": 0, "end": 1}]}), encoding="utf-8")
+        words = [
+            {"id": f"w{index}", "type": "word", "text": f"proof{index}",
+             "start": float(index * 20), "end": float(index * 20 + 1)}
+            for index in range(4)
+        ]
+        transcript.write_text(json.dumps({"words": words}), encoding="utf-8")
+        frame = director.root / "evidence" / "frames" / "frame-00.png"
+        frame.parent.mkdir(parents=True, exist_ok=True)
+        frame.write_bytes(b"frame")
+        director.evidence_bundle_path.write_text(json.dumps({
+            "transcript": {"sha256": sha256_file(transcript), "term_evidence": [
+                {"word_id": row["id"], "text": row["text"], "start": row["start"], "end": row["end"]}
+                for row in words
+            ]},
+            "representative_frames": [{"path": str(frame), "sha256": sha256_file(frame)}],
+        }), encoding="utf-8")
         events = []
         for index in range(4):
             events.append({
@@ -56,19 +72,32 @@ class DirectorTests(unittest.TestCase):
                 },
             })
         full_brief = {
-            "schema_version": 1,
+            "schema_version": 2,
             "generated_by": "test-llm",
             "content_reading": "raw_word_transcript_and_evidence_frames",
             "transcript_sha256": sha256_file(transcript),
-            "evidence_frames": ["frame.png"],
+            "evidence_bundle_sha256": sha256_file(director.evidence_bundle_path),
+            "evidence_frames": [str(frame)],
+            "opening_hook": {"status": "not_selected", "evidence": ["direct opening"]},
             "scope": {"source_start": 0, "source_end": 100.0},
             "events": [
                 {
                     **event,
                     "anchor": f"anchor-{index}",
-                    "transcript_quote": "direct transcript evidence",
-                    "transcript_word_ids": [index],
+                    "transcript_quote": f"proof{index}",
+                    "transcript_word_ids": [f"w{index}"],
                     "source_start": float(index * 20),
+                    "source_end": float(index * 20 + 1),
+                    "output_start": float(index * 20), "output_end": float(index * 20 + 1),
+                    "viewer_job": "understand", "viewer_takeaway": f"proof{index}",
+                    "visual_mechanism": f"mechanism-{index}",
+                    "target_frame_evidence": [str(frame)],
+                    "protected_zones": {"face": [], "ui": [], "caption": [], "cursor": []},
+                    "form": "process", "placement": "left", "size": "medium",
+                    "background": "transparent", "read_time": 1.0,
+                    "motion": {"entrance": "fade", "reveal": "step", "hold": "steady", "exit": "fade"},
+                    "audio_decision": {"type": "intentionally_silent", "reason": "test fixture"},
+                    "deduplication": {"semantic": "unique", "visual": "unique"},
                     "relevance_rationale": "verified semantic event",
                 }
                 for index, event in enumerate(events)
@@ -130,7 +159,8 @@ class DirectorTests(unittest.TestCase):
             "motion": {"ok": True, "errorCount": 0, "enabled": True},
             "contrast": {"ok": True, "errorCount": 0},
         }
-        (qa / "hyperframes-check.json").write_text(json.dumps(check), encoding="utf-8")
+        check_path = qa / "hyperframes-check.json"
+        check_path.write_text(json.dumps(check), encoding="utf-8")
         snapshots = []
         for index in range(4):
             path = qa / f"snapshot-{index}.png"
@@ -156,6 +186,8 @@ class DirectorTests(unittest.TestCase):
             "samples": [{
                 "event_id": "full-0", "time_seconds": 10.0,
                 "studio_snapshot": str(studio), "render_snapshot": str(rendered),
+                "studio_snapshot_sha256": sha256_file(studio),
+                "render_snapshot_sha256": sha256_file(rendered),
                 "animation_phase": {"studio": "midpoint", "render": "midpoint"},
                 "elements": [{
                     "selector": "#event",
@@ -169,6 +201,29 @@ class DirectorTests(unittest.TestCase):
             }],
         }
         (qa / "preview-render-parity.json").write_text(json.dumps(parity), encoding="utf-8")
+        commands_path = director.root / "full-hyperframes-commands.json"
+        command = json.loads(commands_path.read_text(encoding="utf-8"))["check"]
+        toolchain_path = director.root / "toolchain-compatibility.json"
+        toolchain_path.write_text(json.dumps({"fixture": True}), encoding="utf-8")
+        stdout = qa / "hyperframes-check-stdout.log"
+        stderr = qa / "hyperframes-check-stderr.log"
+        stdout.write_text(json.dumps(check), encoding="utf-8")
+        stderr.write_text("", encoding="utf-8")
+        (qa / "hyperframes-check-receipt.json").write_text(json.dumps({
+            "schema_version": 1, "owner": "director", "capability": "hyperframes_check",
+            "status": "pass", "exit_code": 0,
+            "command_sha256": _json_sha256(command["argv"]),
+            "cwd": str(Path(command["cwd"]).resolve()),
+            "storyboard_sha256": sha256_file(director.full_hyperframes_project / "storyboard.json"),
+            "visual_vocabulary_sha256": sha256_file(
+                director.full_hyperframes_project / "visual-vocabulary-audit.json"
+            ),
+            "commands_sha256": sha256_file(commands_path),
+            "toolchain_sha256": sha256_file(toolchain_path),
+            "check_report_sha256": sha256_file(check_path),
+            "stdout_log": str(stdout), "stdout_sha256": sha256_file(stdout),
+            "stderr_log": str(stderr), "stderr_sha256": sha256_file(stderr),
+        }), encoding="utf-8")
         director._start("full_hyperframes_qa")
         director.stage_full_hyperframes_qa()
 
@@ -196,6 +251,83 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(state["status"], "action_required")
         self.assertEqual(state["current_stage"], "preview_approval")
         self.assertEqual(action_before["stage"], action_after["stage"])
+
+    def test_old_state_migration_invalidates_all_unverifiable_completed_work(self) -> None:
+        director = Director(self.project)
+        inspect_artifact = director.root / "inspect.json"
+        timeline_artifact = director.root / "timeline.json"
+        inspect_artifact.write_text("inspect", encoding="utf-8")
+        timeline_artifact.write_text("timeline", encoding="utf-8")
+        director._complete("inspect", [inspect_artifact])
+        director._complete("video_use_timeline", [timeline_artifact])
+        for name in STAGES[STAGES.index("evidence_acquisition"):]:
+            director.state["stages"][name]["status"] = "complete"
+        director.state["schema_version"] = 3
+        director.state["stages"].pop("evidence_acquisition")
+        director._save()
+
+        migrated = Director(self.project)
+
+        for name in STAGES:
+            self.assertEqual(migrated.state["stages"][name]["status"], "pending")
+
+    def test_changed_completed_stage_artifact_reopens_that_stage_and_downstream(self) -> None:
+        director = Director(self.project)
+        inspect_artifact = director.root / "inspect.json"
+        timeline_artifact = director.root / "timeline.json"
+        inspect_artifact.write_text("inspect-v1", encoding="utf-8")
+        timeline_artifact.write_text("timeline-v1", encoding="utf-8")
+        director._complete("inspect", [inspect_artifact])
+        director._complete("video_use_timeline", [timeline_artifact])
+        timeline_artifact.write_text("timeline-v2", encoding="utf-8")
+
+        reopened = Director(self.project)
+        self.assertEqual(reopened.state["stages"]["inspect"]["status"], "complete")
+        self.assertEqual(reopened.state["stages"]["video_use_timeline"]["status"], "pending")
+        self.assertEqual(reopened.state["stages"]["delivery_qa"]["status"], "pending")
+
+    def test_changed_source_bytes_reopen_entire_workflow(self) -> None:
+        director = Director(self.project)
+        artifact = director.root / "inspect.json"
+        artifact.write_text("inspect", encoding="utf-8")
+        director._complete("inspect", [artifact])
+        director.context.source_video.write_bytes(b"changed-source")
+
+        reopened = Director(self.project)
+        self.assertTrue(all(row["status"] == "pending"
+                            for row in reopened.state["stages"].values()))
+        self.assertEqual(reopened.state["input_fingerprints"]["source_video"]["sha256"],
+                         sha256_file(director.context.source_video))
+
+    def test_changed_source_with_preserved_size_and_mtime_still_reopens_workflow(self) -> None:
+        director = Director(self.project)
+        artifact = director.root / "inspect.json"
+        artifact.write_text("inspect", encoding="utf-8")
+        director._complete("inspect", [artifact])
+        source = director.context.source_video
+        original_stat = source.stat()
+        self.assertEqual(len(b"source-media"), len(b"changed-data"))
+        source.write_bytes(b"changed-data")
+        os.utime(source, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+
+        reopened = Director(self.project)
+        self.assertTrue(all(row["status"] == "pending"
+                            for row in reopened.state["stages"].values()))
+
+    def test_changed_project_bytes_reopen_entire_workflow(self) -> None:
+        director = Director(self.project)
+        artifact = director.root / "inspect.json"
+        artifact.write_text("inspect", encoding="utf-8")
+        director._complete("inspect", [artifact])
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["title"] = "changed configuration"
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+        reopened = Director(self.project)
+        self.assertTrue(all(row["status"] == "pending"
+                            for row in reopened.state["stages"].values()))
+        self.assertEqual(reopened.state["input_fingerprints"]["project_file"]["sha256"],
+                         sha256_file(self.project))
 
     def test_undeclared_input_mode_runs_analysis_and_caches_hash_bound_decision(self) -> None:
         recording = self.root / "source" / "recording.mp4"
@@ -338,12 +470,13 @@ class DirectorTests(unittest.TestCase):
         )["final_motion_render"]
         output = Path(command_record["expected_artifact"])
 
-        def fake_run(command: list[str], *, cwd: str, check: bool) -> None:
+        def fake_run(command: list[str], *, cwd: str, **_kwargs):
             self.assertEqual(command[0], r"C:\node\npx.CMD")
             self.assertEqual(cwd, command_record["cwd"])
-            self.assertTrue(check)
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_bytes(b"render")
+            rendered = Path(command[-1])
+            rendered.parent.mkdir(parents=True, exist_ok=True)
+            rendered.write_bytes(b"render")
+            return type("Result", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
 
         director._start("final_render")
         with patch("director.shutil.which", return_value=r"C:\node\npx.CMD") as which:
@@ -353,7 +486,51 @@ class DirectorTests(unittest.TestCase):
         which.assert_called_once_with("npx")
         self.assertEqual(director.state["stages"]["final_render"]["status"], "complete")
 
-    def test_state_migration_adds_new_full_and_compose_stages_without_losing_completed_work(self) -> None:
+    def test_successful_noop_render_cannot_receipt_preexisting_output(self) -> None:
+        director = Director(self.project, approve_final_render=True)
+        self._write_full_hyperframes_contract(director)
+        director._start("full_hyperframes_storyboard")
+        director.stage_full_hyperframes_storyboard()
+        self._pass_full_hyperframes_qa(director)
+        authorize_final_render(Director(self.project), "hongr")
+        director = Director(self.project, approve_final_render=True, execute_external=True)
+        output = Path(json.loads((director.root / "full-hyperframes-commands.json")
+                                 .read_text(encoding="utf-8"))
+                      ["final_motion_render"]["expected_artifact"])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"old-render")
+        no_op = type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        director._start("final_render")
+        with patch("director.subprocess.run", return_value=no_op):
+            with self.assertRaisesRegex(DirectorContractError, "did not create"):
+                director.stage_final_render()
+        self.assertFalse((director.root / "final-render-receipt.json").exists())
+
+    def test_stale_hyperframes_check_receipt_is_rerun_when_execution_is_enabled(self) -> None:
+        director = Director(self.project)
+        self._write_full_hyperframes_contract(director)
+        director._start("full_hyperframes_storyboard")
+        director.stage_full_hyperframes_storyboard()
+        self._pass_full_hyperframes_qa(director)
+        storyboard = director.full_hyperframes_project / "storyboard.json"
+        payload = json.loads(storyboard.read_text(encoding="utf-8"))
+        payload["review_revision"] = 2
+        storyboard.write_text(json.dumps(payload), encoding="utf-8")
+        resumed = Director(self.project, execute_external=True)
+        check = json.loads((resumed.root / "full-qa" / "hyperframes-check.json")
+                           .read_text(encoding="utf-8"))
+        result = type("Result", (), {
+            "returncode": 0, "stdout": json.dumps(check), "stderr": "",
+        })()
+        resumed._start("full_hyperframes_qa")
+        with patch("director.subprocess.run", return_value=result) as run:
+            resumed.stage_full_hyperframes_qa()
+        self.assertEqual(run.call_count, 1)
+        receipt = json.loads((resumed.root / "full-qa" / "hyperframes-check-receipt.json")
+                             .read_text(encoding="utf-8"))
+        self.assertEqual(receipt["storyboard_sha256"], sha256_file(storyboard))
+
+    def test_state_migration_adds_new_stages_and_invalidates_unverifiable_completion(self) -> None:
         director = Director(self.project)
         director._start("inspect")
         director.stage_inspect()
@@ -499,14 +676,15 @@ class DirectorTests(unittest.TestCase):
             director.stage_manual_finish_handoff()
         self.assertEqual(director.state["stages"]["manual_finish_handoff"]["status"], "complete")
 
+        returned_stat = returned.stat()
         returned.write_bytes(b"manual-v2")
+        os.utime(returned, ns=(returned_stat.st_atime_ns, returned_stat.st_mtime_ns))
         reopened = Director(self.project)
         self.assertEqual(reopened.state["stages"]["manual_finish_handoff"]["status"], "pending")
         self.assertEqual(reopened.state["stages"]["delivery_qa"]["status"], "pending")
-        invalidation = json.loads(
-            (reopened.manual_finish_dir / "return-change-invalidation.json").read_text(encoding="utf-8")
-        )
-        self.assertIn("bytes changed", invalidation["reason"])
+        self.assertEqual(reopened.state["last_invalidation"]["from_stage"],
+                         "manual_finish_handoff")
+        self.assertIn("artifact changed", reopened.state["last_invalidation"]["reason"])
 
     def test_project_hardcoded_event_scripts_are_quarantined_not_executed(self) -> None:
         scripts = self.root / "scripts"
@@ -536,6 +714,27 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(Path(plan["output"]), director.delivery_output)
         self.assertIn("loudnorm=I=-14:TP=-1.5:LRA=11", plan["argv"])
         self.assertEqual(plan["argv"][-1], str(director.delivery_output))
+
+    def test_audio_stage_executes_real_asset_production_when_external_execution_is_enabled(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["audio"] = {"production": {"enabled": True}}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project, execute_external=True)
+        director.sample_hyperframes_project.mkdir(parents=True, exist_ok=True)
+        storyboard = director.sample_hyperframes_project / "storyboard.json"
+        storyboard.write_text(json.dumps({"events": []}), encoding="utf-8")
+        audio_plan = director.sample_hyperframes_project / "audio-plan.json"
+
+        def fake_produce(**kwargs):
+            self.assertEqual(kwargs["storyboard"], storyboard)
+            audio_plan.write_text(json.dumps({"schema_version": 3}), encoding="utf-8")
+            return [audio_plan]
+
+        director._start("audio")
+        with patch("director.produce_audio_assets", side_effect=fake_produce) as produce:
+            director.stage_audio()
+        self.assertEqual(produce.call_count, 1)
+        self.assertIn(str(audio_plan), director.state["stages"]["audio"]["artifacts"])
 
     def test_final_compose_adds_authorized_bgm_with_speech_ducking(self) -> None:
         bgm = self.root / "assets" / "bgm.wav"
@@ -580,6 +779,269 @@ class DirectorTests(unittest.TestCase):
         self.assertIn("amix=inputs=2", filter_graph)
         self.assertIn("loudnorm=I=-14:TP=-1.5:LRA=11", filter_graph)
 
+    def test_final_compose_uses_successful_bgm_from_full_audio_plan(self) -> None:
+        bgm = self.root / "edit" / "audio" / "bgm" / "selected.wav"
+        bgm.parent.mkdir(parents=True)
+        bgm.write_bytes(b"generated-authorized-music")
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["audio"] = {"bgm": {"enabled_by_default": True}}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        motion = director.root / "render" / "full-hyperframes.mp4"
+        motion.parent.mkdir(parents=True)
+        motion.write_bytes(b"hyperframes-render")
+        director.full_hyperframes_project.mkdir(parents=True)
+        (director.full_hyperframes_project / "storyboard.json").write_text(
+            json.dumps({"composition": {"duration": 20.0}}), encoding="utf-8"
+        )
+        (director.full_hyperframes_project / "audio-plan.json").write_text(json.dumps({
+            "background_music": {"mode": "authorized_asset", "enabled": True,
+                                 "source": str(bgm), "preview_volume": 0.08,
+                                 "provenance": {"provider": "minimax", "sha256": sha256_file(bgm)}}
+        }), encoding="utf-8")
+        (director.root / "full-hyperframes-commands.json").write_text(json.dumps({
+            "final_motion_render": {"expected_artifact": str(motion)}
+        }), encoding="utf-8")
+        director._start("final_compose")
+        with self.assertRaisesRegex(ValueError, "universal"):
+            director.stage_final_compose()
+        plan = json.loads((director.root / "final-compose-command.json").read_text(encoding="utf-8"))
+        self.assertEqual(plan["audio_mix"]["bgm_asset"], str(bgm))
+        self.assertEqual(plan["audio_mix"]["source"], "full_audio_plan")
+        self.assertEqual(plan["audio_mix"]["provider"], "minimax")
+
+    def test_final_compose_runs_full_technical_qa_bound_to_output(self) -> None:
+        director = Director(self.project, execute_external=True)
+        motion = director.root / "render" / "full-hyperframes.mp4"
+        motion.parent.mkdir(parents=True)
+        motion.write_bytes(b"motion")
+        (director.root / "full-hyperframes-commands.json").write_text(json.dumps({
+            "final_motion_render": {"expected_artifact": str(motion)}
+        }), encoding="utf-8")
+        director.video_use_dir.mkdir(parents=True, exist_ok=True)
+        (director.video_use_dir / "edl.json").write_text(json.dumps({
+            "ranges": [{"start": 0, "end": 4}, {"start": 8, "end": 12}]
+        }), encoding="utf-8")
+
+        def fake_qa(media, *, output, evidence_dir, cut_boundaries, true_peak_ceiling):
+            self.assertEqual(media, director.delivery_output)
+            self.assertEqual(cut_boundaries, [4.0])
+            report = {"status": "pass", "file_sha256": sha256_file(media),
+                      "decode": {"status": "pass"}, "blocking_errors": []}
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(report), encoding="utf-8")
+            return report
+
+        def fake_compose(command, **_kwargs):
+            target = Path(command[-1])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"universal")
+
+        director._start("final_compose")
+        with patch("director.subprocess.run", side_effect=fake_compose), \
+             patch("director.run_technical_qa", side_effect=fake_qa) as run:
+            director.stage_final_compose()
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(director.state["stages"]["final_compose"]["status"], "complete")
+
+    def test_enabled_two_pass_normalization_is_hash_bound_and_keeps_one_delivery_output(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["audio"] = {"normalization": {"enabled": True, "target_lufs": -14.0,
+                                                   "true_peak_dbtp": -1.5, "lra": 11.0}}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project, execute_external=True)
+        motion = director.root / "render" / "full-hyperframes.mp4"
+        motion.parent.mkdir(parents=True)
+        motion.write_bytes(b"motion")
+        (director.root / "full-hyperframes-commands.json").write_text(json.dumps({
+            "final_motion_render": {"expected_artifact": str(motion)}
+        }), encoding="utf-8")
+
+        def fake_run(command, **kwargs):
+            target = Path(command[-1])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"pre-normalized")
+
+        def fake_normalize(source, output, target_i, target_tp, lra):
+            self.assertNotEqual(source, output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"normalized")
+            return {"source": str(source), "source_sha256": sha256_file(source),
+                    "output": str(output), "output_sha256": sha256_file(output),
+                    "target": {"integrated_lufs": target_i, "true_peak_dbtp": target_tp,
+                               "lra": lra},
+                    "first_pass": {"input_i": "-19.0", "input_tp": "-4.0",
+                                   "input_lra": "6.0", "input_thresh": "-29.0",
+                                   "target_offset": "0.1"},
+                    "post_measurement": {"input_i": str(target_i),
+                                         "input_tp": str(target_tp),
+                                         "input_lra": "6.0"},
+                    "status": "pass"}
+
+        def fake_qa(media, **kwargs):
+            report = {"status": "pass", "file_sha256": sha256_file(media),
+                      "decode": {"status": "pass"}, "blocking_errors": []}
+            kwargs["output"].parent.mkdir(parents=True, exist_ok=True)
+            kwargs["output"].write_text(json.dumps(report), encoding="utf-8")
+            return report
+
+        director._start("final_compose")
+        with patch("director.subprocess.run", side_effect=fake_run), \
+             patch("director.normalize_social_audio", side_effect=fake_normalize) as normalize, \
+             patch("director.run_technical_qa", side_effect=fake_qa):
+            director.stage_final_compose()
+
+        self.assertEqual(normalize.call_count, 1)
+        plan = json.loads((director.root / "final-compose-command.json").read_text(encoding="utf-8"))
+        self.assertEqual(plan["output"], str(director.delivery_output))
+        self.assertTrue(plan["single_universal_output"])
+        report = json.loads((director.root / "audio-normalization-report.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["output_sha256"], sha256_file(director.delivery_output))
+
+    def test_final_compose_rebuilds_when_motion_hash_changes(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["audio"] = {"normalization": {"enabled": True}}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project, execute_external=True)
+        motion = director.root / "render" / "full-hyperframes.mp4"
+        motion.parent.mkdir(parents=True)
+        motion.write_bytes(b"motion-v1")
+        (director.root / "full-hyperframes-commands.json").write_text(json.dumps({
+            "final_motion_render": {"expected_artifact": str(motion)}
+        }), encoding="utf-8")
+        compose_calls: list[list[str]] = []
+
+        def fake_run(command, **kwargs):
+            compose_calls.append(command)
+            target = Path(command[-1])
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"pre-" + motion.read_bytes())
+
+        def fake_normalize(source, output, target_i, target_tp, lra):
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"normalized-" + source.read_bytes())
+            return {
+                "status": "pass", "source_sha256": sha256_file(source),
+                "output_sha256": sha256_file(output),
+                "target": {"integrated_lufs": target_i,
+                           "true_peak_dbtp": target_tp, "lra": lra},
+                "first_pass": {"input_i": "-19", "input_tp": "-4",
+                               "input_lra": "6", "input_thresh": "-29",
+                               "target_offset": "0"},
+                "post_measurement": {"input_i": str(target_i),
+                                     "input_tp": str(target_tp), "input_lra": "6"},
+            }
+
+        def fake_qa(media, **kwargs):
+            report = {"status": "pass", "file_sha256": sha256_file(media),
+                      "decode": {"status": "pass"}, "blocking_errors": []}
+            kwargs["output"].parent.mkdir(parents=True, exist_ok=True)
+            kwargs["output"].write_text(json.dumps(report), encoding="utf-8")
+            return report
+
+        with patch("director.subprocess.run", side_effect=fake_run), \
+             patch("director.normalize_social_audio", side_effect=fake_normalize), \
+             patch("director.run_technical_qa", side_effect=fake_qa):
+            director._start("final_compose")
+            director.stage_final_compose()
+            motion.write_bytes(b"motion-v2")
+            director.stage_final_compose()
+        self.assertEqual(len(compose_calls), 2)
+        plan = json.loads((director.root / "final-compose-command.json").read_text(encoding="utf-8"))
+        self.assertEqual(plan["compose_input_sha256"], sha256_file(motion))
+        self.assertEqual(plan["compose_output_sha256"], sha256_file(
+            director.root / "final-compose-pre-normalized.mp4"
+        ))
+
+    def test_final_compose_adopts_exact_manual_command_output_on_resume(self) -> None:
+        director = Director(self.project)
+        motion = director.root / "render" / "full-hyperframes.mp4"
+        motion.parent.mkdir(parents=True)
+        motion.write_bytes(b"motion")
+        (director.root / "full-hyperframes-commands.json").write_text(json.dumps({
+            "final_motion_render": {"expected_artifact": str(motion)}
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(DirectorContractError, "not present"):
+            director.stage_final_compose()
+        pending = json.loads((director.root / "final-compose-command.json").read_text(
+            encoding="utf-8"
+        ))
+        self.assertEqual(pending["execution_status"], "awaiting_external_execution")
+        director.delivery_output.parent.mkdir(parents=True, exist_ok=True)
+        director.delivery_output.write_bytes(b"manually-composed")
+
+        def fake_qa(media, **kwargs):
+            report = {"status": "pass", "file_sha256": sha256_file(media),
+                      "decode": {"status": "pass"}, "blocking_errors": []}
+            kwargs["output"].parent.mkdir(parents=True, exist_ok=True)
+            kwargs["output"].write_text(json.dumps(report), encoding="utf-8")
+            return report
+
+        resumed = Director(self.project)
+        resumed._start("final_compose")
+        with patch("director.run_technical_qa", side_effect=fake_qa):
+            resumed.stage_final_compose()
+        completed = json.loads((resumed.root / "final-compose-command.json").read_text(
+            encoding="utf-8"
+        ))
+        self.assertEqual(completed["execution_status"], "adopted_external_output")
+        self.assertEqual(completed["compose_output_sha256"], sha256_file(resumed.delivery_output))
+
+    def test_full_audio_plan_bgm_hash_drift_blocks_composition(self) -> None:
+        bgm = self.root / "edit" / "audio" / "bgm" / "selected.wav"
+        bgm.parent.mkdir(parents=True)
+        bgm.write_bytes(b"approved")
+        approved_hash = sha256_file(bgm)
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["audio"] = {"bgm": {"enabled_by_default": True}}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        motion = director.root / "render" / "full-hyperframes.mp4"
+        motion.parent.mkdir(parents=True)
+        motion.write_bytes(b"motion")
+        director.full_hyperframes_project.mkdir(parents=True)
+        (director.full_hyperframes_project / "storyboard.json").write_text(
+            json.dumps({"composition": {"duration": 20.0}}), encoding="utf-8"
+        )
+        (director.full_hyperframes_project / "audio-plan.json").write_text(json.dumps({
+            "background_music": {"mode": "authorized_asset", "enabled": True,
+                                 "source": str(bgm),
+                                 "provenance": {"provider": "minimax",
+                                                "sha256": approved_hash}}
+        }), encoding="utf-8")
+        bgm.write_bytes(b"changed-after-approval")
+        (director.root / "full-hyperframes-commands.json").write_text(json.dumps({
+            "final_motion_render": {"expected_artifact": str(motion)}
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(DirectorContractError, "BGM.*hash"):
+            director.stage_final_compose()
+
+    def test_enabled_render_cache_executes_hyperframes_through_cache_pipeline(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["render"] = {"cache": {"enabled": True}}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project, approve_final_render=True, execute_external=True)
+        self._write_full_hyperframes_contract(director)
+        director._start("full_hyperframes_storyboard")
+        director.stage_full_hyperframes_storyboard()
+        self._pass_full_hyperframes_qa(director)
+        authorize_final_render(Director(self.project), "tester")
+        director = Director(self.project, approve_final_render=True, execute_external=True)
+        output = director.root / "render" / "full-hyperframes.mp4"
+
+        def fake_pipeline(config, root, cache, status_path, stop_after):
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"render")
+            status_path.write_text(json.dumps({"state": "completed"}), encoding="utf-8")
+            return {"state": "completed", "stages": {"graphics_render": {"state": "completed"}}}
+
+        director._start("final_render")
+        with patch("director.run_cached_pipeline", side_effect=fake_pipeline) as run:
+            director.stage_final_render()
+        self.assertEqual(run.call_count, 1)
+        self.assertIn(str(director.root / "render-cache-status.json"),
+                      director.state["stages"]["final_render"]["artifacts"])
+
     def test_cover_likeness_waits_as_action_required_instead_of_failing(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["delivery"]["cover"] = "cover.png"
@@ -600,13 +1062,16 @@ class DirectorTests(unittest.TestCase):
         cover.write_bytes(b"cover")
         final_qa = director.root / "final-qa"
         final_qa.mkdir(parents=True)
-        (final_qa / "aesthetic-review.json").write_text(json.dumps({}), encoding="utf-8")
+        (final_qa / "aesthetic-review.json").write_text(json.dumps({
+            "reviewed_output_sha256": output_hash,
+        }), encoding="utf-8")
         (final_qa / "cover-review.json").write_text(json.dumps({
             "status": "pending_user_identity_approval",
             "identity_reference_count": 2,
             "topic_relevant": True,
             "natural_expression_and_energy": True,
             "identity_approved_by_user": False,
+            "cover_sha256": sha256_file(cover),
         }), encoding="utf-8")
         director.video_use_dir.mkdir(parents=True, exist_ok=True)
         (director.video_use_dir / "final-edit-correctness.json").write_text(json.dumps({}), encoding="utf-8")
@@ -616,15 +1081,75 @@ class DirectorTests(unittest.TestCase):
             (final_qa / f"platform-{platform}.json").write_text(json.dumps({
                 "status": "pass",
                 "file_sha256": output_hash,
+                "cover_sha256": sha256_file(cover),
             }), encoding="utf-8")
         with patch("director.validate_aesthetic_review", return_value=[]), \
                 patch("director.validate_audio_plan", return_value=[]), \
-                patch("director.validate_video_use_final_correctness", return_value=[]):
+                patch("director.validate_video_use_final_correctness", return_value=[]), \
+                patch("director.validate_technical_report", return_value=[]), \
+                patch("director.validate_platform_report", return_value=[]):
             with self.assertRaisesRegex(DirectorContractError, "explicit user approval"):
                 director.stage_delivery_qa()
         self.assertEqual(director.state["stages"]["delivery_qa"]["status"], "action_required")
         packet = json.loads(director.action_path.read_text(encoding="utf-8"))
         self.assertEqual(packet["actions"][0]["owner"], "user")
+
+    def test_platform_validation_generates_two_reports_for_same_universal_bytes(self) -> None:
+        director = Director(self.project, execute_external=True)
+        output = director.delivery_output
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"one-universal-file")
+        cover = self.root / "cover.png"
+        cover.write_bytes(b"cover")
+        paths = {
+            name: director.root / "final-qa" / f"platform-{name}.json"
+            for name in ("douyin", "wechat_channels")
+        }
+
+        def fake_run(command, **_kwargs):
+            report = Path(command[command.index("--out") + 1])
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(json.dumps({
+                "status": "pass", "file_sha256": sha256_file(output),
+                "cover_sha256": sha256_file(cover),
+                "media": str(output),
+            }), encoding="utf-8")
+            return type("Result", (), {"returncode": 0, "stderr": ""})()
+
+        with patch("director.subprocess.run", side_effect=fake_run) as run:
+            director._ensure_platform_validations(output, cover, paths)
+        self.assertEqual(run.call_count, 2)
+        self.assertTrue(all(path.is_file() for path in paths.values()))
+        self.assertTrue(all(str(output) in call.args[0] for call in run.call_args_list))
+
+    def test_platform_validation_rebuilds_reports_when_cover_bytes_change(self) -> None:
+        director = Director(self.project, execute_external=True)
+        output = director.delivery_output
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"one-universal-file")
+        cover = self.root / "cover.png"
+        cover.write_bytes(b"cover-v1")
+        paths = {
+            name: director.root / "final-qa" / f"platform-{name}.json"
+            for name in ("douyin", "wechat_channels")
+        }
+
+        def fake_run(command, **_kwargs):
+            report = Path(command[command.index("--out") + 1])
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(json.dumps({
+                "status": "pass",
+                "file_sha256": sha256_file(output),
+                "cover_sha256": sha256_file(cover),
+            }), encoding="utf-8")
+            return type("Result", (), {"returncode": 0, "stderr": ""})()
+
+        with patch("director.subprocess.run", side_effect=fake_run) as run:
+            director._ensure_platform_validations(output, cover, paths)
+            self.assertEqual(run.call_count, 2)
+            cover.write_bytes(b"cover-v2")
+            director._ensure_platform_validations(output, cover, paths)
+            self.assertEqual(run.call_count, 4)
 
     def test_full_storyboard_creates_render_authority_for_full_project_only(self) -> None:
         director = Director(self.project)

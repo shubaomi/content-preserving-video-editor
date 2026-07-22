@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 from typing import Any
 
-from director_contracts import read_json, write_json
+from director_contracts import read_json, sha256_file, write_json
 
 
 def _number(value: Any, default: float = float("inf")) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError):
         return default
+    return number if math.isfinite(number) else default
 
 
 def validate(
@@ -74,6 +78,8 @@ def validate(
             path = Path(str(sample.get(field, "")))
             if not path.is_file():
                 errors.append(f"{prefix} {field} is missing")
+            elif sample.get(f"{field}_sha256") != sha256_file(path):
+                errors.append(f"{prefix} {field} hash is missing or stale")
         phase = sample.get("animation_phase") or {}
         if not phase.get("studio") or phase.get("studio") != phase.get("render"):
             errors.append(f"{prefix} animation phase parity failed")

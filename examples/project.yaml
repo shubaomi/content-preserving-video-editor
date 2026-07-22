@@ -1,5 +1,5 @@
-schema_version: 3
-version: 3
+schema_version: 6
+version: 6
 video_id: example-video
 title: Example Video
 profile: ..\..\profile.yaml
@@ -26,6 +26,10 @@ editing:
   allow_long_semantic_deletion_without_confirmation: false
 
 analysis:
+  hook_pacing:
+    enabled: true
+  subject_tracking:
+    enabled: true
   transcription:
     preferred: local_faster_whisper
     optional: [funclip_funasr]
@@ -37,6 +41,8 @@ analysis:
     video_use: conditional
 
 visuals:
+  ip_production:
+    enabled: true
   ip_opportunity_audit_required: true
   theme_asset_mode: content_specific
   character_reference_only: true
@@ -47,6 +53,14 @@ visuals:
   full_canvas_only_for_chapter_bridge: true
   match_design_tokens: true
   prefer_transparent_or_scene_matched_background: true
+
+assets:
+  media_catalog:
+    enabled: false
+
+publishing:
+  copy:
+    enabled: true
 
 layout:
   orientation: auto_from_display_metadata
@@ -65,6 +79,8 @@ delivery:
     assets: {}
 
 qa:
+  platform_occlusion:
+    enabled: true
   preview_render_parity:
     tolerances:
       position_px: 4.0
@@ -73,11 +89,13 @@ qa:
 
 cover:
   enabled: true
+  production:
+    enabled: true
   identity_mode: authorized_real_photo
   style: cinematic_movie_poster
   aspect_ratio: "9:16"
   hand_drawn_ip: optional
-  preserve_original_face_pixels: true
+  preserve_original_face_pixels: false
   generate_background_separately: true
   identity_qa_before_aesthetic_qa: true
 
@@ -86,6 +104,13 @@ hyperframes:
   overlay_source: hyperframes\overlay-source.html.txt
 
 audio:
+  production:
+    enabled: true
+  normalization:
+    enabled: true
+    target_lufs: -14.0
+    true_peak_dbtp: -1.5
+    lra: 11.0
   sfx:
     enabled: true
     volume: 0.28
@@ -96,7 +121,11 @@ audio:
     enabled_by_default: true
     optional: true
     asset: null
-    providers: [heygen, minimax, musicgen]
+    provider_chain:
+      - {name: media-use, enabled: false}
+      - {name: heygen, enabled: false, requires_paid_call: true}
+      - {name: minimax, enabled: false, requires_paid_call: true}
+      - {name: musicgen, enabled: false}
     stop_after_first_success: true
     preview_volume: 0.1
     ducking:

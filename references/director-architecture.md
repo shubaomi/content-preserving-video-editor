@@ -18,6 +18,36 @@ Use this reference when executing or extending the single professional workflow.
 | Composite, mix, encode, decode | FFmpeg | one universal final MP4 and `final-media-report.json` |
 | Optional manual finish | human editor in OpenCut or another NLE | `handoff-manifest.json`, `correction-ledger.json`, returned universal MP4, and fresh hash-bound QA |
 
+## Capability registry and adapter boundary
+
+`scripts/capability_registry.py` is the inventory source of truth. `inspect`
+writes the effective capability and toolchain reports without installing or
+updating dependencies. `scripts/director_adapters.py` supplies atomic state,
+file locking, input/output/implementation hashes, timeout handling, reuse, and
+failure boundaries. Optional adapters are disabled by schema-v6 migration and
+must not change the legacy path.
+Adapter execution uses a per-capability transaction lock around cache lookup,
+execution, output hashing, and state persistence. Relative implementation paths
+resolve from the adapter working directory, and concurrent invocations of the
+same capability reuse one completed result rather than racing on shared output.
+
+Director-integrated adapters include evidence analysis, local ASR routing,
+OTIO projection, subject tracking, existing-edit polish, HyperFrames routing,
+media-use/Catalog asset lookup, audio/IP/cover production, render cache,
+platform occlusion/export validation, preferences, hook/publishing utilities,
+conditional B-roll/multicam/isolation/localization, selected-event Remotion, and
+user-supplied post-publish metrics. “Integrated” means the Director can route,
+execute, cache, validate, or truthfully stop at the adapter boundary; it does
+not claim an unavailable upstream API or paid-service authorization.
+
+The media catalog runs only for semantic events with an explicit query and
+purpose. It writes a request manifest that is passed through the configured
+`{request_manifest}` argument and included as a hashed adapter input. Catalog
+decisions must bind the current request set and per-event query/purpose before
+their asset hashes, provenance, and rights are accepted. OpenCut remains
+human-only. Remotion remains a named-event adapter; HyperFrames owns the full
+composition.
+
 ## State machine
 
 Before the state machine leaves `inspect`, resolve input mode from explicit
@@ -169,15 +199,37 @@ HyperFrames command to run. Keep both absent while rendering is paused.
 
 After HyperFrames output exists, `final_compose` uses FFmpeg for the single
 automatic universal encode and performs a full decode plus ffprobe report. If
+the motion render, selected BGM, full audio plan, FFmpeg settings, schema, or
+Director version changes, the compose signature changes and the intermediate is
+rebuilt. Two-pass normalization validates target parameters, first-pass data,
+post-normalization loudness/true peak/LRA, and exact source/output hashes. If
 manual finishing is disabled, that master proceeds directly to `delivery_qa`.
 If enabled, only the revalidated human return becomes the effective universal
 output. `delivery_qa` then blocks on the final aesthetic review, speech-dominant audio plan with
 provenance, topic/identity/expression-approved cover, and Douyin plus WeChat
 Channels reports that reference the exact same file hash.
+The final aesthetic review binds `reviewed_output_sha256`; the cover review,
+both platform reports, and delivery contract bind the exact cover SHA-256 as
+well. Changing either file invalidates delivery evidence instead of reusing a
+path-based pass.
 
-Run `scripts/completion_audit.py` to obtain an honest eleven-item acceptance
+Director state schema v5 binds the exact project and source bytes plus every
+completed stage artifact. Resume always re-hashes these inputs, including when
+file size and modification time are unchanged, and invalidates the earliest
+affected stage and all downstream stages when bytes drift.
+Legacy state that lacks contemporaneous v5 fingerprints is invalidated from
+`inspect`; it is never upgraded by hashing today's files and preserving an old
+`complete` flag. A returned manual-finish file is likewise re-hashed on every
+resume, so same-size and same-mtime byte changes reopen manual finishing and
+delivery QA.
+
+Run `scripts/completion_audit.py` to obtain an honest thirteen-item acceptance
 report. A paused full render remains `pending`; it must never be reported as
-complete merely because code tests and sample snapshots pass.
+complete merely because code tests and sample snapshots pass. The audit
+independently revalidates full HyperFrames checks, snapshots, preview/render
+parity, render authorization, final aesthetics, cover, full decode, video-use
+correctness, platform bindings, delivery contract, state artifact records, and
+input fingerprints.
 
 Before render, `full_hyperframes_qa` blocks on a strict HyperFrames report with
 lint, runtime, layout, motion-sidecar, and contrast checks plus at least four
@@ -189,3 +241,14 @@ clipping/cropping, and caption occlusion. Reported tolerances may not exceed the
 versioned project configuration. Then `authorize-final-render` binds the full
 Storyboard, visual-vocabulary audit, command manifest, and verified QA evidence
 hashes. A changed artifact invalidates the authorization.
+
+The Director itself records the strict-check and final-render subprocess
+receipts. Each receipt binds the exact argv, working directory, exit status,
+stdout/stderr logs, command manifest, toolchain, Storyboard, QA/authorization,
+and produced bytes. A render file placed on disk without a matching current
+receipt remains unverified and cannot satisfy completion audit.
+
+Final technical and platform report reuse is conditional on the production
+validators freshly repeating probe, decode, and loudness measurement. Existing
+evidence images and current file hashes do not make self-declared measurements
+authoritative.

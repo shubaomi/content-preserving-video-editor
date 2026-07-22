@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
+import time
+from contextlib import contextmanager
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,6 +34,7 @@ REQUIRED_VISUAL_FIELDS = (
 STAGES = (
     "inspect",
     "video_use_timeline",
+    "evidence_acquisition",
     "semantic_brief",
     "hyperframes_storyboard",
     "audio",
@@ -64,6 +69,40 @@ class DirectorContractError(ValueError):
     """Raised when a stage artifact violates the professional workflow contract."""
 
 
+@contextmanager
+def exclusive_file_lock(
+    target: Path, *, timeout_seconds: float = 30.0, stale_seconds: float = 3600.0,
+):
+    """Serialize a transaction with a bounded, crash-reclaimable lock file."""
+    lock = target.with_suffix(target.suffix + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout_seconds
+    descriptor: int | None = None
+    while descriptor is None:
+        try:
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(descriptor, json.dumps({"pid": os.getpid(), "created": time.time()}).encode("utf-8"))
+        except (FileExistsError, PermissionError):
+            try:
+                stale = time.time() - lock.stat().st_mtime > stale_seconds
+            except FileNotFoundError:
+                stale = False
+            if stale:
+                try:
+                    lock.unlink()
+                    continue
+                except (FileNotFoundError, PermissionError):
+                    pass
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"timed out waiting for lock: {lock}")
+            time.sleep(0.01)
+    try:
+        yield
+    finally:
+        os.close(descriptor)
+        lock.unlink(missing_ok=True)
+
+
 @dataclass(frozen=True)
 class ProjectContext:
     project_file: Path
@@ -82,9 +121,26 @@ def read_json(path: Path) -> Any:
 
 def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        deadline = time.monotonic() + 5.0
+        while True:
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.005)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def sha256_file(path: Path) -> str:
@@ -110,8 +166,11 @@ def detect_input_mode(
         return "polish_existing"
     if any(token in declared for token in ("source", "raw", "preserve")):
         return "preserve"
-    if project.get("workflow", {}).get("input_mode") == "polish_existing":
+    workflow_mode = str(project.get("workflow", {}).get("input_mode") or "").lower()
+    if workflow_mode == "polish_existing":
         return "polish_existing"
+    if workflow_mode in {"source_first", "preserve", "raw"}:
+        return "preserve"
     source = project.get("source", {})
     if any(source.get(field) is True for field in (
         "published", "previously_edited", "has_burned_captions", "has_existing_bgm"
@@ -149,6 +208,7 @@ def load_project_context(project_file: Path) -> tuple[dict[str, Any], ProjectCon
             if (
                 candidate.get("source_size") == stat.st_size
                 and candidate.get("source_mtime_ns") == stat.st_mtime_ns
+                and candidate.get("source_sha256") == sha256_file(source_video)
             ):
                 mode_evidence = candidate
         except (OSError, json.JSONDecodeError):
@@ -177,7 +237,11 @@ def visual_signature(event: dict[str, Any]) -> tuple[str, ...]:
 
 def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bool = False) -> list[str]:
     errors: list[str] = []
-    if int(brief.get("schema_version", 0)) < 1:
+    try:
+        schema_version = int(brief.get("schema_version", 0))
+    except (TypeError, ValueError):
+        schema_version = 0
+    if schema_version < 1:
         errors.append("semantic brief requires schema_version >= 1")
     generated_by = str(brief.get("generated_by", "")).lower()
     if "llm" not in generated_by:
@@ -188,6 +252,14 @@ def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bo
         errors.append("semantic brief requires transcript_sha256 provenance")
     if not brief.get("evidence_frames"):
         errors.append("semantic brief requires evidence_frames")
+    if schema_version >= 2:
+        if not re.fullmatch(r"[0-9a-f]{64}", str(brief.get("evidence_bundle_sha256", ""))):
+            errors.append("schema 2 semantic brief requires evidence_bundle_sha256 provenance")
+        opening_hook = brief.get("opening_hook") or {}
+        if not isinstance(opening_hook, dict):
+            opening_hook = {}
+        if opening_hook.get("status") not in {"selected", "not_selected"} or not opening_hook.get("evidence"):
+            errors.append("schema 2 semantic brief requires an evidence-backed opening_hook decision")
     events = brief.get("events") or []
     if not events:
         errors.append("semantic brief requires events")
@@ -219,6 +291,29 @@ def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bo
             errors.append(f"{prefix} requires relevance_rationale")
         if not event.get("transcript_word_ids"):
             errors.append(f"{prefix} requires transcript_word_ids")
+        if schema_version >= 2:
+            required = (
+                "source_end", "output_start", "output_end", "viewer_job", "viewer_takeaway",
+                "visual_mechanism", "target_frame_evidence", "protected_zones", "form",
+                "placement", "size", "background", "read_time", "motion",
+                "audio_decision", "deduplication",
+            )
+            for field in required:
+                if event.get(field) in (None, "", [], {}):
+                    errors.append(f"{prefix} requires {field}")
+            motion = event.get("motion") or {}
+            if not isinstance(motion, dict):
+                motion = {}
+            for phase in ("entrance", "reveal", "hold", "exit"):
+                if not motion.get(phase):
+                    errors.append(f"{prefix} motion requires {phase}")
+            audio = event.get("audio_decision") or {}
+            if not isinstance(audio, dict):
+                audio = {}
+            if audio.get("type") not in {"cue", "intentionally_silent"}:
+                errors.append(f"{prefix} audio_decision must be cue or intentionally_silent")
+            if audio.get("type") == "intentionally_silent" and not audio.get("reason"):
+                errors.append(f"{prefix} intentionally_silent requires reason")
         signature = visual_signature(event)
         if any(not value for value in signature):
             errors.append(f"{prefix} visual_structure requires all five distinctness fields")
@@ -227,6 +322,88 @@ def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bo
         signatures.add(signature)
     if require_sample_variety and (visual_events < 4 or len(signatures) < 4):
         errors.append("sample requires at least four genuinely different visual structures")
+    return errors
+
+
+def validate_semantic_evidence_binding(
+    brief: dict[str, Any], *, transcript_path: Path, evidence_bundle_path: Path,
+) -> list[str]:
+    """Bind semantic choices to the exact current transcript and captured frames."""
+    errors: list[str] = []
+    try:
+        schema_version = int(brief.get("schema_version", 0))
+    except (TypeError, ValueError):
+        schema_version = 0
+    if schema_version < 2:
+        errors.append("semantic brief must use schema_version >= 2 for evidence binding")
+    if not transcript_path.is_file() or brief.get("transcript_sha256") != sha256_file(transcript_path):
+        errors.append("semantic brief is not bound to the current transcript")
+    if not evidence_bundle_path.is_file() or brief.get("evidence_bundle_sha256") != sha256_file(evidence_bundle_path):
+        errors.append("semantic brief is not bound to the current evidence bundle")
+        return errors
+    try:
+        bundle = read_json(evidence_bundle_path)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"evidence bundle is unreadable: {error}")
+        return errors
+    if not isinstance(bundle, dict):
+        errors.append("evidence bundle must be a JSON object")
+        return errors
+    if bundle.get("transcript", {}).get("sha256") != sha256_file(transcript_path):
+        errors.append("evidence bundle transcript hash does not match the current transcript")
+
+    frame_records: dict[str, dict[str, Any]] = {}
+    for row in bundle.get("representative_frames") or []:
+        if not isinstance(row, dict) or not row.get("path"):
+            continue
+        path = Path(str(row["path"])).resolve()
+        frame_records[str(path)] = row
+        if not path.is_file() or row.get("sha256") != sha256_file(path):
+            errors.append(f"evidence frame is missing or hash-drifted: {path}")
+
+    def resolved_frame(value: Any) -> str:
+        if isinstance(value, dict):
+            value = value.get("path")
+        path = Path(str(value))
+        if not path.is_absolute():
+            path = evidence_bundle_path.parent / path
+        return str(path.resolve())
+
+    for value in brief.get("evidence_frames") or []:
+        if resolved_frame(value) not in frame_records:
+            errors.append(f"semantic brief references undeclared evidence frame: {value}")
+
+    term_rows = bundle.get("transcript", {}).get("term_evidence") or []
+    words = {str(row.get("word_id")): row for row in term_rows if isinstance(row, dict)}
+    for index, event in enumerate(brief.get("events") or []):
+        if not isinstance(event, dict):
+            errors.append(f"events[{index}] must be a mapping")
+            continue
+        prefix = f"events[{index}]"
+        ids = [str(value) for value in (event.get("transcript_word_ids") or [])]
+        missing = [value for value in ids if value not in words]
+        if missing:
+            errors.append(f"{prefix} references unknown transcript word IDs: {', '.join(missing)}")
+            continue
+        selected = [words[value] for value in ids]
+        if selected:
+            try:
+                selected_start = min(float(row["start"]) for row in selected)
+                selected_end = max(float(row["end"]) for row in selected)
+                source_start = float(event["source_start"])
+                source_end = float(event["source_end"])
+            except (KeyError, TypeError, ValueError):
+                errors.append(f"{prefix} has invalid source timing evidence")
+            else:
+                if source_start > selected_start + 0.05 or source_end < selected_end - 0.05:
+                    errors.append(f"{prefix} source timing does not contain its referenced words")
+            expected = normalized_anchor("".join(str(row.get("text") or "") for row in selected))
+            quote = normalized_anchor(str(event.get("transcript_quote") or ""))
+            if not quote or (expected and quote not in expected and expected not in quote):
+                errors.append(f"{prefix} transcript quote does not match its referenced words")
+        for value in event.get("target_frame_evidence") or []:
+            if resolved_frame(value) not in frame_records:
+                errors.append(f"{prefix} references undeclared target frame: {value}")
     return errors
 
 

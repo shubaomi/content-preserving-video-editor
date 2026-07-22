@@ -4,11 +4,14 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 3. New projects write both
-`schema_version: 3` and `version: 3`. Legacy projects that only contain
+The current project schema is version 6. New projects write both
+`schema_version: 6` and `version: 6`. Legacy projects that only contain
 `version: 1` or `version: 2` are deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
+Schema versions must be real integers, not booleans or numeric strings. Audio
+normalization targets must be finite numeric values; boolean, NaN, and infinite
+LUFS/true-peak/LRA values are rejected before execution.
 
 ## Profile
 
@@ -50,9 +53,21 @@ Allow project-level `audio.sfx` and `audio.bgm` settings. Recommended defaults:
 - `bgm.enabled_by_default: true`, `optional: true`, preview volume `0.08–0.12` for speech video;
 - `bgm.asset: null` until the director's licensed-media resolver selects a local file;
 - `bgm.ducking.enabled: true`, with provider and parameters recorded;
-- `bgm.providers: [heygen, minimax, musicgen]`, tried in order after approved cache;
+- `bgm.provider_chain`: ordered adapter mappings for media-use/HeyGen, MiniMax,
+  and local MusicGen after an approved local asset. Each provider declares
+  `name`, `enabled`, command/output, and paid-call authorization when applicable;
 - `bgm.stop_after_first_success: true` to avoid unnecessary quota use;
 - original speech always has priority.
+
+Set `audio.production.enabled: true` to execute SFX/BGM production. Set
+`audio.normalization.enabled: true` to enable the hash-bound two-pass final
+normalizer; optional numeric keys are `target_lufs` (default `-14`),
+`true_peak_dbtp` (default `-1.5`), and `lra` (default `11`). Both features are
+disabled by in-memory migration for legacy projects. The normalizer accepts the
+post-measurement only within 1 LU of integrated loudness, no more than 0.1 dB
+above the configured true-peak target, and no more than 1 LU above configured
+LRA. Final composition reuses an intermediate only when its input/parameter
+signature and current file hash both match.
 
 `source.has_existing_bgm` is a declaration, not presence evidence. An
 `embedded_source` plan must include measured presence analysis. A configured
@@ -86,6 +101,38 @@ Keep backend choice separate from editing policy:
 - `nle.video_use: conditional` for complex timeline and boundary work.
 
 No backend may approve semantic deletion. Store candidate ranges separately from the approved EDL.
+
+Schema-v6 optional adapters use these canonical paths and default to disabled:
+
+- `analysis.adapters.pyscenedetect`, `.mediapipe`, and `.paddleocr`;
+- `analysis.subject_tracking` and `analysis.hook_pacing`;
+- `transcription.router`, including backend availability/commands;
+- `timeline.otio` and `render.cache`;
+- `assets.media_catalog`;
+- `extensions.b_roll`, `.multicam`, `.voice_isolation`, and `.localization`;
+- `renderer.remotion`, `preferences`, `publishing.copy`, and
+  `feedback.metrics_import`.
+
+An enabled command adapter declares `command`, `outputs`, optional
+`timeout_seconds`, and `required`. `required: true` converts unavailable or
+failed execution into `action_required`; otherwise the report records the
+truthful fallback and the core path continues.
+
+An enabled `assets.media_catalog` command must include a
+`{request_manifest}` placeholder, for example:
+
+```yaml
+assets:
+  media_catalog:
+    enabled: true
+    command: [python, tools/catalog_adapter.py, "{request_manifest}"]
+    outputs: [edit/assets/catalog-results.json]
+    required: false
+```
+
+The Director replaces the placeholder with an absolute, hash-bound JSON request
+manifest. The compatibility alias `assets.use_media_catalog: true` still enables
+this route for legacy configuration, without rewriting the project file.
 
 ## Topic IP visuals
 
@@ -123,7 +170,8 @@ Recommended defaults:
 - `visuals.generated_aspect_ratio: match_video_canvas`;
 - `cover.aspect_ratio: 9:16` for Douyin and WeChat Channels, independent of video orientation;
 - `cover.hand_drawn_ip: optional`.
-- `cover.preserve_original_face_pixels: true`;
+- `cover.preserve_original_face_pixels: false` for the default reference-guided
+  regenerated-person workflow; literal source-pixel compositing is fallback only;
 - `cover.generate_background_separately: true`;
 - `cover.identity_qa_before_aesthetic_qa: true`.
 

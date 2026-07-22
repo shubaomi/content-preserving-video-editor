@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from director_contracts import sha256_file  # noqa: E402
 from preview_render_parity import validate  # noqa: E402
 
 
@@ -28,6 +29,8 @@ def parity_report(root: Path) -> dict:
             "render_time_seconds": 12.52,
             "studio_snapshot": str(studio),
             "render_snapshot": str(rendered),
+            "studio_snapshot_sha256": sha256_file(studio),
+            "render_snapshot_sha256": sha256_file(rendered),
             "animation_phase": {"studio": "midpoint", "render": "midpoint"},
             "elements": [{
                 "selector": "#callout",
@@ -48,6 +51,14 @@ def parity_report(root: Path) -> dict:
 
 
 class PreviewRenderParityTests(unittest.TestCase):
+    def test_non_finite_or_boolean_tolerances_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            for value in (True, float("nan"), float("inf"), float("-inf")):
+                report = parity_report(Path(folder))
+                report["tolerances"]["position_px"] = value
+                with self.subTest(value=value):
+                    self.assertTrue(validate(report, {"events": [{"id": "event-1"}]}))
+
     def test_representative_event_within_tolerance_passes(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             report = parity_report(Path(folder))

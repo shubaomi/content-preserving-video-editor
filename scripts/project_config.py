@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import math
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 3
+CURRENT_PROJECT_SCHEMA_VERSION = 6
 MANUAL_FINISH_BACKENDS = {"opencut", "other_nle", "none"}
 MANUAL_FINISH_DEFAULTS: dict[str, Any] = {
     "enabled": False,
@@ -23,6 +24,20 @@ PREVIEW_RENDER_PARITY_TOLERANCE_DEFAULTS: dict[str, float] = {
 
 
 def _source_version(project: dict[str, Any]) -> int:
+    for field in ("schema_version", "version"):
+        if field in project and (
+            isinstance(project[field], bool)
+            or not isinstance(project[field], int)
+        ):
+            raise ValueError("project schema versions must be integers")
+    if "schema_version" in project and "version" in project:
+        try:
+            schema_version = int(project["schema_version"])
+            legacy_version = int(project["version"])
+        except (TypeError, ValueError) as error:
+            raise ValueError("project schema versions must be integers") from error
+        if schema_version != legacy_version:
+            raise ValueError("project schema_version and version must match")
     value = project.get("schema_version", project.get("version", 1))
     try:
         version = int(value)
@@ -75,13 +90,152 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     for key, value in PREVIEW_RENDER_PARITY_TOLERANCE_DEFAULTS.items():
         tolerances.setdefault(key, value)
     for key in PREVIEW_RENDER_PARITY_TOLERANCE_DEFAULTS:
+        raw_tolerance = tolerances[key]
+        if isinstance(raw_tolerance, bool) or not isinstance(raw_tolerance, (int, float)):
+            raise ValueError(f"qa.preview_render_parity.tolerances.{key} must be numeric")
         try:
-            tolerance = float(tolerances[key])
+            tolerance = float(raw_tolerance)
         except (TypeError, ValueError) as error:
             raise ValueError(f"qa.preview_render_parity.tolerances.{key} must be numeric") from error
+        if not math.isfinite(tolerance):
+            raise ValueError(f"qa.preview_render_parity.tolerances.{key} must be finite")
         if tolerance < 0:
             raise ValueError(f"qa.preview_render_parity.tolerances.{key} must be non-negative")
         tolerances[key] = tolerance
+    platform_occlusion = qa.setdefault("platform_occlusion", {"enabled": False})
+    if not isinstance(platform_occlusion, dict) or not isinstance(
+        platform_occlusion.setdefault("enabled", False), bool
+    ):
+        raise ValueError("qa.platform_occlusion.enabled must be a boolean")
+    workflow = migrated.setdefault("workflow", {})
+    if not isinstance(workflow, dict):
+        raise ValueError("workflow must be a mapping")
+    capabilities = workflow.setdefault("capabilities", {})
+    if not isinstance(capabilities, dict):
+        raise ValueError("workflow.capabilities must be a mapping")
+    analysis = migrated.setdefault("analysis", {})
+    if not isinstance(analysis, dict):
+        raise ValueError("analysis must be a mapping")
+    adapters = analysis.setdefault("adapters", {})
+    if not isinstance(adapters, dict):
+        raise ValueError("analysis.adapters must be a mapping")
+    for name in ("pyscenedetect", "mediapipe", "paddleocr"):
+        value = adapters.setdefault(name, {"enabled": False})
+        if not isinstance(value, dict) or not isinstance(value.setdefault("enabled", False), bool):
+            raise ValueError(f"analysis.adapters.{name}.enabled must be a boolean")
+    subject_tracking = analysis.setdefault("subject_tracking", {"enabled": False})
+    if not isinstance(subject_tracking, dict) or not isinstance(
+        subject_tracking.setdefault("enabled", False), bool
+    ):
+        raise ValueError("analysis.subject_tracking.enabled must be a boolean")
+    transcription = migrated.setdefault("transcription", {})
+    if not isinstance(transcription, dict):
+        raise ValueError("transcription must be a mapping")
+    router = transcription.setdefault("router", {"enabled": False})
+    if not isinstance(router, dict) or not isinstance(router.setdefault("enabled", False), bool):
+        raise ValueError("transcription.router.enabled must be a boolean")
+    timeline = migrated.setdefault("timeline", {})
+    if not isinstance(timeline, dict):
+        raise ValueError("timeline must be a mapping")
+    otio = timeline.setdefault("otio", {"enabled": False})
+    if not isinstance(otio, dict) or not isinstance(otio.setdefault("enabled", False), bool):
+        raise ValueError("timeline.otio.enabled must be a boolean")
+    render = migrated.setdefault("render", {})
+    if not isinstance(render, dict):
+        raise ValueError("render must be a mapping")
+    cache = render.setdefault("cache", {"enabled": False})
+    if not isinstance(cache, dict) or not isinstance(cache.setdefault("enabled", False), bool):
+        raise ValueError("render.cache.enabled must be a boolean")
+    extensions = migrated.setdefault("extensions", {})
+    if not isinstance(extensions, dict):
+        raise ValueError("extensions must be a mapping")
+    for name in ("b_roll", "multicam", "voice_isolation", "localization"):
+        value = extensions.setdefault(name, {"enabled": False})
+        if not isinstance(value, dict) or not isinstance(value.setdefault("enabled", False), bool):
+            raise ValueError(f"extensions.{name}.enabled must be a boolean")
+    renderer = migrated.setdefault("renderer", {})
+    if not isinstance(renderer, dict):
+        raise ValueError("renderer must be a mapping")
+    remotion = renderer.setdefault("remotion", {"enabled": False})
+    if not isinstance(remotion, dict) or not isinstance(remotion.setdefault("enabled", False), bool):
+        raise ValueError("renderer.remotion.enabled must be a boolean")
+    feedback = migrated.setdefault("feedback", {})
+    if not isinstance(feedback, dict):
+        raise ValueError("feedback must be a mapping")
+    metrics = feedback.setdefault("metrics_import", {"enabled": False})
+    if not isinstance(metrics, dict) or not isinstance(metrics.setdefault("enabled", False), bool):
+        raise ValueError("feedback.metrics_import.enabled must be a boolean")
+    audio = migrated.setdefault("audio", {})
+    if not isinstance(audio, dict):
+        raise ValueError("audio must be a mapping")
+    audio_production = audio.setdefault("production", {"enabled": False})
+    if not isinstance(audio_production, dict) or not isinstance(
+        audio_production.setdefault("enabled", False), bool
+    ):
+        raise ValueError("audio.production.enabled must be a boolean")
+    normalization = audio.setdefault("normalization", {
+        "enabled": False,
+        "target_lufs": -14.0,
+        "true_peak_dbtp": -1.5,
+        "lra": 11.0,
+    })
+    if not isinstance(normalization, dict) or not isinstance(
+        normalization.setdefault("enabled", False), bool
+    ):
+        raise ValueError("audio.normalization.enabled must be a boolean")
+    for name, default in (("target_lufs", -14.0), ("true_peak_dbtp", -1.5), ("lra", 11.0)):
+        value = normalization.setdefault(name, default)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise ValueError(f"audio.normalization.{name} must be numeric")
+        normalization[name] = float(value)
+    bgm = audio.setdefault("bgm", {})
+    if not isinstance(bgm, dict):
+        raise ValueError("audio.bgm must be a mapping")
+    providers = bgm.setdefault("provider_chain", [])
+    if not isinstance(providers, list):
+        raise ValueError("audio.bgm.provider_chain must be a list")
+    cover = migrated.setdefault("cover", {})
+    if not isinstance(cover, dict):
+        raise ValueError("cover must be a mapping")
+    cover_production = cover.setdefault("production", {"enabled": False})
+    if not isinstance(cover_production, dict) or not isinstance(
+        cover_production.setdefault("enabled", False), bool
+    ):
+        raise ValueError("cover.production.enabled must be a boolean")
+    visuals = migrated.setdefault("visuals", {})
+    if not isinstance(visuals, dict):
+        raise ValueError("visuals must be a mapping")
+    ip_production = visuals.setdefault("ip_production", {"enabled": False})
+    if not isinstance(ip_production, dict) or not isinstance(
+        ip_production.setdefault("enabled", False), bool
+    ):
+        raise ValueError("visuals.ip_production.enabled must be a boolean")
+    assets = migrated.setdefault("assets", {})
+    if not isinstance(assets, dict):
+        raise ValueError("assets must be a mapping")
+    media_catalog = assets.setdefault("media_catalog", {"enabled": False})
+    if not isinstance(media_catalog, dict) or not isinstance(
+        media_catalog.setdefault("enabled", False), bool
+    ):
+        raise ValueError("assets.media_catalog.enabled must be a boolean")
+    hook_pacing = analysis.setdefault("hook_pacing", {"enabled": False})
+    if not isinstance(hook_pacing, dict) or not isinstance(
+        hook_pacing.setdefault("enabled", False), bool
+    ):
+        raise ValueError("analysis.hook_pacing.enabled must be a boolean")
+    publishing = migrated.setdefault("publishing", {})
+    if not isinstance(publishing, dict):
+        raise ValueError("publishing must be a mapping")
+    publishing_copy = publishing.setdefault("copy", {"enabled": False})
+    if not isinstance(publishing_copy, dict) or not isinstance(
+        publishing_copy.setdefault("enabled", False), bool
+    ):
+        raise ValueError("publishing.copy.enabled must be a boolean")
+    preferences = migrated.setdefault("preferences", {"enabled": False})
+    if not isinstance(preferences, dict) or not isinstance(
+        preferences.setdefault("enabled", False), bool
+    ):
+        raise ValueError("preferences.enabled must be a boolean")
     migrated["schema_version"] = CURRENT_PROJECT_SCHEMA_VERSION
     migrated["version"] = CURRENT_PROJECT_SCHEMA_VERSION
     return migrated

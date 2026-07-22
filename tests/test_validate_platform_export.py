@@ -34,6 +34,16 @@ class ValidatePlatformExportTests(unittest.TestCase):
             report = MODULE.bind_universal_output({"passed": False}, media)
             self.assertEqual(report["status"], "fail")
 
+    def test_cover_binding_records_exact_cover_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            cover = Path(folder) / "cover.png"
+            cover.write_bytes(b"cover bytes")
+            report = MODULE.bind_cover({}, cover)
+            self.assertEqual(report["cover"], str(cover.resolve()))
+            self.assertEqual(report["cover_sha256"], __import__("hashlib").sha256(
+                b"cover bytes"
+            ).hexdigest())
+
     def test_unsafe_true_peak_is_blocking(self) -> None:
         media = Path("universal.mp4")
         preset = {

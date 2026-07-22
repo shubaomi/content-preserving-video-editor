@@ -61,12 +61,59 @@ def bind_universal_output(report: dict, media: Path) -> dict:
     }
 
 
+def bind_cover(report: dict, cover: Path) -> dict:
+    digest = hashlib.sha256()
+    with cover.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {**report, "cover": str(cover.resolve()), "cover_sha256": digest.hexdigest()}
+
+
+def validate_bound_report(report: dict, media: Path, cover: Path) -> list[str]:
+    errors = []
+    required_checks = ("container_mp4", "video_codec", "pixel_format", "minimum_short_edge",
+                       "ratio", "audio_present", "full_decode", "true_peak_recommendation")
+    media_hash = hashlib.sha256(media.read_bytes()).hexdigest() if media.is_file() else None
+    cover_hash = hashlib.sha256(cover.read_bytes()).hexdigest() if cover.is_file() else None
+    if (report.get("schema_version") != 1 or report.get("status") != "pass"
+            or report.get("passed") is not True or report.get("universal_output") is not True
+            or report.get("file_sha256") != media_hash or report.get("cover_sha256") != cover_hash
+            or not report.get("preset_version") or not report.get("preset_verified_on")
+            or any((report.get("checks") or {}).get(name) is not True for name in required_checks)):
+        errors.append("platform report structure, checks, or byte bindings did not pass")
+    for path_field, hash_field in (("safe_zone_snapshot", "safe_zone_snapshot_sha256"),
+                                   ("cover_crop_preview", "cover_crop_preview_sha256")):
+        path = Path(str(report.get(path_field, "")))
+        actual = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+        if not path.is_file() or report.get(hash_field) != actual:
+            errors.append(f"platform evidence is missing or stale: {path_field}")
+    if media.is_file() and report.get("platform") in {"douyin", "wechat_channels"}:
+        try:
+            presets = json.loads((Path(__file__).parents[1] / "references" / "platform-presets.json")
+                                 .read_text(encoding="utf-8"))
+            platform = report["platform"]
+            fresh = validate(media, presets["platforms"][platform], platform,
+                             loudness(media), decode(media))
+            if (
+                report.get("preset_version") != presets.get("preset_version")
+                or report.get("preset_verified_on") != presets.get("verified_on")
+                or report.get("dimensions") != fresh.get("dimensions")
+                or abs(float(report.get("duration", -1)) - float(fresh.get("duration", 0))) > 0.01
+                or report.get("checks") != fresh.get("checks")
+                or report.get("loudness") != fresh.get("loudness")
+            ):
+                errors.append("platform report does not match fresh probe/decode/audio validation")
+        except (OSError, KeyError, TypeError, ValueError, subprocess.SubprocessError, json.JSONDecodeError):
+            errors.append("platform report could not be independently revalidated")
+    return errors
+
+
 def main()->int:
     p=argparse.ArgumentParser(description=__doc__);p.add_argument("--media",required=True);p.add_argument("--platform",required=True,choices=("douyin","wechat_channels"));p.add_argument("--presets",default=str(Path(__file__).parents[1]/"references"/"platform-presets.json"));p.add_argument("--cover");p.add_argument("--out",required=True);p.add_argument("--evidence-dir",required=True);a=p.parse_args()
     presets=json.loads(Path(a.presets).read_text(encoding="utf-8")); preset=presets["platforms"][a.platform]; media=Path(a.media).resolve(); evidence=Path(a.evidence_dir).resolve(); evidence.mkdir(parents=True,exist_ok=True)
     report=bind_universal_output(validate(media,preset,a.platform,loudness(media),decode(media)),media); report["preset_version"]=presets["preset_version"];report["preset_verified_on"]=presets["verified_on"];report["sources"]=preset["sources"];report["recommendation_fields"]=preset["recommendation_fields"]
-    safe=evidence/f"{a.platform}-safe-zone.jpg";snapshot(media,preset["caption_safe_zone"],safe);report["safe_zone_snapshot"]=str(safe)
+    safe=evidence/f"{a.platform}-safe-zone.jpg";snapshot(media,preset["caption_safe_zone"],safe);report["safe_zone_snapshot"]=str(safe);report["safe_zone_snapshot_sha256"]=hashlib.sha256(safe.read_bytes()).hexdigest()
     if a.cover:
-        cp=evidence/f"{a.platform}-cover-crop.jpg";cover_preview(Path(a.cover),preset["cover"]["center_safe"],cp);report["cover_crop_preview"]=str(cp)
+        cover=Path(a.cover).resolve();cp=evidence/f"{a.platform}-cover-crop.jpg";cover_preview(cover,preset["cover"]["center_safe"],cp);report=bind_cover(report,cover);report["cover_crop_preview"]=str(cp);report["cover_crop_preview_sha256"]=hashlib.sha256(cp.read_bytes()).hexdigest()
     out=Path(a.out).resolve();out.parent.mkdir(parents=True,exist_ok=True);out.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n",encoding="utf-8");print(out);return 0 if report["passed"] else 2
 if __name__=="__main__": raise SystemExit(main())

@@ -4,7 +4,10 @@ import hashlib
 import json
 import sys
 import tempfile
+import os
+import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
@@ -21,6 +24,9 @@ from director_contracts import (  # noqa: E402
     validate_video_use_final_correctness,
     validate_video_use_media_analysis,
     validate_visual_vocabulary_audit,
+    read_json,
+    write_json,
+    exclusive_file_lock,
 )
 
 
@@ -59,6 +65,25 @@ def valid_brief() -> dict:
 
 
 class DirectorContractTests(unittest.TestCase):
+    def test_atomic_json_writes_use_unique_temporaries_under_concurrency(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "shared.json"
+            with ThreadPoolExecutor(max_workers=16) as pool:
+                list(pool.map(lambda value: write_json(target, {"value": value}), range(200)))
+            self.assertIn(read_json(target)["value"], range(200))
+            self.assertEqual(list(Path(folder).glob("*.tmp")), [])
+
+    def test_file_lock_reclaims_verified_stale_sentinel(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "state.json"
+            lock = target.with_suffix(".json.lock")
+            lock.write_text('{"pid": 999999}', encoding="utf-8")
+            old = time.time() - 10
+            os.utime(lock, (old, old))
+            with exclusive_file_lock(target, timeout_seconds=0.2, stale_seconds=1):
+                self.assertTrue(lock.is_file())
+            self.assertFalse(lock.exists())
+
     def test_semantic_brief_requires_four_real_structures(self) -> None:
         self.assertEqual(validate_semantic_brief(valid_brief(), require_sample_variety=True), [])
 

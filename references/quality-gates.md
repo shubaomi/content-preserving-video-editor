@@ -122,6 +122,15 @@ Complete a video only when applicable gates pass.
 - Do not infer embedded BGM from the presence of an audio stream or a project
   declaration. Require measured presence evidence; otherwise use an authorized
   asset when enabled by default, with speech-driven sidechain ducking.
+- When two-pass normalization is enabled, require
+  `audio-normalization-report.json` to bind the intermediate and universal MP4
+  hashes and include first-pass and post-normalization measurements. Recompute
+  target tolerance checks; reject missing, stale, target-mismatched, or merely
+  self-declared reports. A provider-generated BGM selected by the full audio
+  plan must be the same hashed asset used by final composition.
+- Require `final-compose-command.json` to bind the motion hash, BGM/audio-plan
+  hashes, exact command/settings, and current intermediate hash. Never reuse a
+  pre-normalized file merely because that path exists.
 
 ## Export
 
@@ -168,3 +177,43 @@ Complete a video only when applicable gates pass.
 - Scan source and final frames for visual/audio privacy leaks, including sub-second appearances around cuts.
 - Confirm cover hooks and product claims do not exceed the demonstrated content.
 - Require provenance or an explicit authorization basis for music, SFX, fonts, photos, screenshots, and generated assets.
+
+## Workflow implementation acceptance
+
+- Require `capability-inventory.json` and `toolchain-compatibility.json`; every
+  claimed one-shot capability must be `director_integrated` or higher, declare a
+  configuration route, and keep required core capabilities enabled. Resolve all
+  five required HyperFrames Skill roots separately.
+- Run `scripts/fixture_acceptance.py` against all six required fixture types and
+  retain `references/validation/six-fixture-acceptance.json`.
+- A seeded semantic, repetition, geometry, audio, parity, or preservation defect
+  must fail closed. Missing fixture types are a failed completion gate.
+- Recompute the fixture-source and evaluator SHA-256 values and require six
+  unique scenario IDs/types with nonempty passing checks and per-scenario
+  evidence hashes. Also bind the evaluator's routing and contract dependencies,
+  and require the retained report to exactly match a fresh evaluation. Do not
+  accept a detached, shortened, or self-reported pass JSON.
+- Generate one real short MP4 for each of the six required video types and pass
+  full decode, ffprobe, audio measurement, and representative-frame extraction.
+- Retain `references/validation/six-media-acceptance.json` with current media,
+  technical-report, sampled-frame, and implementation dependency hashes. A
+  missing or edited evidence file invalidates the suite.
+- Require a source-bound, zero-skip full-test receipt. Recompute the scripts and
+  tests tree hash, runner hash, test log hash, count, exit status, skipped count,
+  and required regression IDs rather than trusting a standalone green label.
+- Require Director-generated HyperFrames strict-check and render receipts that
+  bind argv, working directory, logs, toolchain, approvals, QA evidence, and
+  output bytes. A manually copied render without a receipt is not accepted.
+- Require completed Director stages to retain current SHA-256 artifact records,
+  and require current project/source input fingerprints. A status flag without
+  these byte bindings is not completion evidence.
+- Require final aesthetic, cover, platform, full-decode, video-use correctness,
+  and delivery-contract evidence to bind the exact universal MP4 and cover
+  bytes. Recompute all bindings, technical measurements, safe-zone/crop evidence,
+  capability inventory, toolchain discovery, and HyperFrames Skill hashes during
+  completion audit.
+- Technical and platform validators must freshly rerun probe, decode, and audio
+  measurement against the exact delivery bytes; matching hashes and self-declared
+  check fields alone are insufficient.
+- Fixture success does not replace full-size aesthetic review, user likeness
+  approval, real-source review, or real-platform verification.
