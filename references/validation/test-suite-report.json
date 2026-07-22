@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "passed": true,
-  "test_count": 261,
+  "test_count": 273,
   "failed": 0,
   "skipped": 0,
   "exit_code": 0,
@@ -21,9 +21,9 @@
     "test_concurrent_identical_request_set_serializes_manifest_creation",
     "test_platform_validation_rebuilds_reports_when_cover_bytes_change"
   ],
-  "source_tree_sha256": "213228c8810e04e7e5ae9b2f81c2b8696518523a1c1719c55b4efeeb0a0558ba",
+  "source_tree_sha256": "81a8ed75e6b3e2e9f3a9c0beecee7d382721fe80e31b4a3c89f230568c7b6034",
   "runner_implementation": "E:\\Projects\\Skills\\content-preserving-video-editor\\scripts\\test_acceptance_report.py",
   "runner_implementation_sha256": "5656fc6edc19347113764715845f09502729fa7de1cad0bbb3ed7d334f572c39",
   "log": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\validation\\test-suite.log",
-  "log_sha256": "c1323b05744fc41024c2067cf02287090a98ca9eec26c1e53456ac142a4f63fb"
+  "log_sha256": "551ccea6725c93531fbba3b98ae3df327cb664363296ae3dfe6719e979fb22a6"
 }

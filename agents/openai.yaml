@@ -1,4 +1,4 @@
 interface:
   display_name: "内容保真视频总导演"
   short_description: "编排 video-use、HyperFrames 与可选适配器，生成可恢复、可审计的通用预发布视频"
-  default_prompt: "Use $content-preserving-video-editor to run the preservation-first Director from source evidence through video-use timing, HyperFrames motion, audio/cover production, one universal MP4, and blocking QA. Keep optional adapters off unless project evidence and configuration enable them."
+  default_prompt: "Use $content-preserving-video-editor to run the preservation-first Director through video-use timing, HyperFrames motion, evidence-bound editorial cover/audio production, one universal MP4, and blocking QA."

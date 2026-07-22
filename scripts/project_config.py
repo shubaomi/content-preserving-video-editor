@@ -7,7 +7,7 @@ import math
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 6
+CURRENT_PROJECT_SCHEMA_VERSION = 7
 MANUAL_FINISH_BACKENDS = {"opencut", "other_nle", "none"}
 MANUAL_FINISH_DEFAULTS: dict[str, Any] = {
     "enabled": False,
@@ -20,6 +20,27 @@ PREVIEW_RENDER_PARITY_TOLERANCE_DEFAULTS: dict[str, float] = {
     "position_px": 4.0,
     "size_px": 4.0,
     "time_seconds": 0.05,
+}
+COVER_EDITORIAL_DEFAULTS: dict[str, Any] = {
+    "enabled": False,
+    "mode": "auto",
+    "prefer_authentic_frame": False,
+    "headline_max_characters": 26,
+    "headline_max_lines": 3,
+    "template_families": [
+        "cinematic_editorial",
+        "bright_tech_tutorial",
+        "dark_high_energy",
+        "thought_leadership_ip",
+    ],
+    "authentic_frames": [],
+    "supporting_assets": [],
+}
+COVER_EDITORIAL_MODES = {
+    "auto", "reference_regenerated", "authentic_frame_editorial", "real_person_ip_hybrid",
+}
+COVER_TEMPLATE_FAMILIES = {
+    "cinematic_editorial", "bright_tech_tutorial", "dark_high_energy", "thought_leadership_ip",
 }
 
 
@@ -202,6 +223,35 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         cover_production.setdefault("enabled", False), bool
     ):
         raise ValueError("cover.production.enabled must be a boolean")
+    cover_editorial = cover.setdefault("editorial", {})
+    if not isinstance(cover_editorial, dict):
+        raise ValueError("cover.editorial must be a mapping")
+    for key, value in COVER_EDITORIAL_DEFAULTS.items():
+        cover_editorial.setdefault(key, deepcopy(value))
+    if not isinstance(cover_editorial.get("enabled"), bool):
+        raise ValueError("cover.editorial.enabled must be a boolean")
+    if cover_editorial.get("mode") not in COVER_EDITORIAL_MODES:
+        raise ValueError(
+            "cover.editorial.mode must be one of " + str(sorted(COVER_EDITORIAL_MODES))
+        )
+    if not isinstance(cover_editorial.get("prefer_authentic_frame"), bool):
+        raise ValueError("cover.editorial.prefer_authentic_frame must be a boolean")
+    for key in ("headline_max_characters", "headline_max_lines"):
+        value = cover_editorial.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"cover.editorial.{key} must be a positive integer")
+    templates = cover_editorial.get("template_families")
+    if not isinstance(templates, list) or not templates:
+        raise ValueError("cover.editorial.template_families must be a non-empty list")
+    invalid_templates = [value for value in templates if value not in COVER_TEMPLATE_FAMILIES]
+    if invalid_templates:
+        raise ValueError(
+            "cover.editorial.template_families contains unsupported values: "
+            + ", ".join(str(value) for value in invalid_templates)
+        )
+    for key in ("authentic_frames", "supporting_assets"):
+        if not isinstance(cover_editorial.get(key), list):
+            raise ValueError(f"cover.editorial.{key} must be a list")
     visuals = migrated.setdefault("visuals", {})
     if not isinstance(visuals, dict):
         raise ValueError("visuals must be a mapping")

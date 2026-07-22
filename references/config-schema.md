@@ -4,8 +4,8 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 6. New projects write both
-`schema_version: 6` and `version: 6`. Legacy projects that only contain
+The current project schema is version 7. New projects write both
+`schema_version: 7` and `version: 7`. Legacy projects that only contain
 `version: 1` or `version: 2` are deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
@@ -174,6 +174,34 @@ Recommended defaults:
   regenerated-person workflow; literal source-pixel compositing is fallback only;
 - `cover.generate_background_separately: true`;
 - `cover.identity_qa_before_aesthetic_qa: true`.
+
+Enhanced editorial covers use:
+
+```yaml
+cover:
+  production:
+    enabled: true
+  editorial:
+    enabled: true
+    mode: auto # auto | reference_regenerated | authentic_frame_editorial | real_person_ip_hybrid
+    prefer_authentic_frame: false
+    headline_max_characters: 26
+    headline_max_lines: 3
+    template_families:
+      - cinematic_editorial
+      - bright_tech_tutorial
+      - dark_high_energy
+      - thought_leadership_ip
+    authentic_frames: []
+    supporting_assets: []
+```
+
+Each supporting asset entry accepts `path`, `role`, `purpose`, and
+`rights_basis`. Use `role: personal_ip` only for the user's confirmed personal
+IP asset. Version-1 through version-6 projects receive
+`cover.editorial.enabled: false` in memory, so the legacy cover path is not
+silently redesigned. Newly initialized projects enable the editorial planner
+but leave external cover production disabled until explicitly requested.
 
 The optional human-finishing configuration is:
 

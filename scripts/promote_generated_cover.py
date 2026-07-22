@@ -7,6 +7,8 @@ import json
 import shutil
 from pathlib import Path
 
+from director_contracts import sha256_file
+
 
 def promote(report_path: Path, out: Path, manifest_out: Path):
     report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -21,11 +23,14 @@ def promote(report_path: Path, out: Path, manifest_out: Path):
     out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, out)
     manifest["output"] = str(out.resolve())
+    quality_report = report["variants"][selected].get("quality_report")
     manifest["selection"] = {
         "source_variant": selected,
         "ab_report": str(report_path.resolve()),
         "editorial_rationale": report["editorial_rationale"],
         "performance_claim": report["performance_claim"],
+        "quality_report": quality_report,
+        "quality_report_sha256": sha256_file(Path(quality_report)) if quality_report else None,
     }
     manifest_out.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return manifest

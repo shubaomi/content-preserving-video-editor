@@ -9,6 +9,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from director_contracts import sha256_file
+
 
 def load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
@@ -34,9 +36,17 @@ def clean_text(value):
 def validate_manifest(data):
     with Image.open(data["output"]) as image:
         size = image.size
+    mode = data.get("generation_mode")
     checks = {
-        "reference_guided": data.get("generation_mode") == "reference_guided_regeneration",
-        "identity_references": len(data.get("identity_references", [])) >= 2,
+        "supported_identity_route": mode in {
+            "reference_guided_regeneration", "reference_regenerated",
+            "authentic_frame_editorial", "real_person_ip_hybrid",
+        },
+        "identity_provenance": (
+            len(data.get("authentic_frames", [])) >= 1
+            if mode == "authentic_frame_editorial"
+            else len(data.get("identity_references", [])) >= 2
+        ),
         "agent_identity_review": data.get("identity_qa", {}).get("agent_visual_review_passed") is True,
         "topic_evidence": bool(data.get("topic_evidence")),
         "strategy": bool(data.get("communication_strategy")),
@@ -72,18 +82,40 @@ def contact_sheet(a: Path, b: Path, out: Path):
     sheet.save(out, quality=94, subsampling=0)
 
 
-def compare(manifest_a: Path, manifest_b: Path, recommended: str, rationale: str, sheet: Path):
+def _valid_qa(path: Path | None, manifest: dict):
+    if path is None:
+        return True
+    data = load(path)
+    return (
+        data.get("automated_passed") is True
+        and data.get("candidate_sha256") == sha256_file(Path(manifest["output"]))
+        and data.get("manifest_sha256") == sha256_file(Path(data["manifest"]))
+    )
+
+
+def _identity_provenance(manifest: dict):
+    if manifest.get("generation_mode") == "authentic_frame_editorial":
+        return manifest.get("authentic_frames", [])
+    return manifest.get("identity_references", [])
+
+
+def compare(
+    manifest_a: Path, manifest_b: Path, recommended: str, rationale: str, sheet: Path,
+    qa_a: Path | None = None, qa_b: Path | None = None,
+):
     a = load(manifest_a)
     b = load(manifest_b)
     checks_a = validate_manifest(a)
     checks_b = validate_manifest(b)
     difference = image_difference(Path(a["output"]), Path(b["output"]))
-    shared_identity = a["identity_references"] == b["identity_references"]
+    shared_identity = _identity_provenance(a) == _identity_provenance(b)
     strategies_differ = a["communication_strategy"] != b["communication_strategy"]
     contact_sheet(Path(a["output"]), Path(b["output"]), sheet)
     checks = {
         "variant_a": all(checks_a.values()),
         "variant_b": all(checks_b.values()),
+        "variant_a_automated_qa": _valid_qa(qa_a, a),
+        "variant_b_automated_qa": _valid_qa(qa_b, b),
         "same_authorized_identity_references": shared_identity,
         "different_communication_strategies": strategies_differ,
         "meaningful_visual_difference": difference >= 0.08,
@@ -94,8 +126,10 @@ def compare(manifest_a: Path, manifest_b: Path, recommended: str, rationale: str
         "schema_version": 2,
         "pipeline": "reference_guided_generative_cover_ab",
         "variants": {
-            "A": {"manifest": str(manifest_a.resolve()), "strategy": a["communication_strategy"], "checks": checks_a},
-            "B": {"manifest": str(manifest_b.resolve()), "strategy": b["communication_strategy"], "checks": checks_b},
+            "A": {"manifest": str(manifest_a.resolve()), "strategy": a["communication_strategy"],
+                  "checks": checks_a, "quality_report": str(qa_a.resolve()) if qa_a else None},
+            "B": {"manifest": str(manifest_b.resolve()), "strategy": b["communication_strategy"],
+                  "checks": checks_b, "quality_report": str(qa_b.resolve()) if qa_b else None},
         },
         "pixel_difference_0_1": difference,
         "checks": checks,
@@ -115,9 +149,15 @@ def main():
     parser.add_argument("--recommended", choices=("A", "B"), required=True)
     parser.add_argument("--rationale", required=True)
     parser.add_argument("--sheet", required=True)
+    parser.add_argument("--qa-a")
+    parser.add_argument("--qa-b")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
-    report = compare(Path(args.manifest_a), Path(args.manifest_b), args.recommended, args.rationale, Path(args.sheet))
+    report = compare(
+        Path(args.manifest_a), Path(args.manifest_b), args.recommended, args.rationale,
+        Path(args.sheet), Path(args.qa_a) if args.qa_a else None,
+        Path(args.qa_b) if args.qa_b else None,
+    )
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

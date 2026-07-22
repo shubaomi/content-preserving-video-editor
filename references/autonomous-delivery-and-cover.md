@@ -60,6 +60,12 @@ The video's hand-drawn IP style is optional for covers. Use it only when the top
 
 ## Cover variants
 
-Default to one strong cover. Generate a second variant only when the first fails identity, readability, or topic-fit QA, or when the platform needs a materially different crop. For Douyin and WeChat Channels, prefer a native 9:16 cover regardless of whether the video is 16:9 or 9:16. Keep the face and title inside a center-safe region that survives list/grid crops.
+Deliver one promoted cover. When enhanced editorial production is enabled,
+generate two internally reviewed candidates with different communication
+strategies and template families, then promote only the editorial recommendation.
+Do not deliver both as platform duplicates or claim an expected performance
+winner without publishing data. For Douyin and WeChat Channels, prefer a native
+9:16 cover regardless of whether the video is 16:9 or 9:16. Keep the face and
+title inside a center-safe region that survives list/grid crops.
 
 Store per-video covers under the video's `covers/` directory. Promote a reusable series cover to shared assets only after approval.

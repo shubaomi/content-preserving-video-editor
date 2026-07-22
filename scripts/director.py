@@ -75,7 +75,7 @@ from video_use_bridge import render_command, render_helper_path
 
 
 STATE_VERSION = 5
-DIRECTOR_VERSION = "2.0.0"
+DIRECTOR_VERSION = "2.1.0"
 
 ROLE_CONTRACT = {
     "director": [
@@ -1302,12 +1302,25 @@ class Director:
         path = self.root / "cover-contract.json"
         if not path.is_file():
             write_json(path, {
-                "schema_version": 1,
+                "schema_version": 2,
                 "owner": "director",
                 "default_aspect": "9:16",
-                "identity": "multi-photo reference-guided regeneration; no pasted cutout",
+                "routes": [
+                    "reference_regenerated", "authentic_frame_editorial", "real_person_ip_hybrid",
+                ],
+                "default_identity": "multi-photo reference-guided regeneration; no generic pasted cutout",
                 "expression": "natural eye contact, credible slight smile, open posture, visible energy",
                 "topic_scene_required": True,
+                "semantic_cover_direction_required_when_editorial_enabled": True,
+                "deterministic_local_typography": True,
+                "template_families": [
+                    "cinematic_editorial", "bright_tech_tutorial",
+                    "dark_high_energy", "thought_leadership_ip",
+                ],
+                "automated_candidate_qa": [
+                    "semantic evidence", "native 9:16", "safe bounds", "subject avoidance",
+                    "thumbnail text size", "supporting asset provenance",
+                ],
                 "user_identity_approval_remains_distinct": True,
             })
         cover_config = self.project.get("cover", {})
@@ -1333,7 +1346,7 @@ class Director:
             request = write_cover_request(self.root / "cover-production-request.json", error.packet)
             self._action_required(
                 "cover",
-                "Reference-guided cinematic cover bases/reviews are required",
+                "Evidence-bound cover plan, clean bases, template QA, or reviews are required",
                 [{"owner": "director_with_image_generation_and_visual_review",
                   "request": str(request), "expected_artifact": str(output)}],
             )

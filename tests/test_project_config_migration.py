@@ -38,6 +38,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         self.assertFalse(migrated["audio"]["production"]["enabled"])
         self.assertFalse(migrated["audio"]["normalization"]["enabled"])
         self.assertFalse(migrated["cover"]["production"]["enabled"])
+        self.assertFalse(migrated["cover"]["editorial"]["enabled"])
         self.assertFalse(migrated["visuals"]["ip_production"]["enabled"])
         self.assertFalse(migrated["assets"]["media_catalog"]["enabled"])
         self.assertFalse(migrated["analysis"]["hook_pacing"]["enabled"])
@@ -68,7 +69,9 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "size_px": 4.0,
             "time_seconds": 0.05,
         })
-        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 6)
+        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 7)
+        self.assertEqual(migrated["cover"]["editorial"]["mode"], "auto")
+        self.assertEqual(migrated["cover"]["editorial"]["headline_max_characters"], 26)
         self.assertEqual(migrated["workflow"]["capabilities"], {})
         self.assertFalse(migrated["analysis"]["adapters"]["pyscenedetect"]["enabled"])
         self.assertFalse(migrated["timeline"]["otio"]["enabled"])

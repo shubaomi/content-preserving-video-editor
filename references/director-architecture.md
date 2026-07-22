@@ -11,7 +11,7 @@ Use this reference when executing or extending the single professional workflow.
 | Semantic content reading | director + LLM | `semantic-brief.json` |
 | Creative direction and motion | HyperFrames | `frame.md`, `storyboard.json`, `index.html` |
 | SFX/BGM policy | director; FFmpeg final mix | `audio-contract.json`, per-event decisions, measured audibility, and licensed assets |
-| Cover/IP/publishing assets | director | evidence-backed cover and provenance |
+| Cover/IP/publishing assets | director | editorial plan, local template candidates, per-candidate QA, cover and provenance |
 | Sample technical and aesthetic QA | director | `sample-qa/aesthetic-review.json` and gate report |
 | Full motion project | HyperFrames | separate full-duration project and visual-vocabulary audit |
 | Motion render | HyperFrames | actual render from the full project, never the sample project |
@@ -24,7 +24,7 @@ Use this reference when executing or extending the single professional workflow.
 writes the effective capability and toolchain reports without installing or
 updating dependencies. `scripts/director_adapters.py` supplies atomic state,
 file locking, input/output/implementation hashes, timeout handling, reuse, and
-failure boundaries. Optional adapters are disabled by schema-v6 migration and
+failure boundaries. Optional adapters are disabled by schema-v7 migration and
 must not change the legacy path.
 Adapter execution uses a per-capability transaction lock around cache lookup,
 execution, output hashing, and state persistence. Relative implementation paths
@@ -61,22 +61,31 @@ The canonical entry is `scripts/director.py`. It owns these ordered stages:
 
 1. `inspect`
 2. `video_use_timeline`
-3. `semantic_brief`
-4. `hyperframes_storyboard`
-5. `audio`
-6. `cover`
-7. `sample_qa`
-8. `preview_approval`
-9. `full_hyperframes_storyboard`
-10. `full_hyperframes_qa`
-11. `final_render`
-12. `final_compose`
-13. `manual_finish_handoff`
-14. `delivery_qa`
+3. `evidence_acquisition`
+4. `semantic_brief`
+5. `hyperframes_storyboard`
+6. `audio`
+7. `cover`
+8. `sample_qa`
+9. `preview_approval`
+10. `full_hyperframes_storyboard`
+11. `full_hyperframes_qa`
+12. `final_render`
+13. `final_compose`
+14. `manual_finish_handoff`
+15. `delivery_qa`
 
 Each stage is `pending`, `running`, `action_required`, `failed`, or `complete`.
 State writes are atomic. A completed stage is skipped on resume. Resetting one
 stage invalidates every downstream stage.
+
+Inside `cover`, an enabled enhanced editorial path validates
+`semantic-brief.cover_direction`, writes `cover-editorial-plan.json`, resolves
+the reference-regenerated, authentic-frame, or real-person/IP-hybrid route,
+writes one generation request per A/B strategy, composes exact text through a
+controlled template family, and runs hash-bound candidate QA before comparison
+and promotion. External image generation remains an explicit adapter boundary;
+missing or unauthorized calls become `action_required`.
 
 Top-level status is reconciled from all stage rows. Revalidating a completed
 upstream stage must not overwrite or delete a downstream `action_required`

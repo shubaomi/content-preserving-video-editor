@@ -1,9 +1,21 @@
-C:\Users\hongr\AppData\Local\Temp\tmpky2vdl6t\work\cover-a.jpg
-C:\Users\hongr\AppData\Local\Temp\tmpky2vdl6t\work\cover-b.jpg
-C:\Users\hongr\AppData\Local\Temp\tmpky2vdl6t\work\cover-ab-report.json
-C:\Users\hongr\AppData\Local\Temp\tmpky2vdl6t\exports\cover.jpg
-C:\Users\hongr\AppData\Local\Temp\tmp7s1zncwz\ip\ip-components.json
-C:\Users\hongr\AppData\Local\Temp\tmpzamsyiit\slice.json
+C:\Users\hongr\AppData\Local\Temp\tmp5esl7ef1\work\cover-a.jpg
+C:\Users\hongr\AppData\Local\Temp\tmp5esl7ef1\work\cover-a-qa.json
+C:\Users\hongr\AppData\Local\Temp\tmp5esl7ef1\work\cover-b.jpg
+C:\Users\hongr\AppData\Local\Temp\tmp5esl7ef1\work\cover-b-qa.json
+C:\Users\hongr\AppData\Local\Temp\tmp5esl7ef1\work\cover-ab-report.json
+C:\Users\hongr\AppData\Local\Temp\tmp5esl7ef1\exports\cover.jpg
+C:\Users\hongr\AppData\Local\Temp\tmpqdf2hwuw\work\cover-a.jpg
+C:\Users\hongr\AppData\Local\Temp\tmpqdf2hwuw\work\cover-a-qa.json
+C:\Users\hongr\AppData\Local\Temp\tmpqdf2hwuw\work\cover-b.jpg
+C:\Users\hongr\AppData\Local\Temp\tmpqdf2hwuw\work\cover-b-qa.json
+C:\Users\hongr\AppData\Local\Temp\tmpqdf2hwuw\work\cover-ab-report.json
+C:\Users\hongr\AppData\Local\Temp\tmpqdf2hwuw\exports\cover.jpg
+C:\Users\hongr\AppData\Local\Temp\tmpaf0fu24r\work\cover-a.jpg
+C:\Users\hongr\AppData\Local\Temp\tmpaf0fu24r\work\cover-b.jpg
+C:\Users\hongr\AppData\Local\Temp\tmpaf0fu24r\work\cover-ab-report.json
+C:\Users\hongr\AppData\Local\Temp\tmpaf0fu24r\exports\cover.jpg
+C:\Users\hongr\AppData\Local\Temp\tmpo1fss8tv\ip\ip-components.json
+C:\Users\hongr\AppData\Local\Temp\tmp5ata6dm6\slice.json
 test_audio_plan_from_manifest_keeps_speech_dominant_and_bgm_ducked (test_adaptive_motion.AdaptiveMotionTests.test_audio_plan_from_manifest_keeps_speech_dominant_and_bgm_ducked) ... ok
 test_concrete_chinese_noun_phrases_create_verified_motion_anchors (test_adaptive_motion.AdaptiveMotionTests.test_concrete_chinese_noun_phrases_create_verified_motion_anchors) ... ok
 test_density_audit_catches_family_and_sfx_rules (test_adaptive_motion.AdaptiveMotionTests.test_density_audit_catches_family_and_sfx_rules) ... ok
@@ -76,8 +88,20 @@ test_empty_extension_output_cannot_claim_completion (test_conditional_extensions
 test_enabled_extensions_still_require_content_evidence (test_conditional_extensions.ConditionalExtensionTests.test_enabled_extensions_still_require_content_evidence) ... ok
 test_correction_is_hashed_validated_and_replayed (test_correction_ledger.CorrectionLedgerTests.test_correction_is_hashed_validated_and_replayed) ... ok
 test_replay_rejects_drift_from_recorded_before_value (test_correction_ledger.CorrectionLedgerTests.test_replay_rejects_drift_from_recorded_before_value) ... ok
+test_auto_route_can_prefer_an_authentic_frame_without_rewriting_identity (test_cover_editorial.CoverEditorialTests.test_auto_route_can_prefer_an_authentic_frame_without_rewriting_identity) ... ok
+test_builds_evidence_bound_hybrid_plan_with_distinct_templates (test_cover_editorial.CoverEditorialTests.test_builds_evidence_bound_hybrid_plan_with_distinct_templates) ... ok
+test_rejects_semantic_direction_without_valid_event_evidence (test_cover_editorial.CoverEditorialTests.test_rejects_semantic_direction_without_valid_event_evidence) ... ok
+test_authentic_frame_route_preserves_source_frame_provenance_without_identity_refs (test_cover_production.CoverProductionTests.test_authentic_frame_route_preserves_source_frame_provenance_without_identity_refs) ... ok
+test_enhanced_editorial_path_produces_plan_template_qa_and_hash_bound_promotion (test_cover_production.CoverProductionTests.test_enhanced_editorial_path_produces_plan_template_qa_and_hash_bound_promotion) ... ok
+test_enhanced_path_does_not_reuse_a_stale_existing_cover_by_path_only (test_cover_production.CoverProductionTests.test_enhanced_path_does_not_reuse_a_stale_existing_cover_by_path_only) ... ok
 test_existing_reviewed_bases_run_typography_ab_and_promotion (test_cover_production.CoverProductionTests.test_existing_reviewed_bases_run_typography_ab_and_promotion) ... ok
 test_missing_reference_guided_bases_returns_truthful_action_request (test_cover_production.CoverProductionTests.test_missing_reference_guided_bases_returns_truthful_action_request) ... ok
+test_blocks_decorative_panel_that_intrudes_into_subject (test_cover_quality.CoverQualityTests.test_blocks_decorative_panel_that_intrudes_into_subject) ... ok
+test_blocks_highlight_phrase_split_across_lines (test_cover_quality.CoverQualityTests.test_blocks_highlight_phrase_split_across_lines) ... ok
+test_blocks_out_of_bounds_or_subject_colliding_title (test_cover_quality.CoverQualityTests.test_blocks_out_of_bounds_or_subject_colliding_title) ... ok
+test_passes_safe_exact_local_typography_and_writes_thumbnail (test_cover_quality.CoverQualityTests.test_passes_safe_exact_local_typography_and_writes_thumbnail) ... ok
+test_ip_template_integrates_owned_supporting_asset_without_title_collision (test_cover_template_renderer.CoverTemplateRendererTests.test_ip_template_integrates_owned_supporting_asset_without_title_collision) ... ok
+test_template_families_are_structurally_distinct_and_safe (test_cover_template_renderer.CoverTemplateRendererTests.test_template_families_are_structurally_distinct_and_safe) ... ok
 test_dark_ui_uses_light_text (test_design_tokens.DesignTokenTests.test_dark_ui_uses_light_text) ... ok
 test_hyperframes_css_has_high_confidence (test_design_tokens.DesignTokenTests.test_hyperframes_css_has_high_confidence) ... ok
 test_light_ui_uses_dark_text (test_design_tokens.DesignTokenTests.test_light_ui_uses_dark_text) ... ok
@@ -267,6 +291,6 @@ test_long_speech_is_split_from_word_timestamps_without_summary_text (test_word_a
 test_verbatim_grouping_preserves_word_timing_and_applies_audited_phrase (test_word_aligned_captions.WordAlignedCaptionTests.test_verbatim_grouping_preserves_word_timing_and_applies_audited_phrase) ... ok
 
 ----------------------------------------------------------------------
-Ran 261 tests in 55.653s
+Ran 273 tests in 73.982s
 
 OK

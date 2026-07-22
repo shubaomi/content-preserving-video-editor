@@ -166,6 +166,13 @@ demonstration actions, and emotion. Then write `semantic-brief.json` with direct
 transcript word IDs, quoted evidence, source times, frame evidence, a relevance
 rationale, and the intended viewer takeaway.
 
+When `cover.editorial.enabled=true`, also write an evidence-backed
+`cover_direction` with a short headline, one to three highlight terms, eyebrow,
+optional subtitle, tone, visual concept, subject side, visual route, and existing
+semantic event IDs. Do not invent a cover claim from generic keywords. Read
+[generative-cover-workflow.md](references/generative-cover-workflow.md) before
+producing an enhanced cover.
+
 Record a separate opening-hook decision for every video. Select a duplicated
 2–6 second cold open only when a transcript- and frame-backed excerpt is
 self-contained, immediately specific, and has clean word/visual boundaries.
@@ -338,6 +345,16 @@ references to regenerate a topic-specific scene, pose, wardrobe, expression,
 lighting, and depth. Do not paste a cutout onto a generic gradient. Prefer
 natural eye contact, a credible slight smile, open posture, and visible energy.
 Default social covers to 9:16 even for a horizontal video.
+
+Let the enhanced cover planner choose among `reference_regenerated`,
+`authentic_frame_editorial`, and `real_person_ip_hybrid` from explicit semantic
+direction and available authorized assets. Keep regeneration as the normal
+personal-cinematic route; use an authentic frame only when it is deliberately
+selected, and use personal IP only when it adds topic meaning. Generate
+`cover-editorial-plan.json`, two structurally different template candidates,
+local exact typography, thumbnail previews, and per-candidate `cover-*-qa.json`.
+Block promotion on missing evidence, unsafe boxes, subject/title collision,
+unreadable thumbnail type, or missing supporting-asset provenance.
 
 Agent review may pass topic relevance, composition, expression, energy, and
 multi-photo reference provenance, but it must not approve personal likeness on

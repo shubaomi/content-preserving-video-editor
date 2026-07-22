@@ -41,6 +41,8 @@ class VideoProjectTests(unittest.TestCase):
             self.assertEqual(project["audio"]["sfx"]["max_event_ratio"], 1.0)
             self.assertEqual(project["audio"]["sfx"]["target_event_coverage"], 1.0)
             self.assertNotIn("min_cues_per_minute", project["audio"]["sfx"])
+            self.assertTrue(project["cover"]["editorial"]["enabled"])
+            self.assertEqual(project["cover"]["editorial"]["mode"], "auto")
             self.assertEqual(MODULE.validate_project(project_file), [])
 
 

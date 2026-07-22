@@ -167,12 +167,20 @@ Complete a video only when applicable gates pass.
 
 - Include a cover, final video, editable project, QA report, and asset provenance.
 - Verify the cover uses an authorized identity reference and matches the actual topic.
+- When enhanced editorial production is enabled, require a hash-bound
+  `cover-editorial-plan.json`, valid semantic event IDs, and one to three
+  headline highlight terms that occur exactly in the local title.
 - Gate cover identity and topic-specific scene coherence before aesthetics. For the default path, require multi-photo reference-guided generation and reject pasted-cutout or generic-gradient results. Record references, prompt, generator, and typography method.
 - Inspect full-size face likeness, expression, eye contact, warmth/energy,
   hands, age, hairline, body proportions, scene/prop relevance, and thumbnail
   crop separately. Keep final user identity approval distinct from automated
   or agent review.
 - Check face consistency, hook accuracy, native 9:16 thumbnail readability for Douyin/WeChat Channels, center-safe cropping, and absence of unsupported claims.
+- Require each candidate `cover-*-qa.json` to bind the exact plan, manifest, and
+  candidate hashes. Block out-of-safe-area geometry, subject/title collision,
+  more than the configured headline lines, type smaller than 10 px at a
+  180-pixel-wide thumbnail, or available supporting assets without purpose,
+  rights basis, and SHA-256.
 - In autonomous mode, complete up to two targeted repair passes before escalating.
 - Scan source and final frames for visual/audio privacy leaks, including sub-second appearances around cuts.
 - Confirm cover hooks and product claims do not exceed the demonstrated content.

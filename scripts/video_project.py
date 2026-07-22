@@ -175,6 +175,15 @@ def init_project(args: argparse.Namespace) -> int:
             },
         },
         "editable_motion": {"require_separate_layout_and_motion_layers": True, "profile": "adaptive_dynamic", "event_rate_policy": "advisory_ceiling", "recommended_events_per_minute": {"screen_tutorial": [4, 10], "polish_existing": [3, 7]}, "maximum_visual_quiet_gap_seconds": 12, "anchor_repeat_cooldown_seconds": 40},
+        "cover": {
+            "enabled": True,
+            "production": {"enabled": False},
+            "editorial": {
+                "enabled": True,
+                "mode": "auto",
+                "prefer_authentic_frame": False,
+            },
+        },
     }
     project = migrate_project_config(project)
     with (root / "project.yaml").open("w", encoding="utf-8", newline="\n") as handle:
