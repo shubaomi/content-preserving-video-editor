@@ -14,6 +14,7 @@ def _asset(
     asset_type: str,
     purpose: str,
     provenance: str,
+    authorization_status: str = "project_authorized",
 ) -> dict[str, Any]:
     resolved = path.resolve() if path else None
     if resolved and resolved.is_file():
@@ -24,6 +25,7 @@ def _asset(
             "type": asset_type,
             "purpose": purpose,
             "provenance": provenance,
+            "authorization_status": authorization_status,
         }
     return {
         "status": "unavailable",
@@ -32,6 +34,7 @@ def _asset(
         "type": asset_type,
         "purpose": purpose,
         "provenance": provenance,
+        "authorization_status": "unavailable",
         "reason": "optional asset is not present; no file was synthesized",
     }
 
@@ -49,6 +52,11 @@ def build_handoff_manifest(
     sfx_stems: Iterable[Path],
     cover: Path | None,
     modifications: list[dict[str, Any]],
+    transcript: Path | None = None,
+    edl: Path | None = None,
+    semantic_brief: Path | None = None,
+    storyboard: Path | None = None,
+    production_contract: Path | None = None,
 ) -> dict[str, Any]:
     sfx = [
         _asset(path, asset_type="audio/sfx-stem", purpose="separable motion sound effect",
@@ -99,6 +107,26 @@ def build_handoff_manifest(
                 cover, asset_type="image/cover", purpose="approved social cover",
                 provenance="director cover workflow",
             ),
+            "transcript": _asset(
+                transcript, asset_type="application/transcript+json",
+                purpose="word-level source evidence", provenance="video-use transcript",
+            ),
+            "edl": _asset(
+                edl, asset_type="application/edl+json", purpose="retained edit timeline",
+                provenance="video-use EDL",
+            ),
+            "semantic_brief": _asset(
+                semantic_brief, asset_type="application/semantic-brief+json",
+                purpose="approved editorial meaning", provenance="Director semantic brief",
+            ),
+            "storyboard": _asset(
+                storyboard, asset_type="application/storyboard+json",
+                purpose="HyperFrames motion plan", provenance="HyperFrames storyboard",
+            ),
+            "production_contract": _asset(
+                production_contract, asset_type="application/production-contract+json",
+                purpose="preservation and delivery promise", provenance="Director production contract",
+            ),
         },
         "modification_list": modifications,
         "return_contract": {
@@ -120,7 +148,7 @@ def validate_handoff_manifest(manifest: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if manifest.get("schema_version") != 1:
         errors.append("handoff manifest schema_version must be 1")
-    if manifest.get("backend") not in {"opencut", "other_nle", "none"}:
+    if manifest.get("backend") not in {"opencut", "openmontage", "other_nle", "none"}:
         errors.append("handoff manifest backend is unsupported")
     if manifest.get("runtime_dependency_required") is not False:
         errors.append("manual handoff cannot require an NLE runtime dependency")
@@ -129,7 +157,8 @@ def validate_handoff_manifest(manifest: dict[str, Any]) -> list[str]:
     assets = manifest.get("assets") or {}
     for name in (
         "source_video", "automatic_master", "clean_a_roll", "captions",
-        "transparent_motion_layer", "bgm_stem", "cover",
+        "transparent_motion_layer", "bgm_stem", "cover", "transcript", "edl",
+        "semantic_brief", "storyboard", "production_contract",
     ):
         row = assets.get(name)
         if not isinstance(row, dict):
@@ -142,6 +171,8 @@ def validate_handoff_manifest(manifest: dict[str, Any]) -> list[str]:
                 errors.append(f"handoff asset {name} available path is missing")
             elif row.get("sha256") != sha256_file(path):
                 errors.append(f"handoff asset {name} hash is stale")
+            if not row.get("authorization_status"):
+                errors.append(f"handoff asset {name} lacks authorization status")
         elif status == "unavailable":
             if row.get("sha256") is not None:
                 errors.append(f"handoff asset {name} cannot fabricate a hash when unavailable")

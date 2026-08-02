@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from director import Director, ROLE_CONTRACT, _json_sha256, approve_sample, authorize_final_render  # noqa: E402
 from director_contracts import DirectorContractError, STAGES, VISUAL_VOCABULARY, sha256_file  # noqa: E402
+from editorial_regression import create_baseline  # noqa: E402
 
 
 class DirectorTests(unittest.TestCase):
@@ -101,7 +102,12 @@ class DirectorTests(unittest.TestCase):
                     "relevance_rationale": "verified semantic event",
                 }
                 for index, event in enumerate(events)
-            ],
+            ] + [{
+                "id": "quiet-tail", "treatment": "quiet_source",
+                "source_start": 61.0, "source_end": 100.0,
+                "output_start": 61.0, "output_end": 100.0,
+                "source_activity_evidence": ["source screen activity continues"],
+            }],
         }
         director.full_semantic_brief_path.write_text(json.dumps(full_brief), encoding="utf-8")
         storyboard = {
@@ -110,7 +116,10 @@ class DirectorTests(unittest.TestCase):
             "capability_skills": ["hyperframes", "hyperframes-core", "hyperframes-creative",
                                   "hyperframes-animation", "hyperframes-cli"],
             "composition": {"duration": duration},
-            "events": events,
+            "events": events + [{
+                "id": "quiet-tail", "treatment": "quiet_source",
+                "source_activity_evidence": ["source screen activity continues"],
+            }],
         }
         (project / "storyboard.json").write_text(json.dumps(storyboard), encoding="utf-8")
         categories = {}
@@ -132,6 +141,9 @@ class DirectorTests(unittest.TestCase):
         edl = director.video_use_dir / "edl.json"
         edl.parent.mkdir(parents=True, exist_ok=True)
         edl.write_text(json.dumps({"ranges": [{"start": 0, "end": 100}]}), encoding="utf-8")
+        director.semantic_brief_path.write_text(json.dumps(full_brief), encoding="utf-8")
+        director._start("production_contract")
+        director.stage_production_contract()
 
     def _write_passing_sample_evidence(self, director: Director) -> tuple[Path, Path, Path]:
         sample = director.sample_hyperframes_project
@@ -237,6 +249,204 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(contract["roles"], ROLE_CONTRACT)
         self.assertEqual(contract["project_scripts_execution"], "forbidden")
         self.assertEqual(contract["motion_renderer"], "hyperframes")
+
+    def test_production_contract_is_a_real_stage_before_hyperframes(self) -> None:
+        self.assertLess(STAGES.index("semantic_brief"), STAGES.index("production_contract"))
+        self.assertLess(STAGES.index("production_contract"), STAGES.index("hyperframes_storyboard"))
+        director = Director(self.project)
+        transcript = director.video_use_dir / "transcripts" / "published.json"
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+        edl = director.video_use_dir / "edl.json"
+        edl.write_text(json.dumps({"ranges": []}), encoding="utf-8")
+        director.semantic_brief_path.write_text(json.dumps({"events": []}), encoding="utf-8")
+
+        director._start("production_contract")
+        director.stage_production_contract()
+
+        self.assertEqual(director.state["stages"]["production_contract"]["status"], "complete")
+        contract = json.loads(director.production_contract_path.read_text(encoding="utf-8"))
+        self.assertEqual(contract["project_mode"], "polish_existing")
+        self.assertEqual(contract["delivery"]["default_output"], "single_universal_mp4")
+        self.assertEqual(len(contract["inputs"]["source"]["sha256"]), 64)
+
+    def test_provider_governance_stage_writes_hash_bound_decision_and_cost_ledger(self) -> None:
+        director = Director(self.project)
+        director._start("provider_governance")
+        director.stage_provider_governance()
+        decision = director.root / "provider-decision.json"
+        ledger = director.root / "cost-ledger.json"
+        self.assertTrue(decision.is_file())
+        self.assertTrue(ledger.is_file())
+        self.assertEqual(director.state["stages"]["provider_governance"]["status"], "complete")
+        self.assertEqual(json.loads(ledger.read_text(encoding="utf-8"))["totals"]["actual"], 0.0)
+
+    def test_metered_provider_call_reconciles_real_production_wrapper(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["provider_governance"] = {"enabled": True, "mode": "cap",
+            "currency": "USD", "budget_total": 1.0, "providers": {"sfx": [{
+                "name": "local-sfx", "available": True, "task_fit": 1.0,
+                "incremental_cost": 0.2, "cost_basis": "user configured local call",
+                "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.1,
+                "failure_incremental_cost": 0.0,
+                "paid_call_authorized": True, "verified_pricing_basis": True,
+                "pricing_source": "user_plan", "remaining_quota": 10,
+                "evidence_timestamp": "2026-08-01T00:00:00+00:00",
+                "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+            }]}}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director._start("provider_governance"); director.stage_provider_governance()
+        produced = director.context.root / "sfx.wav"
+        produced.write_bytes(b"sfx")
+
+        result = director._metered_provider_call(
+            ("sfx",), lambda: [produced], stage="audio",
+        )
+        ledger = json.loads((director.root / "cost-ledger.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(ledger["reservations"][0]["status"], "success")
+        self.assertEqual(ledger["totals"]["actual"], 0.1)
+        resumed = Director(self.project)
+        self.assertEqual(
+            resumed.state["stages"]["provider_governance"]["status"], "complete",
+        )
+
+    def test_metered_provider_call_rejects_unselected_provider_before_callback(self) -> None:
+        director = Director(self.project)
+        director._start("provider_governance")
+        director.stage_provider_governance()
+        called = False
+
+        def callback() -> None:
+            nonlocal called
+            called = True
+
+        with self.assertRaisesRegex(DirectorContractError, "authorized provider"):
+            director._metered_provider_call(("sfx",), callback, stage="sample_qa")
+
+        self.assertFalse(called)
+
+    def test_metered_provider_call_does_not_repeat_an_inflight_reservation(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["provider_governance"] = {"providers": {"sfx": [{
+            "name": "local-sfx", "available": True, "task_fit": 1.0,
+            "incremental_cost": 0.0, "cost_basis": "local idempotent adapter",
+            "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.0,
+            "failure_incremental_cost": 0.0,
+        }]}}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director._start("provider_governance"); director.stage_provider_governance()
+        reservation = director._ensure_provider_reservation(
+            "sfx", stage="sample_qa", allow_create=True,
+        )
+        called = False
+
+        def callback() -> None:
+            nonlocal called
+            called = True
+
+        with self.assertRaisesRegex(DirectorContractError, "in-flight provider reservation"):
+            director._metered_provider_call(("sfx",), callback, stage="sample_qa")
+
+        ledger = json.loads((director.root / "cost-ledger.json").read_text(encoding="utf-8"))
+        self.assertFalse(called)
+        self.assertEqual(len(ledger["reservations"]), 1)
+        self.assertEqual(ledger["reservations"][0]["id"], reservation["id"])
+
+    def test_brand_motion_playbook_is_compiled_before_hyperframes(self) -> None:
+        self.assertLess(STAGES.index("brand_motion_playbook"), STAGES.index("hyperframes_storyboard"))
+        director = Director(self.project)
+        tokens = director.context.edit_dir / "design-tokens.json"
+        tokens.parent.mkdir(parents=True, exist_ok=True)
+        tokens.write_text(json.dumps({
+            "sampling": {"dimensions": {"width": 1920, "height": 1080}},
+            "surface": {"color": "#fff", "text_color": "#111"},
+            "accent": {"color": "#0a8"}, "shape": {}, "shadow": {},
+            "typography": {}, "safe_zones": {},
+        }), encoding="utf-8")
+        director.semantic_brief_path.write_text(json.dumps({"events": []}), encoding="utf-8")
+        director._start("brand_motion_playbook")
+        director.stage_brand_motion_playbook()
+        playbook = director.root / "brand-motion" / "brand-motion-playbook.json"
+        self.assertTrue(playbook.is_file())
+        self.assertEqual(json.loads(playbook.read_text(encoding="utf-8"))["orientation"], "landscape")
+
+    def test_sample_approval_creates_golden_editorial_baseline_when_enabled(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["editorial_regression"] = {"enabled": True}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director.semantic_brief_path.write_text(json.dumps({"events": []}), encoding="utf-8")
+        self._write_passing_sample_evidence(director)
+        approve_sample(director, "hongr")
+        baseline = director.root / "editorial-regression" / "golden-baseline.json"
+        self.assertTrue(baseline.is_file())
+        self.assertEqual(json.loads(baseline.read_text(encoding="utf-8"))["approved_by"], "hongr")
+        approval = json.loads((director.root / "preview-approval.json").read_text(encoding="utf-8"))
+        self.assertEqual(approval["golden_baseline_sha256"], sha256_file(baseline))
+
+    def test_approved_golden_baseline_replacement_invalidates_preview_stage(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["editorial_regression"] = {"enabled": True}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director.semantic_brief_path.write_text(json.dumps({"events": []}), encoding="utf-8")
+        self._write_passing_sample_evidence(director)
+        approve_sample(director, "hongr")
+        director = Director(self.project)
+        director._start("preview_approval"); director.stage_preview_approval()
+        baseline = director.root / "editorial-regression" / "golden-baseline.json"
+        payload = json.loads(baseline.read_text(encoding="utf-8"))
+        payload["signature"]["cover_route"] = "unapproved replacement"
+        payload["integrity_sha256"] = _json_sha256({
+            key: value for key, value in payload.items() if key != "integrity_sha256"
+        })
+        baseline.write_text(json.dumps(payload), encoding="utf-8")
+
+        resumed = Director(self.project)
+
+        self.assertEqual(resumed.state["stages"]["preview_approval"]["status"], "pending")
+        self.assertEqual(resumed.state["last_invalidation"]["from_stage"], "preview_approval")
+        baseline.write_text('{"schema_version":1,"tampered":true}', encoding="utf-8")
+        director._start("preview_approval")
+        with self.assertRaises(DirectorContractError):
+            director.stage_preview_approval()
+
+    def test_sample_qa_writes_and_binds_visual_dynamics_report(self) -> None:
+        director = Director(self.project)
+        storyboard = director.sample_hyperframes_project / "storyboard.json"
+        storyboard.parent.mkdir(parents=True, exist_ok=True)
+        storyboard.write_text(json.dumps({
+            "composition": {"duration": 0},
+            "events": [],
+        }), encoding="utf-8")
+        director.semantic_brief_path.write_text(json.dumps({"events": []}), encoding="utf-8")
+        transcript = director.video_use_dir / "transcripts" / f"{director.context.source_video.stem}.json"
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+        edl = director.video_use_dir / "edl.json"
+        edl.write_text(json.dumps({"ranges": []}), encoding="utf-8")
+        director._start("production_contract")
+        director.stage_production_contract()
+        review = director.root / "sample-qa" / "aesthetic-review.json"
+        review.parent.mkdir(parents=True, exist_ok=True)
+        review.write_text(json.dumps({"verdict": "pass"}), encoding="utf-8")
+        audio = director.sample_hyperframes_project / "audio-plan.json"
+        audio.write_text(json.dumps({}), encoding="utf-8")
+
+        with patch("director.validate_aesthetic_review", return_value=[]), \
+                patch("director.validate_audio_plan", return_value=[]):
+            director._start("sample_qa")
+            director.stage_sample_qa()
+
+        dynamics = director.root / "sample-qa" / "visual-dynamics-qa.json"
+        gate = json.loads((director.root / "sample-qa" / "gate-report.json").read_text(encoding="utf-8"))
+        self.assertTrue(dynamics.is_file())
+        self.assertEqual(gate["visual_dynamics_sha256"], sha256_file(dynamics))
+        self.assertEqual(json.loads(dynamics.read_text(encoding="utf-8"))["status"], "pass")
 
     def test_revalidating_upstream_stage_preserves_downstream_action_required(self) -> None:
         director = Director(self.project)
@@ -581,6 +791,141 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(action["stage"], "manual_finish_handoff")
         self.assertEqual(action["actions"][0]["owner"], "human_editor")
 
+    def test_openmontage_handoff_reuses_manual_finish_contract_and_never_claims_api(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["openmontage_handoff"] = {
+            "enabled": True, "backend": "openmontage", "modifications": [], "assets": {},
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director.delivery_output.parent.mkdir(parents=True)
+        director.delivery_output.write_bytes(b"automatic")
+        director._start("manual_finish_handoff")
+        with self.assertRaisesRegex(DirectorContractError, "human manual finishing"):
+            director.stage_manual_finish_handoff()
+        manifest = director.manual_finish_dir / "openmontage-handoff-manifest.json"
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        self.assertFalse(payload["runtime_dependency_required"])
+        self.assertEqual(payload["automation_capabilities_claimed"], [])
+        self.assertEqual(payload["assets"]["production_contract"]["status"], "unavailable")
+
+    def test_enabled_clip_factory_runs_as_optional_derived_stage(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["derived_content"] = {
+            "clip_factory": {"enabled": True},
+            "podcast": {"enabled": False}, "localization": {"enabled": False},
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        transcript = director.video_use_dir / "transcripts" / "published.json"
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text(json.dumps({"words": [
+            {"id": "w1", "text": "完整解释", "start": 1, "end": 7},
+        ]}), encoding="utf-8")
+        edl = director.video_use_dir / "edl.json"
+        edl.write_text('{"ranges":[{"start":0,"end":10}]}', encoding="utf-8")
+        director.full_semantic_brief_path.write_text(json.dumps({"events": [{
+            "id": "e1", "clip_candidate": True, "source_start": 1, "source_end": 7,
+            "output_start": 1, "output_end": 7, "transcript_word_ids": ["w1"],
+            "transcript_quote": "完整解释", "viewer_takeaway": "完整解释",
+        }]}), encoding="utf-8")
+        director.production_contract_path.write_text('{"schema_version":1}', encoding="utf-8")
+        director._start("derived_content")
+        director.stage_derived_content()
+        manifest = director.root / "derived-content" / "clip-factory-manifest.json"
+        self.assertEqual(json.loads(manifest.read_text(encoding="utf-8"))["status"], "selected")
+
+    def test_invalid_localization_result_reconciles_reserved_provider_as_failed(self) -> None:
+        result = self.root / "work" / "translation-result.json"
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["derived_content"] = {
+            "clip_factory": {"enabled": False}, "podcast": {"enabled": False},
+            "localization": {
+                "enabled": True, "target_language": "en", "glossary": {},
+                "provider": {"backend": "result_file", "name": "translator",
+                             "result": str(result), "authorized": True},
+            },
+        }
+        config["provider_governance"] = {
+            "enabled": True, "mode": "cap", "currency": "USD", "budget_total": 1.0,
+            "providers": {"translation": [{
+                "name": "translator", "available": True, "task_fit": 1.0,
+                "incremental_cost": 0.2, "cost_basis": "user configured call",
+                "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.2,
+                "failure_incremental_cost": 0.05,
+                "paid_call_authorized": True, "verified_pricing_basis": True,
+                "pricing_source": "user_plan", "remaining_quota": 10,
+                "evidence_timestamp": "2026-08-01T00:00:00+00:00",
+                "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+            }]},
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        transcript = director.video_use_dir / "transcripts" / "published.json"
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text(json.dumps({"words": [
+            {"id": "w1", "text": "你好", "start": 0, "end": 1, "type": "word"},
+        ]}, ensure_ascii=False), encoding="utf-8")
+        director._start("provider_governance"); director.stage_provider_governance()
+        reservation = director._ensure_provider_reservation(
+            "translation", stage="derived_content", allow_create=True,
+        )
+        result.parent.mkdir(parents=True, exist_ok=True)
+        result.write_text(json.dumps({
+            "provider": "translator", "target_language": "en",
+            "translations": {"w1": {"translated": "hello", "back_translation": "你好"}},
+        }, ensure_ascii=False), encoding="utf-8")
+
+        director._start("derived_content")
+        with self.assertRaisesRegex(DirectorContractError, "localization manifest"):
+            director.stage_derived_content()
+
+        ledger = json.loads((director.root / "cost-ledger.json").read_text(encoding="utf-8"))
+        row = next(item for item in ledger["reservations"] if item["id"] == reservation["id"])
+        self.assertEqual(row["status"], "failed")
+        self.assertEqual(row["actual"], 0.05)
+
+    def test_malformed_localization_result_reconciles_before_parse_error(self) -> None:
+        result = self.root / "work" / "translation-result.json"
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["derived_content"] = {
+            "clip_factory": {"enabled": False}, "podcast": {"enabled": False},
+            "localization": {
+                "enabled": True, "target_language": "en", "glossary": {},
+                "provider": {"backend": "result_file", "name": "translator",
+                             "result": str(result), "authorized": True},
+            },
+        }
+        config["provider_governance"] = {
+            "providers": {"translation": [{
+                "name": "translator", "available": True, "task_fit": 1.0,
+                "incremental_cost": 0.0, "cost_basis": "local fixture",
+                "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.0,
+                "failure_incremental_cost": 0.0,
+            }]},
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        transcript = director.video_use_dir / "transcripts" / "published.json"
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text(json.dumps({"words": [
+            {"id": "w1", "text": "你好", "start": 0, "end": 1, "type": "word"},
+        ]}, ensure_ascii=False), encoding="utf-8")
+        director._start("provider_governance"); director.stage_provider_governance()
+        reservation = director._ensure_provider_reservation(
+            "translation", stage="derived_content", allow_create=True,
+        )
+        result.parent.mkdir(parents=True, exist_ok=True)
+        result.write_text("{not-json", encoding="utf-8")
+
+        director._start("derived_content")
+        with self.assertRaises(json.JSONDecodeError):
+            director.stage_derived_content()
+
+        ledger = json.loads((director.root / "cost-ledger.json").read_text(encoding="utf-8"))
+        row = next(item for item in ledger["reservations"] if item["id"] == reservation["id"])
+        self.assertEqual(row["status"], "failed")
+
     def test_returned_manual_file_invalidates_old_delivery_qa_and_requires_fresh_evidence(self) -> None:
         returned = self.root / "exports" / "sample-manual.mp4"
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
@@ -718,8 +1063,16 @@ class DirectorTests(unittest.TestCase):
     def test_audio_stage_executes_real_asset_production_when_external_execution_is_enabled(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["audio"] = {"production": {"enabled": True}}
+        config["provider_governance"] = {"providers": {
+            task: [{"name": f"local-{task}", "available": True, "task_fit": 1.0,
+                    "incremental_cost": 0.0, "cost_basis": "test local provider",
+                    "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.0,
+                    "failure_incremental_cost": 0.0}]
+            for task in ("sfx", "bgm")
+        }}
         self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
         director = Director(self.project, execute_external=True)
+        director._start("provider_governance"); director.stage_provider_governance()
         director.sample_hyperframes_project.mkdir(parents=True, exist_ok=True)
         storyboard = director.sample_hyperframes_project / "storyboard.json"
         storyboard.write_text(json.dumps({"events": []}), encoding="utf-8")
@@ -1019,8 +1372,16 @@ class DirectorTests(unittest.TestCase):
     def test_enabled_render_cache_executes_hyperframes_through_cache_pipeline(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["render"] = {"cache": {"enabled": True}}
+        config["provider_governance"] = {"providers": {
+            task: [{"name": f"local-{task}", "available": True, "task_fit": 1.0,
+                    "incremental_cost": 0.0, "cost_basis": "test local provider",
+                    "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.0,
+                    "failure_incremental_cost": 0.0}]
+            for task in ("sfx", "bgm")
+        }}
         self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
         director = Director(self.project, approve_final_render=True, execute_external=True)
+        director._start("provider_governance"); director.stage_provider_governance()
         self._write_full_hyperframes_contract(director)
         director._start("full_hyperframes_storyboard")
         director.stage_full_hyperframes_storyboard()
@@ -1083,8 +1444,20 @@ class DirectorTests(unittest.TestCase):
                 "file_sha256": output_hash,
                 "cover_sha256": sha256_file(cover),
             }), encoding="utf-8")
+        director.production_contract_path.write_text(json.dumps({}), encoding="utf-8")
+        (director.root / "provider-decision.json").write_text(json.dumps({}), encoding="utf-8")
+        (director.root / "cost-ledger.json").write_text(json.dumps({}), encoding="utf-8")
+        for path in (
+            director.root / "sample-qa" / "visual-dynamics-qa.json",
+            director.root / "full-qa" / "visual-dynamics-qa.json",
+        ):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"status": "pass"}), encoding="utf-8")
         with patch("director.validate_aesthetic_review", return_value=[]), \
                 patch("director.validate_audio_plan", return_value=[]), \
+                patch("director.validate_visual_dynamics_report", return_value=[]), \
+                patch.object(director, "_validate_current_production_contract"), \
+                patch.object(director, "_validate_provider_governance"), \
                 patch("director.validate_video_use_final_correctness", return_value=[]), \
                 patch("director.validate_technical_report", return_value=[]), \
                 patch("director.validate_platform_report", return_value=[]):
@@ -1205,6 +1578,26 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(row["authorized_by"], "hongr")
         resumed = Director(self.project, approve_final_render=True)
         self.assertEqual(resumed._validate_final_render_authorization(), approval)
+
+    def test_full_hyperframes_qa_runs_enabled_golden_editorial_regression(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["editorial_regression"] = {"enabled": True}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        self._write_full_hyperframes_contract(director)
+        director._start("full_hyperframes_storyboard")
+        director.stage_full_hyperframes_storyboard()
+        baseline = director.root / "editorial-regression" / "golden-baseline.json"
+        create_baseline(
+            storyboard_path=director.full_hyperframes_project / "storyboard.json",
+            semantic_brief_path=director.full_semantic_brief_path,
+            audio_plan_path=None, cover_plan_path=None, correction_ledger_path=None,
+            approved_by="hongr", output=baseline,
+        )
+        self._pass_full_hyperframes_qa(director)
+        report = director.root / "full-qa" / "editorial-regression.json"
+        self.assertTrue(report.is_file())
+        self.assertEqual(json.loads(report.read_text(encoding="utf-8"))["status"], "pass")
 
     def test_preview_render_parity_failure_blocks_full_hyperframes_qa(self) -> None:
         director = Director(self.project)

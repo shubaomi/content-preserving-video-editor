@@ -31,6 +31,14 @@ class CapabilityRegistryTests(unittest.TestCase):
         by_name = {row["name"]: row for row in inventory["capabilities"]}
 
         self.assertTrue({"design_tokens", "render_cache", "asr_router", "otio_timeline"} <= set(by_name))
+        self.assertTrue({
+            "production_contract", "visual_dynamics_qa", "provider_governance",
+            "local_semantic_corpus", "brand_motion_playbook", "editorial_regression",
+            "review_dashboard", "clip_factory", "podcast_pipeline",
+            "localization_pipeline", "openmontage_handoff",
+        } <= set(by_name))
+        self.assertFalse(by_name["openmontage_handoff"]["enabled"])
+        self.assertEqual(by_name["production_contract"]["maturity"], "director_integrated")
         required = {
             "name", "owner", "dependencies", "compatibility", "inputs", "outputs",
             "optional", "cache_key_fields", "failure_fallback", "enabled", "route_reason",

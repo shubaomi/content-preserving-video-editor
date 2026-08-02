@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -26,8 +27,10 @@ from aesthetic_qa import validate as validate_aesthetic_review
 from asr_router import choose_backend as choose_asr_backend, normalize_transcript
 from audio_qa import validate as validate_audio_plan
 from audio_production import produce_audio_assets
+from brand_motion_playbook import compile_playbook, validate_playbook
 from build_motion_snapshot_plan import build_motion_sidecar, build_plan as build_motion_snapshot_plan
 from capability_registry import build_capability_inventory, build_toolchain_report, capability_config
+from clip_factory import build_clip_manifest, validate_clip_manifest
 from correction_ledger import new_ledger, validate_ledger
 from cover_production import CoverProductionActionRequired, produce_cover, write_cover_request
 from conditional_extensions import route_extensions, run_extension_adapters
@@ -52,6 +55,9 @@ from director_contracts import (
     exclusive_file_lock,
 )
 from evidence_acquisition import acquire as acquire_evidence
+from editorial_regression import (
+    create_baseline, evaluate_regression, validate_baseline, validate_regression,
+)
 from hyperframes_router import route_hyperframes
 from ip_production import IpProductionActionRequired, produce_ip_components
 from manual_finish import (
@@ -64,18 +70,35 @@ from normalize_social_audio import (
     normalize as normalize_social_audio,
     validate_report as validate_audio_normalization_report,
 )
+from localization_pipeline import build_localization_manifest, validate_localization_manifest
 from otio_adapter import edl_to_otio, otio_to_internal, validate_roundtrip as validate_otio_roundtrip
 from post_publish_metrics import import_metrics as import_post_publish_metrics
+from podcast_pipeline import build_podcast_manifest, validate_podcast_manifest
 from platform_occlusion_gate import evaluate_geometry as evaluate_platform_occlusion
 from preview_render_parity import validate as validate_preview_render_parity
+from production_contract import build_contract, validate_contract
+from provider_governance import (
+    build_decision_report,
+    create_cost_ledger,
+    reconcile_selected_call,
+    reserve_selected_call,
+    validate_cost_ledger,
+    validate_decision_report,
+    write_provider_result_receipt,
+)
 from render_with_cache import run_pipeline as run_cached_pipeline
+from review_dashboard import generate_dashboard
 from technical_qa import run_technical_qa, validate_report as validate_technical_report
 from validate_platform_export import validate_bound_report as validate_platform_report
 from video_use_bridge import render_command, render_helper_path
+from visual_dynamics_qa import (
+    build_report as build_visual_dynamics_report,
+    validate_report as validate_visual_dynamics_report,
+)
 
 
-STATE_VERSION = 5
-DIRECTOR_VERSION = "2.1.0"
+STATE_VERSION = 6
+DIRECTOR_VERSION = "2.2.0"
 
 ROLE_CONTRACT = {
     "director": [
@@ -238,7 +261,7 @@ class Director:
             ):
                 self._invalidate_from(
                     state, "inspect",
-                    "legacy state lacks contemporaneous v5 input and artifact fingerprints",
+                    "legacy state lacks contemporaneous v6 input and artifact fingerprints",
                 )
             else:
                 changed_input = next((
@@ -432,6 +455,10 @@ class Director:
         return self.root / "semantic-brief.json"
 
     @property
+    def production_contract_path(self) -> Path:
+        return self.root / "production-contract.json"
+
+    @property
     def evidence_bundle_path(self) -> Path:
         return self.root / "evidence" / "evidence-bundle.json"
 
@@ -467,13 +494,18 @@ class Director:
 
     @property
     def manual_finish_config(self) -> dict[str, Any]:
-        return self.project.get("delivery", {}).get("manual_finish", {})
+        delivery = self.project.get("delivery", {})
+        manual = delivery.get("manual_finish", {})
+        openmontage = delivery.get("openmontage_handoff", {})
+        if openmontage.get("enabled") is True and manual.get("enabled") is not True:
+            return {**openmontage, "backend": "openmontage", "handoff_kind": "openmontage"}
+        return manual
 
     @property
     def manual_finish_active(self) -> bool:
         return (
             self.manual_finish_config.get("enabled") is True
-            and self.manual_finish_config.get("backend") in {"opencut", "other_nle"}
+            and self.manual_finish_config.get("backend") in {"opencut", "openmontage", "other_nle"}
         )
 
     @property
@@ -491,6 +523,15 @@ class Director:
     @property
     def manual_finish_dir(self) -> Path:
         return self.root / "manual-finish"
+
+    @property
+    def manual_handoff_manifest_path(self) -> Path:
+        name = (
+            "openmontage-handoff-manifest.json"
+            if self.manual_finish_config.get("handoff_kind") == "openmontage"
+            else "handoff-manifest.json"
+        )
+        return self.manual_finish_dir / name
 
     def _legacy_script_audit(self) -> Path:
         scripts_dir = self.context.root / str(self.project.get("paths", {}).get("scripts", "scripts"))
@@ -624,6 +665,191 @@ class Director:
         if input_mode_evidence:
             artifacts.append(input_mode_evidence)
         self._complete("inspect", artifacts)
+
+    def stage_provider_governance(self) -> None:
+        config = self.project.get("provider_governance", {})
+        project_hash = sha256_file(self.context.project_file)
+        decision_path = self.root / "provider-decision.json"
+        ledger_path = self.root / "cost-ledger.json"
+        decision = build_decision_report(config=config, project_hash=project_hash)
+        ledger = None
+        if ledger_path.is_file():
+            candidate_ledger = read_json(ledger_path)
+            if not validate_cost_ledger(candidate_ledger, project_hash) and (
+                candidate_ledger.get("config") == config
+            ):
+                ledger = candidate_ledger
+        if ledger is None:
+            ledger = create_cost_ledger(config=config, project_hash=project_hash)
+        write_json(decision_path, decision)
+        write_json(ledger_path, ledger)
+        assert_valid(validate_decision_report(decision, config, project_hash), "provider decision")
+        assert_valid(validate_cost_ledger(ledger, project_hash), "cost ledger")
+        self._complete("provider_governance", [decision_path, ledger_path])
+
+    def _write_cost_ledger(self, ledger: dict[str, Any]) -> Path:
+        """Atomically persist the governed mutable ledger and refresh its stage receipt."""
+        ledger_path = self.root / "cost-ledger.json"
+        write_json(ledger_path, ledger)
+        stage = self.state.get("stages", {}).get("provider_governance") or {}
+        if stage.get("status") == "complete":
+            artifacts = [Path(value).resolve() for value in stage.get("artifacts") or []]
+            if ledger_path.resolve() not in artifacts:
+                artifacts.append(ledger_path.resolve())
+            stage["artifact_records"] = _artifact_records(artifacts)
+            stage["updated_at"] = utc_now()
+            self._save()
+        return ledger_path
+
+    def _metered_provider_call(
+        self, tasks: tuple[str, ...], callback: Callable[[], Any], *, stage: str,
+    ) -> Any:
+        decision_path = self.root / "provider-decision.json"
+        ledger_path = self.root / "cost-ledger.json"
+        if not decision_path.is_file() or not ledger_path.is_file():
+            self._action_required(
+                stage, "External call requires current provider governance artifacts",
+                [{"owner": "director", "provider_decision": str(decision_path),
+                  "cost_ledger": str(ledger_path)}],
+            )
+        decision = read_json(decision_path)
+        ledger = read_json(ledger_path)
+        reservations: list[dict[str, Any]] = []
+        unavailable: list[dict[str, Any]] = []
+        for task in tasks:
+            row = (decision.get("decisions") or {}).get(task) or {}
+            if row.get("status") != "selected":
+                unavailable.append({
+                    "task": task,
+                    "status": row.get("status") or "missing",
+                    "selection_reason": row.get("selection_reason"),
+                })
+                continue
+            selected = row.get("selected") or {}
+            inflight = next((
+                item for item in ledger.get("reservations") or []
+                if item.get("task") == task
+                and item.get("provider") == selected.get("name")
+                and item.get("status") == "reserved"
+            ), None)
+            if inflight is not None:
+                self._action_required(
+                    stage, "An in-flight provider reservation must be reconciled before retry",
+                    [{"owner": "provider_adapter", "task": task,
+                      "reservation_id": inflight.get("id"),
+                      "action": "verify the provider outcome and reconcile success or failure; do not repeat the call",
+                      "cost_ledger": str(ledger_path)}],
+                )
+            reservation = reserve_selected_call(ledger, decision, task=task)
+            if reservation.get("status") == "action_required":
+                self._write_cost_ledger(ledger)
+                self._action_required(
+                    stage, f"Provider budget cannot reserve the configured {task} call",
+                    [{"owner": "user", "reservation": reservation,
+                      "cost_ledger": str(ledger_path)}],
+                )
+            reservations.append(reservation)
+        if unavailable:
+            self._action_required(
+                stage, "External call requires an authorized provider decision",
+                [{"owner": "user", "unavailable_tasks": unavailable,
+                  "provider_decision": str(decision_path)}],
+            )
+        self._write_cost_ledger(ledger)
+        started = time.perf_counter()
+        try:
+            result = callback()
+        except Exception as provider_error:
+            elapsed = time.perf_counter() - started
+            reconciliation_errors: list[str] = []
+            for reservation in reservations:
+                try:
+                    reconcile_selected_call(
+                        ledger, decision, str(reservation["id"]), status="failed",
+                        elapsed_seconds=elapsed,
+                    )
+                except ValueError as error:
+                    reconciliation_errors.append(str(error))
+            self._write_cost_ledger(ledger)
+            if reconciliation_errors:
+                self._action_required(
+                    stage, "Failed provider call requires actual-cost reconciliation",
+                    [{"owner": "provider_adapter", "errors": reconciliation_errors,
+                      "original_error": str(provider_error), "cost_ledger": str(ledger_path)}],
+                )
+            raise
+        elapsed = time.perf_counter() - started
+        result_evidence = result if isinstance(result, dict) else {
+            "outputs": [str(value) for value in result] if isinstance(result, (list, tuple)) else str(result)
+        }
+        for reservation in reservations:
+            try:
+                receipt_path = (
+                    self.root / "provider-call-results" / f"{reservation['id']}.json"
+                )
+                write_provider_result_receipt(receipt_path, reservation, result_evidence)
+                reconcile_selected_call(
+                    ledger, decision, str(reservation["id"]), status="success",
+                    elapsed_seconds=elapsed, result=result_evidence,
+                    result_receipt_path=receipt_path,
+                )
+            except ValueError as error:
+                self._write_cost_ledger(ledger)
+                self._action_required(
+                    stage, "Successful provider call requires actual-cost reconciliation",
+                    [{"owner": "provider_adapter", "error": str(error),
+                      "reservation_id": reservation["id"], "cost_ledger": str(ledger_path)}],
+                )
+        self._write_cost_ledger(ledger)
+        return result
+
+    def _ensure_provider_reservation(
+        self, task: str, *, stage: str, allow_create: bool = True,
+    ) -> dict[str, Any] | None:
+        decision_path = self.root / "provider-decision.json"
+        ledger_path = self.root / "cost-ledger.json"
+        decision = read_json(decision_path); ledger = read_json(ledger_path)
+        selected = ((decision.get("decisions") or {}).get(task) or {}).get("selected")
+        if not isinstance(selected, dict):
+            return None
+        existing = next((
+            row for row in ledger.get("reservations") or []
+            if row.get("task") == task and row.get("provider") == selected.get("name")
+            and row.get("status") == "reserved"
+        ), None)
+        if existing is None and not allow_create:
+            return None
+        reservation = existing or reserve_selected_call(ledger, decision, task=task)
+        self._write_cost_ledger(ledger)
+        if reservation.get("status") == "action_required":
+            self._action_required(
+                stage, f"Provider budget cannot reserve the configured {task} call",
+                [{"owner": "user", "reservation": reservation,
+                  "cost_ledger": str(ledger_path)}],
+            )
+        return reservation
+
+    def _reconcile_provider_result(
+        self, task: str, reservation_id: str, result: dict[str, Any], *, status: str,
+    ) -> None:
+        decision_path = self.root / "provider-decision.json"
+        ledger_path = self.root / "cost-ledger.json"
+        decision = read_json(decision_path); ledger = read_json(ledger_path)
+        reservation = next(
+            (row for row in ledger.get("reservations") or []
+             if row.get("id") == reservation_id), None,
+        )
+        receipt_path = None
+        if status == "success":
+            if reservation is None:
+                raise ValueError("provider reservation is missing")
+            receipt_path = self.root / "provider-call-results" / f"{reservation_id}.json"
+            write_provider_result_receipt(receipt_path, reservation, result)
+        reconcile_selected_call(
+            ledger, decision, reservation_id, status=status, elapsed_seconds=0.0,
+            result=result, result_receipt_path=receipt_path,
+        )
+        self._write_cost_ledger(ledger)
 
     def _valid_video_use_transcript(self, path: Path) -> tuple[bool, str | None]:
         try:
@@ -1132,6 +1358,107 @@ class Director:
                 artifacts.append(publishing_path)
         self._complete("semantic_brief", artifacts)
 
+    def stage_production_contract(self) -> None:
+        transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
+        edl = self.video_use_dir / "edl.json"
+        required = [transcript, edl, self.semantic_brief_path]
+        missing = [str(path) for path in required if not path.is_file()]
+        if missing:
+            self._action_required(
+                "production_contract",
+                "Production contract requires the current transcript, EDL, and semantic brief",
+                [{"owner": "director", "missing_artifacts": missing}],
+            )
+        contract = build_contract(
+            project=self.project,
+            source_path=self.context.source_video,
+            transcript_path=transcript,
+            edl_path=edl,
+            semantic_brief_path=self.semantic_brief_path,
+            input_mode=self.context.input_mode,
+        )
+        write_json(self.production_contract_path, contract)
+        assert_valid(validate_contract(
+            contract,
+            project=self.project,
+            source_path=self.context.source_video,
+            transcript_path=transcript,
+            edl_path=edl,
+            semantic_brief_path=self.semantic_brief_path,
+            input_mode=self.context.input_mode,
+        ), "production contract")
+        self._complete("production_contract", [self.production_contract_path])
+
+    def _validate_current_production_contract(self) -> None:
+        if not self.production_contract_path.is_file():
+            raise DirectorContractError("current production contract is missing")
+        transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
+        assert_valid(validate_contract(
+            read_json(self.production_contract_path),
+            project=self.project,
+            source_path=self.context.source_video,
+            transcript_path=transcript,
+            edl_path=self.video_use_dir / "edl.json",
+            semantic_brief_path=self.semantic_brief_path,
+            input_mode=self.context.input_mode,
+        ), "production contract")
+
+    def _validate_provider_governance(self, *, require_reconciled: bool = False) -> None:
+        project_hash = sha256_file(self.context.project_file)
+        decision_path = self.root / "provider-decision.json"
+        ledger_path = self.root / "cost-ledger.json"
+        if not decision_path.is_file() or not ledger_path.is_file():
+            raise DirectorContractError("provider decision or cost ledger is missing")
+        config = self.project.get("provider_governance", {})
+        assert_valid(
+            validate_decision_report(read_json(decision_path), config, project_hash),
+            "provider decision",
+        )
+        ledger = read_json(ledger_path)
+        assert_valid(validate_cost_ledger(ledger, project_hash), "cost ledger")
+        if require_reconciled:
+            pending = [row for row in ledger.get("reservations") or []
+                       if row.get("status") in {"reserved", "action_required"}]
+            if pending:
+                raise DirectorContractError(
+                    f"provider cost ledger has {len(pending)} unreconciled reservation(s)"
+                )
+
+    def stage_brand_motion_playbook(self) -> None:
+        output_dir = self.root / "brand-motion"
+        playbook_path = output_dir / "brand-motion-playbook.json"
+        config = self.project.get("brand", {}).get("motion_playbook", {})
+        if config.get("enabled", True) is not True:
+            write_json(playbook_path, {
+                "schema_version": 1, "status": "disabled", "reason": "project configuration",
+            })
+            self._complete("brand_motion_playbook", [playbook_path])
+            return
+        design_tokens = self.context.edit_dir / "design-tokens.json"
+        if not design_tokens.is_file() or not self.semantic_brief_path.is_file():
+            self._action_required(
+                "brand_motion_playbook",
+                "Brand Motion Playbook requires current design tokens and semantic brief",
+                [{"owner": "director", "missing_artifacts": [
+                    str(path) for path in (design_tokens, self.semantic_brief_path)
+                    if not path.is_file()
+                ]}],
+            )
+        profile_value = self.project.get("profile")
+        profile_path = self._project_path(profile_value) if profile_value else None
+        outputs = compile_playbook(
+            project=self.project,
+            design_tokens_path=design_tokens,
+            semantic_brief_path=self.semantic_brief_path,
+            profile_path=profile_path,
+            output_dir=output_dir,
+        )
+        assert_valid(
+            validate_playbook(read_json(outputs[0]), project=self.project),
+            "brand motion playbook",
+        )
+        self._complete("brand_motion_playbook", list(outputs))
+
     def stage_hyperframes_storyboard(self) -> None:
         project = self.sample_hyperframes_project
         evidence = read_json(self.evidence_bundle_path) if self.evidence_bundle_path.is_file() else {}
@@ -1139,9 +1466,15 @@ class Director:
         route = route_hyperframes(self.project, evidence)
         renderer_artifacts: list[Path] = []
         catalog_report_path = self.root / "media-catalog-report.json"
-        catalog = run_media_catalog(
+        catalog_call = lambda: run_media_catalog(
             project=self.project, semantic_brief=read_json(self.semantic_brief_path),
             root=self.context.root, runner=self.adapter_runner, execute=self.execute_external,
+        )
+        catalog_config = self.project.get("assets", {}).get("media_catalog", {})
+        catalog = (
+            self._metered_provider_call(("media_catalog",), catalog_call,
+                                        stage="hyperframes_storyboard")
+            if self.execute_external and catalog_config.get("command") else catalog_call()
         )
         write_json(catalog_report_path, catalog)
         renderer_artifacts.append(catalog_report_path)
@@ -1181,12 +1514,16 @@ class Director:
         ip_artifacts: list[Path] = []
         if self.project.get("visuals", {}).get("ip_production", {}).get("enabled") is True:
             try:
-                ip_artifacts = produce_ip_components(
-                    project=self.project, project_root=self.context.root,
-                    semantic_brief=self.semantic_brief_path,
-                    design_tokens=self.context.edit_dir / "design-tokens.json",
-                    output_dir=self.context.edit_dir / "assets" / "ip-components",
-                    runner=self.adapter_runner, execute_external=self.execute_external,
+                ip_artifacts = self._metered_provider_call(
+                    ("identity_reference_generation",),
+                    lambda: produce_ip_components(
+                        project=self.project, project_root=self.context.root,
+                        semantic_brief=self.semantic_brief_path,
+                        design_tokens=self.context.edit_dir / "design-tokens.json",
+                        output_dir=self.context.edit_dir / "assets" / "ip-components",
+                        runner=self.adapter_runner, execute_external=self.execute_external,
+                    ),
+                    stage="hyperframes_storyboard",
                 )
             except IpProductionActionRequired as error:
                 request = self.root / "ip-production-request.json"
@@ -1213,6 +1550,10 @@ class Director:
                 "required_outputs": ["index.html", "storyboard.json", "frame.md", "visual-vocabulary-audit.json"],
                 "motion_output": "hyperframes_render",
                 "renderer_route": str(route_path),
+                "brand_motion_playbook": str(
+                    self.root / "brand-motion" / "brand-motion-playbook.json"
+                ),
+                "brand_motion_css": str(self.root / "brand-motion" / "brand-motion-tokens.css"),
                 "route": route["route"],
                 "route_capabilities": route["capability_skills"],
                 "ip_component_artifacts": [str(path) for path in ip_artifacts],
@@ -1278,10 +1619,14 @@ class Director:
             artifacts.append(audio_plan)
         elif (self.project.get("audio", {}).get("production", {}).get("enabled") is True
               and storyboard.is_file() and self.execute_external):
-            artifacts.extend(produce_audio_assets(
-                storyboard=storyboard, project=self.project, project_root=self.context.root,
-                output_dir=self.context.edit_dir / "audio", source_audio=self.context.source_video,
-                runner=self.adapter_runner,
+            artifacts.extend(self._metered_provider_call(
+                ("sfx", "bgm"),
+                lambda: produce_audio_assets(
+                    storyboard=storyboard, project=self.project, project_root=self.context.root,
+                    output_dir=self.context.edit_dir / "audio", source_audio=self.context.source_video,
+                    runner=self.adapter_runner,
+                ),
+                stage="audio",
             ))
         else:
             write_json(production_request, {
@@ -1336,11 +1681,15 @@ class Director:
         configured = self.project.get("delivery", {}).get("cover", "exports/cover-portrait.png")
         output = self._project_path(configured)
         try:
-            artifacts = produce_cover(
-                project=self.project, project_root=self.context.root,
-                semantic_brief=self.semantic_brief_path, output=output,
-                work_dir=self.context.edit_dir / "cover", runner=self.adapter_runner,
-                execute_external=self.execute_external,
+            artifacts = self._metered_provider_call(
+                ("image_generation",),
+                lambda: produce_cover(
+                    project=self.project, project_root=self.context.root,
+                    semantic_brief=self.semantic_brief_path, output=output,
+                    work_dir=self.context.edit_dir / "cover", runner=self.adapter_runner,
+                    execute_external=self.execute_external,
+                ),
+                stage="cover",
             )
         except CoverProductionActionRequired as error:
             request = write_cover_request(self.root / "cover-production-request.json", error.packet)
@@ -1353,6 +1702,7 @@ class Director:
         self._complete("cover", [path, *artifacts])
 
     def stage_sample_qa(self) -> None:
+        self._validate_current_production_contract()
         review_path = self.root / "sample-qa" / "aesthetic-review.json"
         storyboard_path = self.sample_hyperframes_project / "storyboard.json"
         audio_plan_path = self.sample_hyperframes_project / "audio-plan.json"
@@ -1392,15 +1742,41 @@ class Director:
             ),
             "sample audio QA",
         )
+        dynamics_path = self.root / "sample-qa" / "visual-dynamics-qa.json"
+        dynamics_config = self.project.get("qa", {}).get("visual_dynamics", {})
+        dynamics = build_visual_dynamics_report(
+            storyboard_path=storyboard_path,
+            semantic_brief_path=self.semantic_brief_path,
+            config=dynamics_config,
+            production_contract_path=self.production_contract_path,
+        )
+        write_json(dynamics_path, dynamics)
+        assert_valid(
+            validate_visual_dynamics_report(
+                dynamics, storyboard_path, self.semantic_brief_path,
+                config=dynamics_config,
+                production_contract_path=self.production_contract_path,
+            ),
+            "sample visual dynamics QA",
+        )
+        if (
+            dynamics_config.get("enabled", True) is True
+            and dynamics_config.get("blocking", True) is True
+            and dynamics.get("status") != "pass"
+        ):
+            raise DirectorContractError("sample visual dynamics QA failed")
         report_path = self.root / "sample-qa" / "gate-report.json"
         write_json(report_path, {
             "schema_version": 2, "passed": True,
             "storyboard": str(storyboard_path), "storyboard_sha256": sha256_file(storyboard_path),
             "review": str(review_path), "review_sha256": sha256_file(review_path),
             "audio_plan": str(audio_plan_path), "audio_plan_sha256": sha256_file(audio_plan_path),
+            "visual_dynamics": str(dynamics_path),
+            "visual_dynamics_sha256": sha256_file(dynamics_path),
             "errors": [],
         })
-        self._complete("sample_qa", [storyboard_path, review_path, audio_plan_path, report_path,
+        self._complete("sample_qa", [storyboard_path, review_path, audio_plan_path, dynamics_path,
+                                     report_path,
                                      *_review_evidence_files(review)])
 
     def stage_preview_approval(self) -> None:
@@ -1430,7 +1806,23 @@ class Director:
                 raise DirectorContractError(
                     f"sample approval is stale: {field} does not match the current approved evidence"
                 )
-        self._complete("preview_approval", [approval])
+        if self.project.get("editorial_regression", {}).get("enabled") is True:
+            baseline = self.root / "editorial-regression" / "golden-baseline.json"
+            if (
+                not baseline.is_file()
+                or row.get("golden_baseline") != str(baseline)
+                or row.get("golden_baseline_sha256") != sha256_file(baseline)
+            ):
+                raise DirectorContractError("sample approval is stale: golden editorial baseline")
+            assert_valid(validate_baseline(read_json(baseline)), "golden editorial baseline")
+        artifacts = [approval]
+        if self.project.get("editorial_regression", {}).get("enabled") is True:
+            baseline_path = self.root / "editorial-regression" / "golden-baseline.json"
+            artifacts.append(baseline_path)
+            cover_input = ((read_json(baseline_path).get("inputs") or {}).get("cover_plan") or {})
+            if cover_input.get("path"):
+                artifacts.append(Path(str(cover_input["path"])).resolve())
+        self._complete("preview_approval", artifacts)
 
     def _expected_timeline_duration(self) -> float:
         edl = read_json(self.video_use_dir / "edl.json")
@@ -1505,10 +1897,14 @@ class Director:
         full_audio_plan = project / "audio-plan.json"
         audio_artifacts: list[Path] = []
         if not full_audio_plan.is_file() and self.execute_external:
-            audio_artifacts = produce_audio_assets(
-                storyboard=storyboard_path, project=self.project, project_root=self.context.root,
-                output_dir=self.context.edit_dir / "audio", source_audio=self.context.source_video,
-                runner=self.adapter_runner,
+            audio_artifacts = self._metered_provider_call(
+                ("sfx", "bgm"),
+                lambda: produce_audio_assets(
+                    storyboard=storyboard_path, project=self.project, project_root=self.context.root,
+                    output_dir=self.context.edit_dir / "audio", source_audio=self.context.source_video,
+                    runner=self.adapter_runner,
+                ),
+                stage="full_hyperframes_storyboard",
             )
         motion_output = self.root / "render" / "full-hyperframes.mp4"
         commands = {
@@ -1549,6 +1945,7 @@ class Director:
         storyboard_path = self.full_hyperframes_project / "storyboard.json"
         vocabulary_path = self.full_hyperframes_project / "visual-vocabulary-audit.json"
         check_command = commands["check"]
+        self._validate_current_production_contract()
 
         def check_receipt_is_current() -> bool:
             if not check_path.is_file() or not check_receipt_path.is_file():
@@ -1693,6 +2090,59 @@ class Director:
             for field in ("studio_snapshot", "render_snapshot")
             if sample.get(field)
         ]
+        dynamics_path = qa_dir / "visual-dynamics-qa.json"
+        dynamics_config = self.project.get("qa", {}).get("visual_dynamics", {})
+        dynamics = build_visual_dynamics_report(
+            storyboard_path=storyboard_path,
+            semantic_brief_path=self.full_semantic_brief_path,
+            config=dynamics_config,
+            production_contract_path=self.production_contract_path,
+        )
+        write_json(dynamics_path, dynamics)
+        assert_valid(
+            validate_visual_dynamics_report(
+                dynamics, storyboard_path, self.full_semantic_brief_path,
+                config=dynamics_config,
+                production_contract_path=self.production_contract_path,
+            ),
+            "full visual dynamics QA",
+        )
+        if (
+            dynamics_config.get("enabled", True) is True
+            and dynamics_config.get("blocking", True) is True
+            and dynamics.get("status") != "pass"
+        ):
+            raise DirectorContractError("full visual dynamics QA failed")
+        regression_artifacts: list[Path] = []
+        regression_config = self.project.get("editorial_regression", {})
+        if regression_config.get("enabled") is True:
+            baseline_path = self.root / "editorial-regression" / "golden-baseline.json"
+            if not baseline_path.is_file():
+                self._action_required(
+                    "full_hyperframes_qa",
+                    "Golden editorial regression requires a user-approved sample baseline",
+                    [{"owner": "user", "expected_artifact": str(baseline_path),
+                      "action": "approve-sample"}],
+                )
+            ledger_path = self.manual_finish_dir / "correction-ledger.json"
+            regression_path = qa_dir / "editorial-regression.json"
+            regression = evaluate_regression(
+                baseline=read_json(baseline_path),
+                baseline_path=baseline_path,
+                storyboard_path=storyboard_path,
+                semantic_brief_path=self.full_semantic_brief_path,
+                audio_plan_path=self.full_hyperframes_project / "audio-plan.json",
+                cover_plan_path=self.root / "cover-contract.json",
+                correction_ledger_path=ledger_path if ledger_path.is_file() else None,
+            )
+            write_json(regression_path, regression)
+            assert_valid(
+                validate_regression(regression, read_json(baseline_path)),
+                "golden editorial regression",
+            )
+            if regression.get("status") != "pass":
+                raise DirectorContractError("golden editorial regression failed")
+            regression_artifacts.extend([baseline_path, regression_path])
         occlusion_artifacts: list[Path] = []
         if self.project.get("qa", {}).get("platform_occlusion", {}).get("enabled") is True:
             geometry_path = qa_dir / "element-geometry.json"
@@ -1726,14 +2176,21 @@ class Director:
             "hyperframes_check_receipt_sha256": sha256_file(check_receipt_path),
             "snapshot_review_sha256": sha256_file(snapshot_review_path),
             "preview_render_parity_sha256": sha256_file(parity_path),
+            "production_contract_sha256": sha256_file(self.production_contract_path),
+            "visual_dynamics_sha256": sha256_file(dynamics_path),
+            "editorial_regression_sha256": (
+                sha256_file(regression_artifacts[-1]) if regression_artifacts else "disabled"
+            ),
             "strict_check_passed": True,
             "snapshot_review_passed": True,
             "preview_render_parity_passed": True,
+            "visual_dynamics_passed": dynamics.get("status") == "pass",
             "platform_occlusion_passed": True if occlusion_artifacts else "disabled",
         })
         self._complete("full_hyperframes_qa", [check_path, check_receipt_path,
-                                                snapshot_review_path, parity_path,
-                                                evidence_path, *snapshot_paths,
+                                                 snapshot_review_path, parity_path,
+                                                 dynamics_path, self.production_contract_path,
+                                                 evidence_path, *regression_artifacts, *snapshot_paths,
                                                 *parity_snapshots, *occlusion_artifacts])
 
     def _validate_final_render_authorization(self) -> Path:
@@ -2166,6 +2623,146 @@ class Director:
             artifacts.extend([compose_output, normalization_report])
         self._complete("final_compose", artifacts)
 
+    def stage_derived_content(self) -> None:
+        config = self.project.get("derived_content", {})
+        output_dir = self.root / "derived-content"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        artifacts: list[Path] = []
+        decisions: dict[str, Any] = {}
+        transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
+        edl = self.video_use_dir / "edl.json"
+        enabled = [name for name in ("clip_factory", "podcast", "localization")
+                   if config.get(name, {}).get("enabled") is True]
+        if not enabled:
+            decision_path = output_dir / "decision.json"
+            write_json(decision_path, {"schema_version": 1, "status": "disabled",
+                                       "reason": "all optional derived content is disabled"})
+            self._complete("derived_content", [decision_path])
+            return
+        if "clip_factory" in enabled:
+            required = [transcript, edl, self.full_semantic_brief_path,
+                        self.production_contract_path]
+            missing = [str(path) for path in required if not path.is_file()]
+            if missing:
+                self._action_required("derived_content", "Clip Factory evidence is incomplete",
+                                      [{"owner": "director", "missing_artifacts": missing}])
+            tokens_path = self.context.edit_dir / "design-tokens.json"
+            orientation = "landscape"
+            if tokens_path.is_file():
+                dimensions = (read_json(tokens_path).get("sampling") or {}).get("dimensions") or {}
+                orientation = "portrait" if float(dimensions.get("height") or 0) > float(
+                    dimensions.get("width") or 1
+                ) else "landscape"
+            path = output_dir / "clip-factory-manifest.json"
+            report = build_clip_manifest(
+                transcript_path=transcript, edl_path=edl,
+                semantic_brief_path=self.full_semantic_brief_path,
+                output_timeline_path=edl,
+                hook_path=self.root / "hook-decision.json",
+                production_contract_path=self.production_contract_path,
+                orientation=orientation, output=path,
+            )
+            assert_valid(validate_clip_manifest(report), "clip factory")
+            decisions["clip_factory"] = report["status"]
+            artifacts.append(path)
+        if "podcast" in enabled:
+            podcast = config["podcast"]
+            audio_path = self._optional_project_path(podcast.get("clean_audio"))
+            if not audio_path or not audio_path.is_file() or not transcript.is_file():
+                self._action_required(
+                    "derived_content", "Podcast requires an actually materialized clean PCM audio file",
+                    [{"owner": "ffmpeg_or_audio_provider", "expected_artifact": str(audio_path)}],
+                )
+            path = output_dir / "podcast-manifest.json"
+            report = build_podcast_manifest(
+                audio_path=audio_path, transcript_path=transcript,
+                chapters=list(podcast.get("chapters") or []),
+                title=str(podcast.get("title") or self.project.get("video_id") or "Podcast"),
+                description=str(podcast.get("description") or "Source-bound podcast export"),
+                output=path,
+            )
+            assert_valid(validate_podcast_manifest(report), "podcast pipeline")
+            decisions["podcast"] = "pass"; artifacts.append(path)
+        if "localization" in enabled:
+            localization = config["localization"]
+            if not transcript.is_file():
+                self._action_required("derived_content", "Localization requires the current transcript",
+                                      [{"owner": "video-use", "expected_artifact": str(transcript)}])
+            path = output_dir / "localization-manifest.json"
+            provider = dict(localization.get("provider") or {})
+            if provider.get("result"):
+                provider["result"] = str(self._project_path(provider["result"]))
+            reservation = None
+            if provider.get("backend") != "fixture":
+                decision = read_json(self.root / "provider-decision.json")
+                selected = ((decision.get("decisions") or {}).get("translation") or {}).get("selected")
+                if not isinstance(selected, dict) or selected.get("name") != provider.get("name"):
+                    self._action_required(
+                        "derived_content",
+                        "Localization provider is not the current authorized translation decision",
+                        [{"owner": "user", "provider": provider.get("name"),
+                          "provider_decision": str(self.root / "provider-decision.json")}],
+                    )
+                result_exists = bool(provider.get("result")) and Path(
+                    str(provider.get("result"))
+                ).is_file()
+                reservation = self._ensure_provider_reservation(
+                    "translation", stage="derived_content", allow_create=not result_exists,
+                )
+                if result_exists and reservation is None:
+                    self._action_required(
+                        "derived_content",
+                        "Localization result cannot be adopted without a prior cost reservation",
+                        [{"owner": "user", "action": "remove stale result, resume to reserve, then rerun provider",
+                          "provider_result": str(provider.get("result"))}],
+                    )
+            try:
+                report = build_localization_manifest(
+                    transcript_path=transcript,
+                    target_language=str(localization.get("target_language") or "en"),
+                    glossary=dict(localization.get("glossary") or {}),
+                    provider=provider,
+                    voice_clone_authorized=localization.get("voice_clone_authorized") is True,
+                    output=path,
+                )
+            except Exception as error:
+                if reservation is not None:
+                    result_path = Path(str(provider.get("result") or "")).resolve()
+                    failure_evidence = {
+                        "error_type": type(error).__name__,
+                        "provider_result": {
+                            "path": str(result_path),
+                            "sha256": sha256_file(result_path) if result_path.is_file() else None,
+                        },
+                    }
+                    self._reconcile_provider_result(
+                        "translation", str(reservation["id"]),
+                        failure_evidence, status="failed",
+                    )
+                raise
+            if reservation is not None and report.get("status") == "failed":
+                raw_result = read_json(Path(str(provider["result"])).resolve())
+                self._reconcile_provider_result(
+                    "translation", str(reservation["id"]), raw_result, status="failed",
+                )
+            if report.get("status") == "action_required":
+                self._action_required(
+                    "derived_content", str(report.get("reason")),
+                    [{"owner": "translation_or_tts_provider", "request": str(path),
+                      "reservation_id": reservation.get("id") if reservation else None}],
+                )
+            assert_valid(validate_localization_manifest(report), "localization pipeline")
+            if reservation is not None:
+                raw_result = read_json(Path(str(provider["result"])).resolve())
+                self._reconcile_provider_result(
+                    "translation", str(reservation["id"]), raw_result, status="success",
+                )
+            decisions["localization"] = "complete"; artifacts.append(path)
+        decision_path = output_dir / "decision.json"
+        write_json(decision_path, {"schema_version": 1, "status": "complete",
+                                   "capabilities": decisions})
+        self._complete("derived_content", [decision_path, *artifacts])
+
     def _optional_project_path(self, value: Any, *, base: Path | None = None) -> Path | None:
         if not value:
             return None
@@ -2207,7 +2804,7 @@ class Director:
         )
         sfx = [self._optional_project_path(value) for value in (assets.get("sfx_stems") or [])]
         sfx_paths = [path for path in sfx if path] or self._manual_sfx_stems()
-        path = self.manual_finish_dir / "handoff-manifest.json"
+        path = self.manual_handoff_manifest_path
         build_handoff_manifest(
             manifest_path=path,
             backend=str(config.get("backend")),
@@ -2220,6 +2817,11 @@ class Director:
             sfx_stems=sfx_paths,
             cover=cover,
             modifications=list(config.get("modifications") or []),
+            transcript=self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json",
+            edl=self.video_use_dir / "edl.json",
+            semantic_brief=self.full_semantic_brief_path,
+            storyboard=self.full_hyperframes_project / "storyboard.json",
+            production_contract=self.production_contract_path,
         )
         return path
 
@@ -2330,8 +2932,9 @@ class Director:
                     "correction_ledger": str(ledger_path),
                     "expected_artifact": str(returned),
                     "capability_boundary": (
-                        "OpenCut is a human-facing option only; no CLI, MCP, Editor API, or headless "
-                        "rendering capability is assumed."
+                        "The configured NLE is a human-facing option only; no CLI, MCP, Editor API, "
+                        "or headless rendering capability is assumed for OpenMontage, OpenCut, or "
+                        "another editor."
                     ),
                 }],
             )
@@ -2430,14 +3033,26 @@ class Director:
             if self.manual_finish_active else self.root / "final-media-report.json"
         )
         manual_required = [
-            self.manual_finish_dir / "handoff-manifest.json",
+            self.manual_handoff_manifest_path,
             self.manual_finish_dir / "correction-ledger.json",
             self.manual_finish_dir / "return-receipt.json",
             self.manual_finish_dir / "manual-final-qa.json",
         ] if self.manual_finish_active else []
+        sample_dynamics_path = self.root / "sample-qa" / "visual-dynamics-qa.json"
+        full_dynamics_path = self.root / "full-qa" / "visual-dynamics-qa.json"
+        provider_decision_path = self.root / "provider-decision.json"
+        cost_ledger_path = self.root / "cost-ledger.json"
+        regression_path = self.root / "full-qa" / "editorial-regression.json"
+        regression_required = (
+            [regression_path]
+            if self.project.get("editorial_regression", {}).get("enabled") is True else []
+        )
         required = [storyboard_path, final_review_path, audio_plan_path, cover_path,
-                    cover_review_path, final_edit_correctness_path,
-                    media_report_path, *manual_required, *platform_paths.values()]
+                     cover_review_path, final_edit_correctness_path,
+                    media_report_path, self.production_contract_path,
+                    sample_dynamics_path, full_dynamics_path,
+                    provider_decision_path, cost_ledger_path, *regression_required,
+                    *manual_required, *platform_paths.values()]
         missing = [str(path) for path in required if not path.is_file()]
         if missing:
             self._action_required(
@@ -2447,6 +3062,35 @@ class Director:
                   "missing_artifacts": missing}],
             )
         final_review = read_json(final_review_path)
+        self._validate_current_production_contract()
+        self._validate_provider_governance(require_reconciled=True)
+        if regression_required:
+            regression = read_json(regression_path)
+            baseline_path = self.root / "editorial-regression" / "golden-baseline.json"
+            if not baseline_path.is_file():
+                raise DirectorContractError("golden editorial baseline is missing")
+            assert_valid(
+                validate_regression(regression, read_json(baseline_path)),
+                "golden editorial regression",
+            )
+            if regression.get("status") != "pass":
+                raise DirectorContractError("golden editorial regression did not pass")
+        for label, path, scoped_storyboard, scoped_brief in (
+            ("sample", sample_dynamics_path,
+             self.sample_hyperframes_project / "storyboard.json", self.semantic_brief_path),
+            ("full", full_dynamics_path, storyboard_path, self.full_semantic_brief_path),
+        ):
+            dynamics = read_json(path)
+            assert_valid(
+                validate_visual_dynamics_report(
+                    dynamics, scoped_storyboard, scoped_brief,
+                    config=self.project.get("qa", {}).get("visual_dynamics", {}),
+                    production_contract_path=self.production_contract_path,
+                ),
+                f"{label} visual dynamics QA",
+            )
+            if dynamics.get("status") != "pass":
+                raise DirectorContractError(f"{label} visual dynamics QA did not pass")
         assert_valid(validate_aesthetic_review(final_review, read_json(storyboard_path)), "final aesthetic QA")
         output_hash = sha256_file(output)
         if final_review.get("reviewed_output_sha256") != output_hash:
@@ -2504,9 +3148,18 @@ class Director:
         write_json(report, {"schema_version": 1, "universal_video": str(output),
                             "file_sha256": output_hash, "duplicate_platform_mp4s": False,
                             "validated_same_file_for": list(platform_paths),
-                            "cover": str(cover_path), "cover_sha256": cover_hash,
-                            "audio_plan": str(audio_plan_path),
-                            "automatic_master": str(self.delivery_output),
+                             "cover": str(cover_path), "cover_sha256": cover_hash,
+                             "audio_plan": str(audio_plan_path),
+                             "production_contract": str(self.production_contract_path),
+                             "production_contract_sha256": sha256_file(self.production_contract_path),
+                             "sample_visual_dynamics_sha256": sha256_file(sample_dynamics_path),
+                             "full_visual_dynamics_sha256": sha256_file(full_dynamics_path),
+                             "provider_decision_sha256": sha256_file(provider_decision_path),
+                             "cost_ledger_sha256": sha256_file(cost_ledger_path),
+                             "editorial_regression_sha256": (
+                                 sha256_file(regression_path) if regression_required else "disabled"
+                             ),
+                             "automatic_master": str(self.delivery_output),
                             "manual_finish": self.manual_finish_active})
         self._complete("delivery_qa", [output, cover_path, report, *required,
                                        *_review_evidence_files(final_review)])
@@ -2548,9 +3201,12 @@ class Director:
     def run(self, until: str | None = None) -> int:
         handlers: dict[str, Callable[[], None]] = {
             "inspect": self.stage_inspect,
+            "provider_governance": self.stage_provider_governance,
             "video_use_timeline": self.stage_video_use_timeline,
             "evidence_acquisition": self.stage_evidence_acquisition,
             "semantic_brief": self.stage_semantic_brief,
+            "production_contract": self.stage_production_contract,
+            "brand_motion_playbook": self.stage_brand_motion_playbook,
             "hyperframes_storyboard": self.stage_hyperframes_storyboard,
             "audio": self.stage_audio,
             "cover": self.stage_cover,
@@ -2560,6 +3216,7 @@ class Director:
             "full_hyperframes_qa": self.stage_full_hyperframes_qa,
             "final_render": self.stage_final_render,
             "final_compose": self.stage_final_compose,
+            "derived_content": self.stage_derived_content,
             "manual_finish_handoff": self.stage_manual_finish_handoff,
             "delivery_qa": self.stage_delivery_qa,
         }
@@ -2647,6 +3304,30 @@ def approve_sample(director: Director, approved_by: str) -> Path:
     approver = approved_by.strip()
     if not approver:
         raise DirectorContractError("approved_by is required")
+    baseline_path = director.root / "editorial-regression" / "golden-baseline.json"
+    baseline_sha256 = "disabled"
+    if director.project.get("editorial_regression", {}).get("enabled") is True:
+        current_cover = director.root / "cover-contract.json"
+        approved_cover = director.root / "editorial-regression" / "approved-cover-contract.json"
+        cover_input = None
+        if current_cover.is_file():
+            approved_cover.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(current_cover, approved_cover)
+            cover_input = approved_cover
+        baseline = create_baseline(
+            storyboard_path=storyboard,
+            semantic_brief_path=director.semantic_brief_path,
+            audio_plan_path=director.sample_hyperframes_project / "audio-plan.json",
+            cover_plan_path=cover_input,
+            correction_ledger_path=(
+                director.manual_finish_dir / "correction-ledger.json"
+                if (director.manual_finish_dir / "correction-ledger.json").is_file() else None
+            ),
+            approved_by=approver,
+            output=baseline_path,
+        )
+        assert_valid(validate_baseline(baseline), "golden editorial baseline")
+        baseline_sha256 = sha256_file(baseline_path)
     path = director.root / "preview-approval.json"
     write_json(path, {
         "schema_version": 1,
@@ -2658,6 +3339,8 @@ def approve_sample(director: Director, approved_by: str) -> Path:
         "storyboard_sha256": sha256_file(storyboard),
         "aesthetic_review_sha256": sha256_file(review),
         "gate_report_sha256": sha256_file(gate),
+        "golden_baseline": str(baseline_path) if baseline_sha256 != "disabled" else None,
+        "golden_baseline_sha256": baseline_sha256,
     })
     reset_stage(director.state_path, "preview_approval")
     director.action_path.unlink(missing_ok=True)
@@ -2731,6 +3414,9 @@ def parser() -> argparse.ArgumentParser:
         open_command.add_argument("--full", action="store_true")
     deliver = sub.add_parser("deliver", help="run all authorized local/external stages to delivery")
     deliver.add_argument("--project", required=True)
+    review = sub.add_parser("review", help="generate a local read-only Director evidence dashboard")
+    review.add_argument("--project", required=True)
+    review.add_argument("--output")
     metrics = sub.add_parser("import-metrics", help="import a user-exported platform metrics file")
     metrics.add_argument("--project", required=True)
     metrics.add_argument("--input", required=True)
@@ -2748,6 +3434,15 @@ def _dispatch(args: argparse.Namespace) -> int:
                         execute_external=getattr(args, "execute_external", False) or deliver)
     if args.command == "status":
         print(json.dumps(director.state, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "review":
+        configured = director.project.get("review", {}).get("dashboard", {})
+        if configured.get("enabled", True) is not True:
+            raise DirectorContractError("review.dashboard.enabled must be true")
+        output = Path(args.output).resolve() if args.output else director.root / "review" / "index.html"
+        print(generate_dashboard(
+            project_root=director.context.root, director_root=director.root, output=output,
+        ))
         return 0
     if args.command == "reset-stage":
         reset_stage(director.state_path, args.stage)

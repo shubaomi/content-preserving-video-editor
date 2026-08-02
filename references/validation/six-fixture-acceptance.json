@@ -17,7 +17,7 @@
     "scripts/fixture_acceptance.py": "dbc81a616e3930693fd28ed017a65699437aedf30e02b36761bdfe0415554e03",
     "scripts/asr_router.py": "4e45b7ae994ad56111e3ec19d9172fe91a4be626a4d9e30532601d584750e303",
     "scripts/hyperframes_router.py": "d9dc36257565f596d29bb86972e9260afce0d741126c147b2da7ad1d184debf4",
-    "scripts/director_contracts.py": "aea5ff84786e7e8ee3c1a71aa1eb9af2aa1b47fd84b9609c0063a5704c892dfc"
+    "scripts/director_contracts.py": "51cf14af5fb55e9f708e1fcfbcaaf7b0e0e06919945c058c7035b04fd0513a7a"
   },
   "missing_types": [],
   "duplicate_types": [],

@@ -24,7 +24,7 @@ Use this reference when executing or extending the single professional workflow.
 writes the effective capability and toolchain reports without installing or
 updating dependencies. `scripts/director_adapters.py` supplies atomic state,
 file locking, input/output/implementation hashes, timeout handling, reuse, and
-failure boundaries. Optional adapters are disabled by schema-v7 migration and
+failure boundaries. Optional adapters are disabled by schema-v8 migration and
 must not change the legacy path.
 Adapter execution uses a per-capability transaction lock around cache lookup,
 execution, output hashing, and state persistence. Relative implementation paths
@@ -60,20 +60,24 @@ existing-edit markers select `polish_existing`; absent strong evidence selects
 The canonical entry is `scripts/director.py`. It owns these ordered stages:
 
 1. `inspect`
-2. `video_use_timeline`
-3. `evidence_acquisition`
-4. `semantic_brief`
-5. `hyperframes_storyboard`
-6. `audio`
-7. `cover`
-8. `sample_qa`
-9. `preview_approval`
-10. `full_hyperframes_storyboard`
-11. `full_hyperframes_qa`
-12. `final_render`
-13. `final_compose`
-14. `manual_finish_handoff`
-15. `delivery_qa`
+2. `provider_governance`
+3. `video_use_timeline`
+4. `evidence_acquisition`
+5. `semantic_brief`
+6. `production_contract`
+7. `brand_motion_playbook`
+8. `hyperframes_storyboard`
+9. `audio`
+10. `cover`
+11. `sample_qa`
+12. `preview_approval`
+13. `full_hyperframes_storyboard`
+14. `full_hyperframes_qa`
+15. `final_render`
+16. `final_compose`
+17. `derived_content`
+18. `manual_finish_handoff`
+19. `delivery_qa`
 
 Each stage is `pending`, `running`, `action_required`, `failed`, or `complete`.
 State writes are atomic. A completed stage is skipped on resume. Resetting one
@@ -104,7 +108,8 @@ the same director entry again. Never edit `director-state.json` by hand.
 
 `manual_finish_handoff` is disabled by default. Disabled or backend `none` is a
 completed no-op and preserves the existing automatic path. Backend `opencut` or
-`other_nle` creates a human-facing action packet only after `final_compose`; it
+`other_nle`, or the separate `openmontage_handoff` configuration, creates a
+human-facing action packet only after `final_compose`; it
 does not invoke an NLE and does not require an OpenCut runtime. OpenCut currently
 has no assumed MCP, Editor API, CLI, or headless renderer contract here.
 
@@ -222,23 +227,78 @@ both platform reports, and delivery contract bind the exact cover SHA-256 as
 well. Changing either file invalidates delivery evidence instead of reusing a
 path-based pass.
 
-Director state schema v5 binds the exact project and source bytes plus every
+Director state schema v6 binds the exact project and source bytes plus every
 completed stage artifact. Resume always re-hashes these inputs, including when
 file size and modification time are unchanged, and invalidates the earliest
 affected stage and all downstream stages when bytes drift.
-Legacy state that lacks contemporaneous v5 fingerprints is invalidated from
+Legacy state that lacks contemporaneous v6 fingerprints is invalidated from
 `inspect`; it is never upgraded by hashing today's files and preserving an old
 `complete` flag. A returned manual-finish file is likewise re-hashed on every
 resume, so same-size and same-mtime byte changes reopen manual finishing and
 delivery QA.
 
-Run `scripts/completion_audit.py` to obtain an honest thirteen-item acceptance
+Run `scripts/completion_audit.py` to obtain an honest fourteen-item acceptance
 report. A paused full render remains `pending`; it must never be reported as
 complete merely because code tests and sample snapshots pass. The audit
 independently revalidates full HyperFrames checks, snapshots, preview/render
 parity, render authorization, final aesthetics, cover, full decode, video-use
 correctness, platform bindings, delivery contract, state artifact records, and
 input fingerprints.
+
+## Production governance and editorial regression
+
+`provider_governance` writes deterministic provider decisions and a cost ledger
+before any optional paid or local model is considered. It ranks only configured,
+available, authorized candidates and records rejected reasons and evidence.
+Reservations occur only immediately before an actual adapter invocation, survive
+resume, and are reconciled on both success and failure from configured fixed,
+result-field, or local-runtime evidence. Delivery rejects unresolved reservations.
+An external callback cannot run without current governance artifacts and a selected
+provider for every requested task. The ledger is the one deliberately mutable
+governance artifact: each valid reserve/reconcile transition is atomic and refreshes
+the `provider_governance` stage artifact receipt so resume cannot mistake recorded
+spend for tampering. A positive incremental monetary cost is governed as paid even
+when the author omitted `requires_paid_call`. Successful reconciliation requires a
+provider-result receipt whose result and output-file inventory can be recomputed;
+an existing reserved call blocks retry until its real outcome is reconciled.
+No provider name is treated as proof that its command, quota, credentials, or
+rights are available.
+
+`production_contract` then binds source/project evidence, preservation coverage,
+allowed motion families and density ceilings, quiet-interval policy, IP/audio/
+cover requirements, provider decisions, derived outputs, and manual handoff.
+All later gates validate the current contract hash. `brand_motion_playbook`
+compiles profile/project/design-token evidence into machine JSON, CSS variables,
+and human-readable design rules without overwriting optical corrections already
+approved in the correction ledger.
+
+Sample and full QA each emit `visual-dynamics-qa.json`. The gate checks semantic
+event evidence, cadence without density gaming, family/structure diversity,
+quiet intervals, IP/connector correctness, cue decisions, safe zones, captions,
+faces, UI, and canvas bounds. If editorial regression is enabled, sample approval
+creates the Golden baseline; the full stage compares structural event/family/
+anchor/quiet/IP/connector/SFX/BGM/cover evidence and permits only hash-bound,
+approved ledger corrections. Preview approval binds the baseline path and hash;
+the Director stage also hashes the baseline itself. Baseline inputs,
+implementation, integrity, removed events, full-storyboard corrections, and correction
+before-value/target guards are independently revalidated. Mutable cover evidence is
+snapshotted at approval, while each correction must target and hash the Storyboard,
+semantic brief, audio plan, or cover artifact that actually owns the changed field.
+
+`derived_content` is default-off. Clip Factory emits candidates with source and
+output times, word IDs, quotes, titles, independence scores, cut reasons, and
+orientation decisions. Podcast requires a real verifiable clean PCM WAV and
+chapter evidence. Localization can adopt a real authorized hashed provider result
+after a prior cost reservation and keeps
+word IDs/times, transcript/glossary request hashes, glossary decisions,
+back-translation checks, TTS/lip-sync status,
+and voice-clone authorization explicit. Missing providers or assets produce
+`action_required` rather than fabricated media.
+
+`director.py review` produces a static, local, read-only dashboard bound to the
+current hashes. It summarizes stages, action packets, Production Contract,
+visual dynamics, provider/cost evidence, correction ledger, Universal MP4,
+covers, snapshots, and QA; it never edits the project or approves a gate.
 
 Before render, `full_hyperframes_qa` blocks on a strict HyperFrames report with
 lint, runtime, layout, motion-sidecar, and contrast checks plus at least four

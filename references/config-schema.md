@@ -4,8 +4,8 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 7. New projects write both
-`schema_version: 7` and `version: 7`. Legacy projects that only contain
+The current project schema is version 8. New projects write both
+`schema_version: 8` and `version: 8`. Legacy projects that only contain
 `version: 1` or `version: 2` are deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
@@ -102,7 +102,7 @@ Keep backend choice separate from editing policy:
 
 No backend may approve semantic deletion. Store candidate ranges separately from the approved EDL.
 
-Schema-v6 optional adapters use these canonical paths and default to disabled:
+Optional adapters use these canonical paths and default to disabled:
 
 - `analysis.adapters.pyscenedetect`, `.mediapipe`, and `.paddleocr`;
 - `analysis.subject_tracking` and `analysis.hook_pacing`;
@@ -133,6 +133,79 @@ assets:
 The Director replaces the placeholder with an absolute, hash-bound JSON request
 manifest. The compatibility alias `assets.use_media_catalog: true` still enables
 this route for legacy configuration, without rewriting the project file.
+
+## Schema-v8 production governance
+
+Schema v8 adds these non-destructive defaults. Migration deep-copies the source
+mapping and never rewrites the user's YAML:
+
+- `workflow.production_contract.enabled: true` for a hash-bound preservation, dynamics,
+  audio, cover, provider, and derived-output contract;
+- `provider_governance.enabled: true`, with per-task configured candidates,
+  explicit authorization/quota/availability, weighted selection evidence, a
+  project budget cap, estimates, reservations, and reconciled actual cost;
+- `assets.local_semantic_corpus.enabled: false`; the deterministic local index
+  stores rights, source hash, embedding model/version/cache key, semantic score,
+  motion score, and event binding. An unavailable CLIP/backend is reported and
+  never downloaded implicitly;
+- `brand.motion_playbook.enabled: true`, compiling project/profile tokens to
+  JSON, CSS custom properties, and `DESIGN.md`;
+- `qa.visual_dynamics.enabled: true` for sample/full/delivery hash-bound cadence,
+  variety, quiet-interval, geometry, occlusion, connector, IP, SFX, and canvas
+  checks;
+- `editorial_regression.enabled: false` until an approved sample establishes
+  a Golden Editorial baseline;
+- `review.dashboard.enabled: true` for a static local read-only review page;
+- `derived_content.clip_factory`, `.podcast`, and `.localization`, all disabled
+  by default and constrained to existing transcript/EDL/contract evidence;
+- `delivery.openmontage_handoff.enabled: false`, a human-only neutral package
+  that reuses correction-ledger and returned-media revalidation contracts.
+
+Provider candidates must not be selected merely because a name appears in YAML.
+Availability, paid-call authorization, remaining quota, current evidence timestamp,
+privacy/locality, latency, continuity/cache value, cost, Chinese suitability,
+identity preservation, and task quality all participate in the recorded
+decision. A reservation is not actual spend: adapters must reconcile it after
+success or failure. Exceeding the project cap produces `action_required`.
+Every external callback requires a current selected provider for its exact task.
+The cost ledger remains auditable across resume by atomically refreshing its
+Director stage artifact receipt after each valid reserve/reconcile transition.
+Any positive `incremental_cost` is treated as paid and therefore requires current
+authorization, price, and quota evidence. A success row also requires a separate
+provider-result receipt; its declared absolute output paths and SHA-256 values are
+recomputed. A still-reserved call is never retried automatically.
+`provider_governance.max_evidence_age_days` defaults to 30; paid pricing and
+quota timestamps older than that window, missing timezone information, or more
+than five minutes in the future are rejected as stale evidence.
+
+Treat `requires_paid_call: true` or any positive `incremental_cost` as paid.
+For such a candidate, require explicit `paid_call_authorized`,
+`verified_pricing_basis: true`, `pricing_source` equal
+to `user_plan` or `user_contract`, a user-plan `cost_basis`, incremental cost,
+positive remaining quota, pricing/quota evidence timestamps, an
+`actual_cost_strategy`, and evidenced failure cost. Supported reconciliation
+strategies are `fixed`, `result_field`, and `local_runtime`. The Director reserves
+only at the real adapter boundary and final delivery rejects any unresolved
+reservation.
+
+`assets.local_semantic_corpus.backend: precomputed` is the no-download production
+route: each authorized asset supplies a finite local embedding and the config
+supplies same-model `query_embeddings` for requested queries. `fixture` is tests
+only. A configured `clip` or `command` backend that is not actually available
+returns `unavailable`; it never triggers an implicit model download. Enabling the
+local corpus is sufficient to route media requests even when the external media
+catalog is disabled.
+
+The podcast module currently accepts a real signed 16-bit PCM WAV clean-audio
+asset and verifies decode, duration, sample rate, channels, RMS, and peak. The
+localization module accepts an authorized `result_file` whose provider identity,
+language, current hash, transcript hash, glossary hash, complete word IDs,
+translations, and back-translations
+validate. The Director requires the selected translation provider and a prior
+cost reservation before adopting that file. Missing translation, TTS, lip-sync,
+or voice-clone authorization remains `action_required`. Tests may
+use deterministic fixtures, but production reports must never label fixture
+output as external-provider completion.
 
 ## Topic IP visuals
 
@@ -228,6 +301,21 @@ CLI, MCP, or headless integration. Resolve declared asset and return paths from
 `paths.root`. The returned path must differ from the automatic master path.
 Missing optional assets are legal and must be represented as `unavailable` in
 the handoff manifest.
+
+An OpenMontage-oriented handoff may alternatively set:
+
+```yaml
+delivery:
+  openmontage_handoff:
+    enabled: true
+    returned_final: null
+    modifications: []
+```
+
+This produces an editor-neutral package and `action_required`; it does not call
+OpenMontage, depend on it, or claim an API, MCP, CLI, or headless renderer.
+Do not enable `manual_finish` and `openmontage_handoff` together; schema v8
+rejects that ambiguous double handoff.
 
 Configure the blocking Studio/render parity tolerance as follows:
 

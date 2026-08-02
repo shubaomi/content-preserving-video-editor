@@ -86,6 +86,34 @@ class MediaCatalogAdapterTests(unittest.TestCase):
                                    runner=AdapterRunner(ROOT / "unused.json"), execute=True)
         self.assertEqual(report["status"], "not_applicable")
 
+    def test_local_semantic_corpus_can_fulfil_immutable_catalog_request(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            asset = root / "tabs.mp4"
+            asset.write_bytes(b"owned-tabs")
+            project = {"assets": {
+                "media_catalog": {"enabled": False},
+                "local_semantic_corpus": {
+                    "enabled": True, "backend": "fixture", "embedding_model": "fixture-v1",
+                    "index": "work/director/semantic-corpus/index.json",
+                    "assets": [{
+                        "path": str(asset), "type": "video", "source": "HongRun",
+                        "purpose": "browser tab organization", "rights_basis": "project-owned",
+                        "semantic_text": "browser tabs organization", "motion_score": 0.5,
+                    }],
+                },
+            }}
+            report = run_media_catalog(
+                project=project,
+                semantic_brief={"events": [{"id": "e1", "asset_request": {
+                    "query": "browser tabs organization", "purpose": "explain organization",
+                }}]},
+                root=root, runner=AdapterRunner(root / "state.json"), execute=False,
+            )
+            self.assertEqual(report["status"], "complete")
+            payload = json.loads(Path(report["outputs"][0]).read_text(encoding="utf-8"))
+            self.assertEqual(payload["decisions"][0]["asset"]["rights_basis"], "project-owned")
+
     def test_catalog_command_must_accept_request_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

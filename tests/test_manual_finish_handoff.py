@@ -78,6 +78,27 @@ class ManualFinishHandoffTests(unittest.TestCase):
             report["output_sha256"] = "0" * 64
             self.assertTrue(any("output hash" in error for error in validate_returned_final_qa(report, output)))
 
+    def test_openmontage_neutral_manifest_includes_editorial_evidence_without_claiming_api(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            files = {}
+            for name in ("source.mp4", "automatic.mp4", "transcript.json", "captions.srt",
+                         "edl.json", "brief.json", "storyboard.json", "contract.json"):
+                path = root / name; path.write_bytes(name.encode()); files[name] = path
+            manifest = build_handoff_manifest(
+                manifest_path=root / "openmontage-handoff-manifest.json", backend="openmontage",
+                source_video=files["source.mp4"], automatic_master=files["automatic.mp4"],
+                clean_a_roll=None, captions=files["captions.srt"], transparent_motion_layer=None,
+                bgm_stem=None, sfx_stems=[], cover=None, modifications=[],
+                transcript=files["transcript.json"], edl=files["edl.json"],
+                semantic_brief=files["brief.json"], storyboard=files["storyboard.json"],
+                production_contract=files["contract.json"],
+            )
+            self.assertEqual(manifest["assets"]["production_contract"]["status"], "available")
+            self.assertEqual(manifest["backend"], "openmontage")
+            self.assertEqual(manifest["automation_capabilities_claimed"], [])
+            self.assertFalse(manifest["runtime_dependency_required"])
+
 
 if __name__ == "__main__":
     unittest.main()

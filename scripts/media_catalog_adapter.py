@@ -10,6 +10,7 @@ from typing import Any
 
 from director_adapters import AdapterRunner
 from director_contracts import exclusive_file_lock, read_json, sha256_file, write_json
+from local_semantic_corpus import build_index, search_index, validate_index
 
 
 def _resolve(root: Path, value: Any) -> Path:
@@ -74,7 +75,11 @@ def run_media_catalog(
     config = assets.get("media_catalog", {}) if isinstance(assets, dict) else {}
     if not isinstance(config, dict):
         config = {}
-    enabled = config.get("enabled") is True or assets.get("use_media_catalog") is True
+    corpus_config = assets.get("local_semantic_corpus", {})
+    enabled = (
+        config.get("enabled") is True or assets.get("use_media_catalog") is True
+        or (isinstance(corpus_config, dict) and corpus_config.get("enabled") is True)
+    )
     if not enabled:
         return {"schema_version": 1, "status": "disabled", "reason": "optional_default_off",
                 "outputs": []}
@@ -119,6 +124,67 @@ def run_media_catalog(
         else:
             write_json(request_manifest, manifest)
     manifest_sha256 = sha256_file(request_manifest)
+    if isinstance(corpus_config, dict) and corpus_config.get("enabled") is True:
+        index_value = corpus_config.get("index") or "work/director/semantic-corpus/index.json"
+        index_path = _resolve(root, index_value)
+        index = build_index(
+            config=corpus_config,
+            assets=[row for row in (corpus_config.get("assets") or []) if isinstance(row, dict)],
+            output=index_path,
+        )
+        if index.get("status") == "complete":
+            validation_errors = validate_index(index, corpus_config)
+            if validation_errors:
+                return {"schema_version": 1, "status": "failed",
+                        "reason": "local semantic corpus index validation failed",
+                        "validation_errors": validation_errors, "outputs": []}
+            decisions: list[dict[str, Any]] = []
+            threshold = float(corpus_config.get("minimum_similarity", 0.01))
+            for request in requests:
+                search = search_index(
+                    index=index, query=str(request["query"]), event_id=str(request["event_id"]),
+                    limit=int(corpus_config.get("limit", 5)),
+                )
+                candidates = [row for row in search.get("results") or []
+                              if float(row.get("semantic_similarity") or 0) >= threshold]
+                base = {
+                    "event_id": request["event_id"],
+                    "request_sha256": request["request_sha256"],
+                    "query": request["query"],
+                    "purpose": request["purpose"],
+                }
+                if not candidates:
+                    decisions.append({**base, "status": "no_match",
+                                      "reason": "no authorized local asset met semantic threshold"})
+                    continue
+                selected = candidates[0]
+                decisions.append({**base, "status": "selected", "asset": {
+                    "path": selected["path"], "sha256": selected["sha256"],
+                    "type": selected["type"], "purpose": request["purpose"],
+                    "provenance": selected["source"], "rights_basis": selected["rights_basis"],
+                    "embedding_model": selected["embedding_model"],
+                    "embedding_version": selected["embedding_version"],
+                    "embedding_cache_key": selected["embedding_cache_key"],
+                    "semantic_similarity": selected["semantic_similarity"],
+                    "motion_score": selected["motion_score"], "event_id": request["event_id"],
+                }})
+            output = request_manifest.with_name(f"{request_set_sha256}-local-decisions.json")
+            payload = {"schema_version": 1, "request_set_sha256": request_set_sha256,
+                       "index_sha256": index.get("integrity_sha256"), "decisions": decisions}
+            write_json(output, payload)
+            validation_errors = _validate_catalog(payload, requests, root)
+            return {"schema_version": 1,
+                    "status": "complete" if not validation_errors else "failed",
+                    "requests": requests, "event_ids": [row["event_id"] for row in requests],
+                    "request_manifest": str(request_manifest),
+                    "request_manifest_sha256": manifest_sha256,
+                    "index": str(index_path), "outputs": [str(output)],
+                    "validation_errors": validation_errors}
+        if index.get("status") == "unavailable" and not execute:
+            return {"schema_version": 1, "status": "unavailable",
+                    "reason": index.get("reason"), "requests": requests,
+                    "request_manifest": str(request_manifest),
+                    "request_manifest_sha256": manifest_sha256, "outputs": []}
     if not execute:
         return {"schema_version": 1, "status": "action_required",
                 "reason": "media catalog adapter execution is not enabled", "requests": requests,

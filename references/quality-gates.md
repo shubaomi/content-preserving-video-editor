@@ -11,6 +11,29 @@ Complete a video only when applicable gates pass.
 - Review every omitted source interval of 15 seconds or longer; silence alone is not permission to delete it.
 - Pass or explicitly waive tail coverage.
 
+## Production contract and providers
+
+- Require a current hash-bound Production Contract before creative planning and
+  revalidate it at sample, full, and delivery gates.
+- Reject a provider decision that lacks configured availability, authorization,
+  quota, evidence timestamp, selection score, rejected reasons, or task binding.
+- Treat estimated/reserved cost separately from reconciled actual cost. A failed
+  provider call must release or reconcile its reservation; a budget-cap breach
+  is `action_required`, not a silently degraded paid call.
+- Reject missing governance artifacts, unselected task providers, unknown ledger
+  states, task/provider mismatches, and success rows without result/cost evidence.
+  Refresh the mutable ledger's stage receipt only through its controlled writer.
+- Infer paid governance from any positive incremental monetary cost, even if the
+  candidate omitted its paid flag. Recompute estimate/basis/runtime/actual from the
+  selected provider and require a current result receipt with a complete output-file
+  inventory. Never automatically retry a still-reserved external call after resume.
+- Require paid candidates to carry current user-plan/contract pricing and quota
+  evidence plus an actual-cost reconciliation strategy. Reject unresolved
+  reservations at delivery.
+- Do not download a local semantic model or asset corpus implicitly. Require
+  absolute paths, hashes, rights/authorization, embedding model/version/cache
+  key, event purpose, semantic score, and motion score for every selected asset.
+
 ## Captions
 
 - Use complete natural phrases.
@@ -102,6 +125,20 @@ Complete a video only when applicable gates pass.
 - Reject a motion plan below its selected profile floor unless an explicit
   user-approved sparse override includes evidence. Reject long quiet gaps that
   have only a generic prose justification without verified source-frame samples.
+- Require sample/full visual-dynamics reports to bind the current Production
+  Contract, Storyboard/timeline, captions, design tokens, and reviewed evidence.
+  More events do not compensate for weak anchors, repeated layout families,
+  clipped geometry, long unexplained quiet gaps, or redundant visuals.
+- When Golden Editorial Regression is enabled, compare the full structure to the
+  approved sample baseline. Allow drift only through a current approved
+  correction-ledger entry whose related hashes still match.
+- Bind the Golden baseline into preview approval and revalidate its source,
+  preview-stage artifact receipt, implementation, integrity, target, and
+  before-value guards. Removed events and
+  quiet/IP/connector/SFX/BGM/cover/rejection drift are blocking structural changes.
+- Snapshot mutable cover evidence at sample approval. Correction-ledger targets and
+  related-file hashes must cover the actual owning Storyboard, semantic brief,
+  audio plan, or cover artifact; an unrelated current file is not approval evidence.
 
 ## Audio
 
@@ -162,6 +199,23 @@ Complete a video only when applicable gates pass.
   tied to the exact returned file hash.
 - Reopen manual finishing and delivery QA when the returned file disappears or
   its bytes, size, or modification time change.
+- Treat `delivery.openmontage_handoff` as the same human-only boundary. Generate
+  a neutral manifest and `action_required`; never claim OpenMontage automation,
+  API, MCP, CLI, or headless rendering.
+
+## Optional derived outputs
+
+- Clip candidates must cite existing word IDs, source/output times, exact quote,
+  evidence hashes, independence score, cut reason, and orientation decision.
+- Podcast output must be an actually materialized, decodable clean PCM WAV with
+  duration/sample-rate/channel/RMS/peak measurements and chapter evidence.
+- Localization requires an actual provider result bound to the current transcript
+  and glossary hashes. Preserve word IDs/times, terminology/glossary choices,
+  and back-translation QA; do not fake TTS,
+  lip-sync, or voice-clone authorization.
+- Missing optional providers or assets are honest `unavailable` or
+  `action_required` outcomes and must not block the default universal MP4 when
+  the module is disabled.
 
 ## Pre-publish package
 
@@ -215,6 +269,10 @@ Complete a video only when applicable gates pass.
 - Require completed Director stages to retain current SHA-256 artifact records,
   and require current project/source input fingerprints. A status flag without
   these byte bindings is not completion evidence.
+- Require the completion audit's OpenMontage-method enhancement criterion to
+  independently verify Production Contract, provider/cost, brand playbook,
+  sample/full visual dynamics, enabled Golden regression/derived outputs,
+  stage artifact bindings, full-QA bindings, and delivery bindings.
 - Require final aesthetic, cover, platform, full-decode, video-use correctness,
   and delivery-contract evidence to bind the exact universal MP4 and cover
   bytes. Recompute all bindings, technical measurements, safe-zone/crop evidence,

@@ -7,7 +7,7 @@ import math
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 7
+CURRENT_PROJECT_SCHEMA_VERSION = 8
 MANUAL_FINISH_BACKENDS = {"opencut", "other_nle", "none"}
 MANUAL_FINISH_DEFAULTS: dict[str, Any] = {
     "enabled": False,
@@ -41,6 +41,20 @@ COVER_EDITORIAL_MODES = {
 }
 COVER_TEMPLATE_FAMILIES = {
     "cinematic_editorial", "bright_tech_tutorial", "dark_high_energy", "thought_leadership_ip",
+}
+VISUAL_DYNAMICS_DEFAULTS: dict[str, Any] = {
+    "enabled": True,
+    "blocking": True,
+    "maximum_family_ratio": 0.65,
+    "maximum_unexplained_gap_seconds": 30.0,
+    "minimum_useful_content_ratio": 0.2,
+}
+OPENMONTAGE_HANDOFF_DEFAULTS: dict[str, Any] = {
+    "enabled": False,
+    "backend": "openmontage",
+    "returned_final": None,
+    "modifications": [],
+    "assets": {},
 }
 
 
@@ -99,6 +113,21 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("delivery.manual_finish.modifications must be a list")
     if not isinstance(manual.get("assets"), dict):
         raise ValueError("delivery.manual_finish.assets must be a mapping")
+    openmontage = delivery.setdefault("openmontage_handoff", {})
+    if not isinstance(openmontage, dict):
+        raise ValueError("delivery.openmontage_handoff must be a mapping")
+    for key, value in OPENMONTAGE_HANDOFF_DEFAULTS.items():
+        openmontage.setdefault(key, deepcopy(value))
+    if not isinstance(openmontage.get("enabled"), bool):
+        raise ValueError("delivery.openmontage_handoff.enabled must be a boolean")
+    if openmontage.get("backend") != "openmontage":
+        raise ValueError("delivery.openmontage_handoff.backend must be openmontage")
+    if not isinstance(openmontage.get("modifications"), list):
+        raise ValueError("delivery.openmontage_handoff.modifications must be a list")
+    if not isinstance(openmontage.get("assets"), dict):
+        raise ValueError("delivery.openmontage_handoff.assets must be a mapping")
+    if manual.get("enabled") is True and openmontage.get("enabled") is True:
+        raise ValueError("manual_finish and openmontage_handoff cannot both be enabled")
     qa = migrated.setdefault("qa", {})
     if not isinstance(qa, dict):
         raise ValueError("qa must be a mapping")
@@ -128,12 +157,39 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         platform_occlusion.setdefault("enabled", False), bool
     ):
         raise ValueError("qa.platform_occlusion.enabled must be a boolean")
+    visual_dynamics = qa.setdefault("visual_dynamics", {})
+    if not isinstance(visual_dynamics, dict):
+        raise ValueError("qa.visual_dynamics must be a mapping")
+    for key, value in VISUAL_DYNAMICS_DEFAULTS.items():
+        visual_dynamics.setdefault(key, value)
+    for key in ("enabled", "blocking"):
+        if not isinstance(visual_dynamics.get(key), bool):
+            raise ValueError(f"qa.visual_dynamics.{key} must be a boolean")
+    for key in (
+        "maximum_family_ratio", "maximum_unexplained_gap_seconds",
+        "minimum_useful_content_ratio",
+    ):
+        value = visual_dynamics.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            raise ValueError(f"qa.visual_dynamics.{key} must be numeric")
+        visual_dynamics[key] = float(value)
+    if not 0 < visual_dynamics["maximum_family_ratio"] <= 1:
+        raise ValueError("qa.visual_dynamics.maximum_family_ratio must be in (0, 1]")
+    if visual_dynamics["maximum_unexplained_gap_seconds"] <= 0:
+        raise ValueError("qa.visual_dynamics.maximum_unexplained_gap_seconds must be positive")
+    if not 0 <= visual_dynamics["minimum_useful_content_ratio"] <= 1:
+        raise ValueError("qa.visual_dynamics.minimum_useful_content_ratio must be in [0, 1]")
     workflow = migrated.setdefault("workflow", {})
     if not isinstance(workflow, dict):
         raise ValueError("workflow must be a mapping")
     capabilities = workflow.setdefault("capabilities", {})
     if not isinstance(capabilities, dict):
         raise ValueError("workflow.capabilities must be a mapping")
+    production_contract = workflow.setdefault("production_contract", {"enabled": True})
+    if not isinstance(production_contract, dict) or not isinstance(
+        production_contract.setdefault("enabled", True), bool
+    ):
+        raise ValueError("workflow.production_contract.enabled must be a boolean")
     analysis = migrated.setdefault("analysis", {})
     if not isinstance(analysis, dict):
         raise ValueError("analysis must be a mapping")
@@ -268,6 +324,23 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         media_catalog.setdefault("enabled", False), bool
     ):
         raise ValueError("assets.media_catalog.enabled must be a boolean")
+    semantic_corpus = assets.setdefault("local_semantic_corpus", {
+        "enabled": False,
+        "backend": "none",
+        "index": "work/director/semantic-corpus/index.json",
+        "embedding_model": None,
+        "command": [],
+    })
+    if not isinstance(semantic_corpus, dict) or not isinstance(
+        semantic_corpus.setdefault("enabled", False), bool
+    ):
+        raise ValueError("assets.local_semantic_corpus.enabled must be a boolean")
+    if not isinstance(semantic_corpus.setdefault("command", []), list):
+        raise ValueError("assets.local_semantic_corpus.command must be a list")
+    if semantic_corpus.setdefault("backend", "none") not in {
+        "none", "fixture", "precomputed", "clip", "command",
+    }:
+        raise ValueError("assets.local_semantic_corpus.backend is unsupported")
     hook_pacing = analysis.setdefault("hook_pacing", {"enabled": False})
     if not isinstance(hook_pacing, dict) or not isinstance(
         hook_pacing.setdefault("enabled", False), bool
@@ -286,6 +359,54 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         preferences.setdefault("enabled", False), bool
     ):
         raise ValueError("preferences.enabled must be a boolean")
+    provider_governance = migrated.setdefault("provider_governance", {
+        "enabled": True,
+        "mode": "observe",
+        "currency": "USD",
+        "budget_total": None,
+        "single_action_approval": None,
+        "max_evidence_age_days": 30,
+        "providers": {},
+    })
+    if not isinstance(provider_governance, dict) or not isinstance(
+        provider_governance.setdefault("enabled", True), bool
+    ):
+        raise ValueError("provider_governance.enabled must be a boolean")
+    if provider_governance.setdefault("mode", "observe") not in {"observe", "warn", "cap"}:
+        raise ValueError("provider_governance.mode must be observe, warn, or cap")
+    max_evidence_age_days = provider_governance.setdefault("max_evidence_age_days", 30)
+    if not isinstance(max_evidence_age_days, int) or isinstance(max_evidence_age_days, bool) or max_evidence_age_days < 1:
+        raise ValueError("provider_governance.max_evidence_age_days must be a positive integer")
+    if not isinstance(provider_governance.setdefault("providers", {}), dict):
+        raise ValueError("provider_governance.providers must be a mapping")
+    brand = migrated.setdefault("brand", {})
+    if not isinstance(brand, dict):
+        raise ValueError("brand must be a mapping")
+    motion_playbook = brand.setdefault("motion_playbook", {"enabled": True})
+    if not isinstance(motion_playbook, dict) or not isinstance(
+        motion_playbook.setdefault("enabled", True), bool
+    ):
+        raise ValueError("brand.motion_playbook.enabled must be a boolean")
+    editorial_regression = migrated.setdefault("editorial_regression", {"enabled": False})
+    if not isinstance(editorial_regression, dict) or not isinstance(
+        editorial_regression.setdefault("enabled", False), bool
+    ):
+        raise ValueError("editorial_regression.enabled must be a boolean")
+    review = migrated.setdefault("review", {})
+    if not isinstance(review, dict):
+        raise ValueError("review must be a mapping")
+    dashboard = review.setdefault("dashboard", {"enabled": True})
+    if not isinstance(dashboard, dict) or not isinstance(
+        dashboard.setdefault("enabled", True), bool
+    ):
+        raise ValueError("review.dashboard.enabled must be a boolean")
+    derived_content = migrated.setdefault("derived_content", {})
+    if not isinstance(derived_content, dict):
+        raise ValueError("derived_content must be a mapping")
+    for name in ("clip_factory", "podcast", "localization"):
+        value = derived_content.setdefault(name, {"enabled": False})
+        if not isinstance(value, dict) or not isinstance(value.setdefault("enabled", False), bool):
+            raise ValueError(f"derived_content.{name}.enabled must be a boolean")
     migrated["schema_version"] = CURRENT_PROJECT_SCHEMA_VERSION
     migrated["version"] = CURRENT_PROJECT_SCHEMA_VERSION
     return migrated

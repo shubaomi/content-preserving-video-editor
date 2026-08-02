@@ -10,6 +10,7 @@ from typing import Any
 
 from aesthetic_qa import validate as validate_aesthetic_review
 from audio_qa import validate as validate_audio_plan
+from brand_motion_playbook import validate_playbook
 from capability_registry import CAPABILITY_LEVELS, build_capability_inventory, build_toolchain_report
 from director_contracts import (
     REQUIRED_VISUAL_FIELDS,
@@ -25,13 +26,20 @@ from director_contracts import (
     write_json,
 )
 from correction_ledger import validate_ledger
+from clip_factory import validate_clip_manifest
+from editorial_regression import validate_baseline, validate_regression
+from localization_pipeline import validate_localization_manifest
 from manual_finish import validate_handoff_manifest, validate_returned_final_qa
+from podcast_pipeline import validate_podcast_manifest
+from production_contract import validate_contract
+from provider_governance import validate_cost_ledger, validate_decision_report
 from fixture_acceptance import CHECK_NAMES, evaluate_suite
 from preview_render_parity import validate as validate_preview_render_parity
 from six_media_acceptance import validate_manifest as validate_six_media_manifest
 from test_acceptance_report import validate_report as validate_test_suite_report
 from technical_qa import validate_report as validate_technical_report
 from validate_platform_export import validate_bound_report as validate_platform_report
+from visual_dynamics_qa import validate_report as validate_visual_dynamics_report
 
 
 REQUIRED_FIXTURE_TYPES = {
@@ -295,6 +303,16 @@ def _sample_qa_errors(root: Path, sample_project: Path, project: dict[str, Any])
     }.items():
         if approval.get(field) != sha256_file(artifact):
             errors.append(f"sample approval is stale: {field}")
+    if project.get("editorial_regression", {}).get("enabled") is True:
+        baseline = root / "editorial-regression" / "golden-baseline.json"
+        if (
+            not baseline.is_file()
+            or approval.get("golden_baseline") != str(baseline)
+            or approval.get("golden_baseline_sha256") != (
+                sha256_file(baseline) if baseline.is_file() else None
+            )
+        ):
+            errors.append("sample approval is stale: golden editorial baseline")
     return errors
 
 
@@ -398,9 +416,12 @@ def build(
         "output", f"exports/{project.get('video_id', 'video')}-universal.mp4"
     )
     manual_finish = project.get("delivery", {}).get("manual_finish", {})
+    openmontage = project.get("delivery", {}).get("openmontage_handoff", {})
+    if openmontage.get("enabled") is True and manual_finish.get("enabled") is not True:
+        manual_finish = {**openmontage, "backend": "openmontage"}
     manual_active = (
         manual_finish.get("enabled") is True
-        and manual_finish.get("backend") in {"opencut", "other_nle"}
+        and manual_finish.get("backend") in {"opencut", "openmontage", "other_nle"}
     )
     if manual_active:
         delivery_output_value = manual_finish.get(
@@ -628,7 +649,10 @@ def build(
     )
     manual_dir = root / "manual-finish"
     manual_artifacts = [
-        manual_dir / "handoff-manifest.json",
+        manual_dir / (
+            "openmontage-handoff-manifest.json"
+            if manual_finish.get("backend") == "openmontage" else "handoff-manifest.json"
+        ),
         manual_dir / "correction-ledger.json",
         manual_dir / "return-receipt.json",
         manual_dir / "manual-final-media-report.json",
@@ -724,6 +748,10 @@ def build(
         "hyperframes_router", "preview_render_parity", "cover_generation", "ip_components",
         "bgm_pipeline", "sfx_pipeline", "audio_normalization", "platform_occlusion",
         "render_cache", "manual_finish_handoff", "asr_router", "otio_timeline",
+        "production_contract", "provider_governance", "local_semantic_corpus",
+        "brand_motion_playbook", "visual_dynamics_qa", "editorial_regression",
+        "review_dashboard", "clip_factory", "podcast_pipeline",
+        "localization_pipeline", "openmontage_handoff",
     }
     maturity_floor = CAPABILITY_LEVELS.index("director_integrated")
     capability_contract_pass = (
@@ -800,6 +828,120 @@ def build(
         if evidence_contract_pass else
         "Capability routes, toolchain skills, or hash-bound semantic evidence are incomplete.",
         [inventory_path, toolchain_path, evidence_bundle_path, semantic_brief_path, transcript_path],
+    )
+    enhancement_errors: list[str] = []
+    production_path = root / "production-contract.json"
+    provider_path = root / "provider-decision.json"
+    cost_path = root / "cost-ledger.json"
+    sample_dynamics = root / "sample-qa" / "visual-dynamics-qa.json"
+    full_dynamics = root / "full-qa" / "visual-dynamics-qa.json"
+    full_brief_path = root / "full-semantic-brief.json"
+    playbook_path = root / "brand-motion" / "brand-motion-playbook.json"
+    core_paths = [production_path, provider_path, cost_path, sample_dynamics,
+                  full_dynamics, full_brief_path, playbook_path]
+    missing_core = [path for path in core_paths if not path.is_file()]
+    if missing_core:
+        enhancement_errors.append("OpenMontage-method enhancement evidence is missing")
+    else:
+        enhancement_errors.extend(validate_contract(
+            read_json(production_path), project=project, source_path=context.source_video,
+            transcript_path=transcript_path, edl_path=edl_path,
+            semantic_brief_path=semantic_brief_path, input_mode=context.input_mode,
+        ))
+        project_hash = sha256_file(context.project_file)
+        enhancement_errors.extend(validate_decision_report(
+            read_json(provider_path), project.get("provider_governance", {}), project_hash,
+        ))
+        cost_ledger = read_json(cost_path)
+        enhancement_errors.extend(validate_cost_ledger(cost_ledger, project_hash))
+        if any(row.get("status") not in {"success", "failed"}
+               for row in cost_ledger.get("reservations") or []):
+            enhancement_errors.append("provider cost ledger has unreconciled reservations")
+        for report_path, storyboard_path, brief_path in (
+            (sample_dynamics, sample_storyboard_path, semantic_brief_path),
+            (full_dynamics, full_project / "storyboard.json", full_brief_path),
+        ):
+            report = read_json(report_path)
+            enhancement_errors.extend(validate_visual_dynamics_report(
+                report, storyboard_path, brief_path,
+                config=project.get("qa", {}).get("visual_dynamics", {}),
+                production_contract_path=production_path,
+            ))
+            if report.get("status") != "pass":
+                enhancement_errors.append(f"visual dynamics did not pass: {report_path}")
+        enhancement_errors.extend(validate_playbook(read_json(playbook_path), project=project))
+    if project.get("editorial_regression", {}).get("enabled") is True:
+        regression_path = root / "full-qa" / "editorial-regression.json"
+        baseline_path = root / "editorial-regression" / "golden-baseline.json"
+        if not regression_path.is_file():
+            enhancement_errors.append("enabled editorial regression report is missing")
+        elif not baseline_path.is_file():
+            enhancement_errors.append("enabled golden editorial baseline is missing")
+        else:
+            baseline = read_json(baseline_path)
+            enhancement_errors.extend(validate_baseline(baseline))
+            enhancement_errors.extend(validate_regression(read_json(regression_path), baseline))
+    derived = project.get("derived_content", {})
+    derived_paths = {
+        "clip_factory": root / "derived-content" / "clip-factory-manifest.json",
+        "podcast": root / "derived-content" / "podcast-manifest.json",
+        "localization": root / "derived-content" / "localization-manifest.json",
+    }
+    derived_validators = {
+        "clip_factory": validate_clip_manifest,
+        "podcast": validate_podcast_manifest,
+        "localization": validate_localization_manifest,
+    }
+    for name, path in derived_paths.items():
+        if derived.get(name, {}).get("enabled") is not True:
+            continue
+        if not path.is_file():
+            enhancement_errors.append(f"enabled derived content report is missing: {name}")
+        else:
+            enhancement_errors.extend(derived_validators[name](read_json(path)))
+    required_new_stages = {
+        "provider_governance", "production_contract", "brand_motion_playbook", "derived_content",
+    }
+    if any((stages.get(name) or {}).get("status") != "complete" for name in required_new_stages):
+        enhancement_errors.append("new Director stages are not all complete")
+    stage_bindings = {
+        "provider_governance": [provider_path, cost_path],
+        "production_contract": [production_path],
+        "brand_motion_playbook": [playbook_path],
+        "sample_qa": [sample_dynamics],
+        "full_hyperframes_qa": [production_path, full_dynamics],
+        "derived_content": [root / "derived-content" / "decision.json"],
+    }
+    for stage, paths in stage_bindings.items():
+        if not _stage_binds_artifacts(stages, stage, paths):
+            enhancement_errors.append(f"{stage} does not hash-bind its enhancement evidence")
+    if full_qa_evidence.is_file() and not missing_core:
+        evidence = read_json(full_qa_evidence)
+        for field, path in {
+            "production_contract_sha256": production_path,
+            "visual_dynamics_sha256": full_dynamics,
+        }.items():
+            if evidence.get(field) != sha256_file(path):
+                enhancement_errors.append(f"full QA enhancement binding is stale: {field}")
+    delivery_contract_path = root / "delivery-contract.json"
+    if delivery_contract_path.is_file() and not missing_core:
+        delivery_contract = read_json(delivery_contract_path)
+        for field, path in {
+            "production_contract_sha256": production_path,
+            "provider_decision_sha256": provider_path,
+            "cost_ledger_sha256": cost_path,
+            "sample_visual_dynamics_sha256": sample_dynamics,
+            "full_visual_dynamics_sha256": full_dynamics,
+        }.items():
+            if delivery_contract.get(field) != sha256_file(path):
+                enhancement_errors.append(f"delivery enhancement binding is stale: {field}")
+    criteria["14_openmontage_method_enhancements"] = _row(
+        "pass" if not enhancement_errors else "pending",
+        "Production, provider/cost, visual dynamics, brand, optional derived-content, and handoff contracts validate."
+        if not enhancement_errors else
+        f"OpenMontage-method enhancement evidence has {len(enhancement_errors)} issue(s).",
+        [production_path, provider_path, cost_path, sample_dynamics, full_dynamics,
+         playbook_path, root / "derived-content" / "decision.json"],
     )
     overall = "pass" if all(row["status"] == "pass" for row in criteria.values()) else (
         "failed" if any(row["status"] == "failed" for row in criteria.values()) else "pending"

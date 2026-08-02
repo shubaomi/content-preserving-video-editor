@@ -21,6 +21,7 @@ class DirectorCommandTests(unittest.TestCase):
             "approve": ["approve", "--project", "project.yaml"],
             "authorize-render": ["authorize-render", "--project", "project.yaml"],
             "deliver": ["deliver", "--project", "project.yaml"],
+            "review": ["review", "--project", "project.yaml"],
             "import-metrics": ["import-metrics", "--project", "project.yaml",
                                "--input", "metrics.json"],
         }

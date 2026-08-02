@@ -69,7 +69,15 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "size_px": 4.0,
             "time_seconds": 0.05,
         })
-        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 7)
+        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 8)
+        self.assertTrue(migrated["workflow"]["production_contract"]["enabled"])
+        self.assertEqual(migrated["provider_governance"]["max_evidence_age_days"], 30)
+        self.assertTrue(migrated["qa"]["visual_dynamics"]["enabled"])
+        self.assertFalse(migrated["assets"]["local_semantic_corpus"]["enabled"])
+        self.assertFalse(migrated["derived_content"]["clip_factory"]["enabled"])
+        self.assertFalse(migrated["derived_content"]["podcast"]["enabled"])
+        self.assertFalse(migrated["derived_content"]["localization"]["enabled"])
+        self.assertFalse(migrated["delivery"]["openmontage_handoff"]["enabled"])
         self.assertEqual(migrated["cover"]["editorial"]["mode"], "auto")
         self.assertEqual(migrated["cover"]["editorial"]["headline_max_characters"], 26)
         self.assertEqual(migrated["workflow"]["capabilities"], {})
@@ -104,6 +112,41 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "delivery": {"manual_finish": {"enabled": True, "backend": "imaginary_nle"}},
         }
         with self.assertRaisesRegex(ValueError, "manual_finish.backend"):
+            migrate_project_config(project)
+
+    def test_v7_migrates_to_v8_without_mutating_the_source_mapping(self) -> None:
+        original = {
+            "schema_version": 7,
+            "version": 7,
+            "assets": {"media_catalog": {"enabled": True}},
+        }
+        before = copy.deepcopy(original)
+
+        migrated = migrate_project_config(original)
+
+        self.assertEqual(original, before)
+        self.assertEqual(migrated["schema_version"], 8)
+        self.assertTrue(migrated["assets"]["media_catalog"]["enabled"])
+        self.assertFalse(migrated["assets"]["local_semantic_corpus"]["enabled"])
+        self.assertEqual(migrated["delivery"]["openmontage_handoff"]["backend"], "openmontage")
+
+    def test_manual_finish_and_openmontage_handoff_cannot_both_be_enabled(self) -> None:
+        project = {"version": 8, "schema_version": 8, "delivery": {
+            "manual_finish": {"enabled": True, "backend": "opencut"},
+            "openmontage_handoff": {"enabled": True, "backend": "openmontage"},
+        }}
+
+        with self.assertRaisesRegex(ValueError, "cannot both be enabled"):
+            migrate_project_config(project)
+
+    def test_provider_evidence_age_must_be_a_positive_integer(self) -> None:
+        project = {
+            "version": 8,
+            "schema_version": 8,
+            "provider_governance": {"max_evidence_age_days": 0},
+        }
+
+        with self.assertRaisesRegex(ValueError, "max_evidence_age_days"):
             migrate_project_config(project)
 
 

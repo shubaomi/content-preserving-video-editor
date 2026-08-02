@@ -50,7 +50,7 @@ moving projects.
 
 Load legacy project YAML through the versioned in-memory migrator. Never rewrite
 an existing `project.yaml` merely to add defaults. New projects use project
-schema version 6; migrated legacy projects receive disabled optional adapters, disabled manual finishing, and
+schema version 8; migrated legacy projects receive disabled optional adapters, disabled manual finishing, and
 the current preview/render parity tolerances in memory.
 
 ## Use the single entry
@@ -61,6 +61,7 @@ Run the director from the Skill root:
 python scripts/director.py run --project <project.yaml> --until sample_qa
 python scripts/director.py resume --project <project.yaml>
 python scripts/director.py status --project <project.yaml>
+python scripts/director.py review --project <project.yaml>
 python scripts/director.py open-preview --project <project.yaml>
 python scripts/director.py open-studio --project <project.yaml>
 python scripts/director.py approve-sample --project <project.yaml> --approved-by <name>
@@ -278,7 +279,9 @@ full HyperFrames motion and final universal media.
 
 The full chain after approval is `full_hyperframes_storyboard` →
 `full_hyperframes_qa` → `final_render` → `final_compose` →
-`manual_finish_handoff` → `delivery_qa`. The manual stage is a no-op unless
+`derived_content` → `manual_finish_handoff` → `delivery_qa`. The derived-content
+stage is a no-op unless an evidence-bound clip, podcast, or localization module
+is enabled. The manual stage is a no-op unless
 `delivery.manual_finish.enabled=true` with backend `opencut` or `other_nle`, so
 the default one-shot workflow is unchanged. `full_hyperframes_qa` requires
 strict HyperFrames checks, reviewed snapshots, and representative Studio/render
@@ -292,6 +295,40 @@ and expires when any of them changes. The final stage requires the actual cover 
 identity review, final audio plan and provenance, final aesthetic snapshots, a
 full decode report, and two platform reports that validate the same universal
 file hash.
+
+Before creative planning, require the schema-v8 governance chain:
+`provider_governance` chooses only configured providers and writes a scored
+decision plus a hash-bound cost ledger; reserve only immediately before an
+actual adapter call, reconcile success and failure from configured actual-cost
+evidence, reject calls without a currently selected task provider, preserve the
+ledger across resume as a controlled mutable artifact whose stage receipt is
+atomically refreshed after every legal transition, and block delivery while any
+reservation remains unresolved. Treat any positive incremental monetary cost as
+paid and require current user-plan evidence. Every successful call must produce a
+hash-bound result receipt with a recomputed output-file inventory; an in-flight
+reservation requires explicit reconciliation and must never be called again on resume.
+`production_contract`
+binds the approved preservation, visual-density, audio, cover, provider, and
+derived-output promises; and `brand_motion_playbook` compiles profile and design
+tokens into deterministic JSON, CSS, and `DESIGN.md`. Missing paid authorization,
+quota, rights, or a real provider must become `unavailable` or
+`action_required`, never synthetic success.
+
+Run `visual-dynamics-qa.json` at sample and full-project gates. It measures
+evidence-backed event cadence, meaningful layout-family variety, quiet intervals,
+IP integration, connectors, audio decisions, caption/face/UI protection, and
+canvas bounds without rewarding random density. When Golden Editorial Regression
+is enabled, sample approval creates the baseline and full QA blocks structural
+drift unless an approved correction-ledger entry explains it.
+
+The approved Golden baseline is part of `preview-approval.json` by absolute path
+and SHA-256 and is itself a hashed preview-approval stage artifact. Validate its
+source inputs and integrity before comparing anchors. Snapshot mutable approved
+cover evidence before baseline creation, and route corrections to the artifact
+that actually owns each decision (Storyboard, semantic brief, audio, or cover).
+Compare anchors, families, removed events, quiet/IP decisions, connectors, SFX,
+BGM, cover route, and rejected-event structure. Apply an exception only when the correction ledger
+still passes its target, before-value, approver, and related-file hash guards.
 
 ## Audio, cover, and delivery
 

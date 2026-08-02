@@ -16,10 +16,15 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from completion_audit import build  # noqa: E402
 from capability_registry import build_capability_inventory, build_toolchain_report  # noqa: E402
+from brand_motion_playbook import compile_playbook  # noqa: E402
 from aesthetic_qa import REQUIRED_CRITERIA  # noqa: E402
 from director_contracts import STAGES, VISUAL_VOCABULARY, sha256_file  # noqa: E402
+from production_contract import build_contract  # noqa: E402
+from project_config import migrate_project_config  # noqa: E402
+from provider_governance import build_decision_report, create_cost_ledger  # noqa: E402
 from test_acceptance_report import REQUIRED_TEST_IDS, write_report_from_output  # noqa: E402
 from technical_qa import run_technical_qa  # noqa: E402
+from visual_dynamics_qa import build_report as build_visual_dynamics_report  # noqa: E402
 from validate_platform_export import (  # noqa: E402
     bind_cover, bind_universal_output, cover_preview, decode, loudness, snapshot, validate,
 )
@@ -60,11 +65,16 @@ class CompletionAuditTests(unittest.TestCase):
             full = root / "hyperframes-director-full"
             sample.mkdir()
             full.mkdir()
-            events = [{"id": f"e{i}", "treatment": "structure", "visual_structure": {
+            events = [{"id": f"e{i}", "treatment": "structure",
+                "anchor": f"concept-{i}", "viewer_takeaway": f"takeaway-{i}",
+                "visual_mechanism": f"mechanism-{i}",
+                "relevance_rationale": "fixture explanatory value",
+                "motion": {"entrance": "fade", "reveal": "step", "hold": "steady", "exit": "fade"},
+                "visual_structure": {
                 "dom_structure": f"dom{i}", "information_hierarchy": f"h{i}",
                 "layout_archetype": f"l{i}", "animation_choreography": f"a{i}",
                 "use_case": f"u{i}"}} for i in range(4)]
-            storyboard = {"events": events}
+            storyboard = {"composition": {"duration": 0}, "events": events}
             (sample / "storyboard.json").write_text(json.dumps(storyboard), encoding="utf-8")
             (full / "storyboard.json").write_text(json.dumps(storyboard), encoding="utf-8")
             categories = {}
@@ -302,13 +312,77 @@ class CompletionAuditTests(unittest.TestCase):
                         "use_case": "proof"},
                 }],
             }), encoding="utf-8")
-            inventory = build_capability_inventory(yaml.safe_load(project.read_text(encoding="utf-8")))
+            project_data = migrate_project_config(
+                yaml.safe_load(project.read_text(encoding="utf-8"))
+            )
+            inventory = build_capability_inventory(project_data)
             (director_root / "capability-inventory.json").write_text(
                 json.dumps(inventory), encoding="utf-8")
             (director_root / "toolchain-compatibility.json").write_text(
                 json.dumps(build_toolchain_report(probe_versions=False)), encoding="utf-8")
             edl = {"ranges": [{"start": 0, "end": 10}]}
             (video_use / "edl.json").write_text(json.dumps(edl), encoding="utf-8")
+            production_path = director_root / "production-contract.json"
+            production = build_contract(
+                project=project_data, source_path=source, transcript_path=transcript,
+                edl_path=video_use / "edl.json", semantic_brief_path=semantic,
+                input_mode="preserve",
+            )
+            production_path.write_text(json.dumps(production), encoding="utf-8")
+            project_hash = sha256_file(project)
+            provider_path = director_root / "provider-decision.json"
+            provider_path.write_text(json.dumps(build_decision_report(
+                config=project_data["provider_governance"], project_hash=project_hash,
+            )), encoding="utf-8")
+            cost_path = director_root / "cost-ledger.json"
+            cost_path.write_text(json.dumps(create_cost_ledger(
+                config=project_data["provider_governance"], project_hash=project_hash,
+            )), encoding="utf-8")
+            full_semantic = director_root / "full-semantic-brief.json"
+            full_semantic.write_bytes(semantic.read_bytes())
+            sample_dynamics = director_root / "sample-qa" / "visual-dynamics-qa.json"
+            sample_dynamics.write_text(json.dumps(build_visual_dynamics_report(
+                storyboard_path=sample / "storyboard.json", semantic_brief_path=semantic,
+                config=project_data["qa"]["visual_dynamics"],
+                production_contract_path=production_path,
+            )), encoding="utf-8")
+            full_dynamics = full_qa / "visual-dynamics-qa.json"
+            full_dynamics.write_text(json.dumps(build_visual_dynamics_report(
+                storyboard_path=full / "storyboard.json", semantic_brief_path=full_semantic,
+                config=project_data["qa"]["visual_dynamics"],
+                production_contract_path=production_path,
+            )), encoding="utf-8")
+            design_tokens = root / "edit" / "design-tokens.json"
+            design_tokens.write_text(json.dumps({
+                "sampling": {"dimensions": {"width": 1280, "height": 720}},
+                "surface": {"color": "#ffffff", "text_color": "#111111"},
+                "accent": {"color": "#22aa88"}, "shape": {}, "shadow": {},
+                "typography": {}, "safe_zones": {},
+            }), encoding="utf-8")
+            playbook_outputs = compile_playbook(
+                project=project_data, design_tokens_path=design_tokens,
+                semantic_brief_path=semantic, profile_path=None,
+                output_dir=director_root / "brand-motion",
+            )
+            derived_decision = director_root / "derived-content" / "decision.json"
+            derived_decision.parent.mkdir(parents=True)
+            derived_decision.write_text(json.dumps({"schema_version": 1, "status": "disabled"}),
+                                        encoding="utf-8")
+            verified = json.loads(evidence_path.read_text(encoding="utf-8"))
+            verified.update({
+                "production_contract_sha256": sha256_file(production_path),
+                "visual_dynamics_sha256": sha256_file(full_dynamics),
+                "visual_dynamics_passed": True,
+            })
+            evidence_path.write_text(json.dumps(verified), encoding="utf-8")
+            authorization = json.loads(authorization_path.read_text(encoding="utf-8"))
+            authorization["full_qa_evidence_sha256"] = sha256_file(evidence_path)
+            authorization_path.write_text(json.dumps(authorization), encoding="utf-8")
+            receipt_path = director_root / "final-render-receipt.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["full_qa_evidence_sha256"] = sha256_file(evidence_path)
+            receipt["authorization_sha256"] = sha256_file(authorization_path)
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             for name, payload in {
                 "captions.json": {}, "media-analysis.json": {},
                 "edit-correctness-preflight.json": {}, "caption-sync-report.json": {"passed": True},
@@ -390,6 +464,11 @@ class CompletionAuditTests(unittest.TestCase):
             (director_root / "delivery-contract.json").write_text(json.dumps({
                 "universal_video": str(output), "file_sha256": output_hash,
                 "cover_sha256": sha256_file(cover), "duplicate_platform_mp4s": False,
+                "production_contract_sha256": sha256_file(production_path),
+                "provider_decision_sha256": sha256_file(provider_path),
+                "cost_ledger_sha256": sha256_file(cost_path),
+                "sample_visual_dynamics_sha256": sha256_file(sample_dynamics),
+                "full_visual_dynamics_sha256": sha256_file(full_dynamics),
             }), encoding="utf-8")
             state_proof = director_root / "state-proof.json"
             state_proof.write_text("bound", encoding="utf-8")
@@ -406,13 +485,18 @@ class CompletionAuditTests(unittest.TestCase):
             stages = {name: stage_row([state_proof]) for name in STAGES}
             stages["sample_qa"] = stage_row([
                 sample / "storyboard.json", sample_review_path, sample / "audio-plan.json",
-                sample_gate_path, studio,
+                sample_gate_path, sample_dynamics, studio,
             ])
             stages["preview_approval"] = stage_row([director_root / "preview-approval.json"])
             stages["full_hyperframes_qa"] = stage_row([
                 check_path, check_receipt_path, review_path, parity_path, evidence_path,
+                production_path, full_dynamics,
                 *[Path(path) for path in snapshots], studio, rendered_snapshot,
             ])
+            stages["provider_governance"] = stage_row([provider_path, cost_path])
+            stages["production_contract"] = stage_row([production_path])
+            stages["brand_motion_playbook"] = stage_row(list(playbook_outputs))
+            stages["derived_content"] = stage_row([derived_decision])
             stages["final_render"] = stage_row([
                 render, authorization_path, director_root / "final-render-receipt.json",
                 render_stdout, render_stderr,
@@ -432,7 +516,7 @@ class CompletionAuditTests(unittest.TestCase):
                         "size": file_stat.st_size, "mtime_ns": file_stat.st_mtime_ns,
                         "sha256": sha256_file(path)}
             (director_root / "director-state.json").write_text(json.dumps({
-                "single_universal_output": True, "stages": stages,
+                "schema_version": 6, "single_universal_output": True, "stages": stages,
                 "input_fingerprints": {"project_file": input_record(project),
                                        "source_video": input_record(source)},
             }), encoding="utf-8")

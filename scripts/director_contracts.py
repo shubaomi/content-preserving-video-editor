@@ -33,9 +33,12 @@ REQUIRED_VISUAL_FIELDS = (
 
 STAGES = (
     "inspect",
+    "provider_governance",
     "video_use_timeline",
     "evidence_acquisition",
     "semantic_brief",
+    "production_contract",
+    "brand_motion_playbook",
     "hyperframes_storyboard",
     "audio",
     "cover",
@@ -45,6 +48,7 @@ STAGES = (
     "full_hyperframes_qa",
     "final_render",
     "final_compose",
+    "derived_content",
     "manual_finish_handoff",
     "delivery_qa",
 )

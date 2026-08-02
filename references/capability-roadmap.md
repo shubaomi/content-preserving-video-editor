@@ -42,6 +42,33 @@ The six-fixture result is `fixture_validated` evidence for routing and shared
 contract gates only. Human aesthetics, generated-person likeness, and live
 Douyin/WeChat Channels behavior remain manual or real-project gates.
 
+## 2026-08-01 OpenMontage-method enhancement (P0/P1/P2)
+
+Current status: `implemented`; validation remains limited to deterministic tests,
+the retained six fixtures, and six real short-media technical fixtures. No
+OpenMontage source code, runtime dependency, or automated editor integration is
+included.
+
+P0 delivers a schema-v8 Production Contract, preservation-aware Visual Dynamics
+QA, deterministic provider selection with adapter-bound cost reservation/
+reconciliation, controlled mutable-ledger stage receipts, and an optional
+rights-aware local semantic corpus with a real
+no-download precomputed-embedding route. P1 delivers
+a compiled Brand & Motion Playbook, Golden Editorial Regression with approved
+correction-ledger exceptions, and a hash-bound read-only review dashboard. P2
+delivers default-off evidence-bound Clip Factory, Podcast, and Localization
+modules plus a neutral human OpenMontage handoff that reuses the existing manual
+finish and returned-media revalidation contracts.
+
+True limitations remain explicit: unavailable CLIP/local models are not
+downloaded; paid/local providers are not assumed from their names; podcast
+production requires a real clean PCM WAV; localization production adopts only
+an authorized provider result bound to the current transcript and glossary after
+reservation; TTS/lip-sync/voice
+cloning are not claimed;
+OpenMontage is not invoked; and human aesthetics, likeness, editorial taste, and
+live platform performance remain release gates.
+
 ## Phase 0 — Current foundation
 
 Status: `implemented`, with real TabOut validation.
