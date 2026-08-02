@@ -69,7 +69,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "size_px": 4.0,
             "time_seconds": 0.05,
         })
-        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 8)
+        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 9)
         self.assertTrue(migrated["workflow"]["production_contract"]["enabled"])
         self.assertEqual(migrated["provider_governance"]["max_evidence_age_days"], 30)
         self.assertTrue(migrated["qa"]["visual_dynamics"]["enabled"])
@@ -86,6 +86,14 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         self.assertFalse(migrated["extensions"]["b_roll"]["enabled"])
         self.assertFalse(migrated["renderer"]["remotion"]["enabled"])
         self.assertFalse(migrated["feedback"]["metrics_import"]["enabled"])
+        self.assertFalse(migrated["analysis"]["semantic_confidence"]["enabled"])
+        self.assertFalse(migrated["render"]["cache"]["event_level"]["enabled"])
+        self.assertFalse(migrated["review"]["interactive"]["enabled"])
+        self.assertFalse(migrated["cover"]["reference_pack"]["enabled"])
+        self.assertFalse(migrated["preferences"]["learning"]["enabled"])
+        self.assertFalse(migrated["feedback"]["learning_loop"]["enabled"])
+        self.assertFalse(migrated["delivery"]["audit_bundle"]["enabled"])
+        self.assertFalse(migrated["delivery"]["release_pack"]["enabled"])
 
     def test_legacy_project_context_runs_with_migrated_defaults_without_yaml_mutation(self) -> None:
         fixture = ROOT / "tests" / "fixtures" / "project-v1.yaml"
@@ -114,7 +122,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "manual_finish.backend"):
             migrate_project_config(project)
 
-    def test_v7_migrates_to_v8_without_mutating_the_source_mapping(self) -> None:
+    def test_v7_migrates_to_v9_without_mutating_the_source_mapping(self) -> None:
         original = {
             "schema_version": 7,
             "version": 7,
@@ -125,10 +133,19 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         migrated = migrate_project_config(original)
 
         self.assertEqual(original, before)
-        self.assertEqual(migrated["schema_version"], 8)
+        self.assertEqual(migrated["schema_version"], 9)
         self.assertTrue(migrated["assets"]["media_catalog"]["enabled"])
         self.assertFalse(migrated["assets"]["local_semantic_corpus"]["enabled"])
         self.assertEqual(migrated["delivery"]["openmontage_handoff"]["backend"], "openmontage")
+
+    def test_v8_migrates_to_v9_without_rewriting_user_configuration(self) -> None:
+        original = {"schema_version": 8, "version": 8, "render": {"cache": {"enabled": True}}}
+        before = copy.deepcopy(original)
+        migrated = migrate_project_config(original)
+        self.assertEqual(original, before)
+        self.assertEqual(migrated["schema_version"], 9)
+        self.assertTrue(migrated["render"]["cache"]["enabled"])
+        self.assertFalse(migrated["render"]["cache"]["event_level"]["enabled"])
 
     def test_manual_finish_and_openmontage_handoff_cannot_both_be_enabled(self) -> None:
         project = {"version": 8, "schema_version": 8, "delivery": {
@@ -137,6 +154,20 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         }}
 
         with self.assertRaisesRegex(ValueError, "cannot both be enabled"):
+            migrate_project_config(project)
+
+    def test_enabled_release_pack_cannot_disable_required_human_gates(self) -> None:
+        project = {
+            "schema_version": 9,
+            "version": 9,
+            "delivery": {
+                "release_pack": {
+                    "enabled": True,
+                    "require_privacy_audit": False,
+                },
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "release pack requires privacy"):
             migrate_project_config(project)
 
     def test_provider_evidence_age_must_be_a_positive_integer(self) -> None:

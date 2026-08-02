@@ -283,3 +283,31 @@ Complete a video only when applicable gates pass.
   check fields alone are insufficient.
 - Fixture success does not replace full-size aesthetic review, user likeness
   approval, real-source review, or real-platform verification.
+
+## P0/P1/P2 blocking gates
+
+- Reproduce the current golden report from fixture, policy, six-media evidence,
+  Director/schema version, and implementation hashes. Tamper, missing, expiry,
+  semantic mismatch, layout drift, or caption drift must fail.
+- Event cache reuse requires current input/output hashes and explicit
+  frame/audio/visual equivalence. Otherwise use the complete HyperFrames render.
+- Semantic candidates cover every non-quiet event and retain grounding,
+  counterexamples, duplication, reasons, and rejection reasons. Low-information
+  words alone never become anchors.
+- Interactive proposals stay pending until separate approval. Stale hashes,
+  path traversal, non-loopback hosts, bad origin/auth/CSRF, arbitrary targets,
+  and direct output edits fail.
+- Cover packs require authorization, role/expression coverage, distinct images,
+  structurally different A/B candidates, anatomy checks, and separate user
+  likeness approval.
+- Preference candidates remain pending and ineligible below configured samples;
+  stale/sensitive/conflicting or unapproved cross-scope evidence fails.
+- Audit bundles verify after relocation and contain no secrets or machine paths.
+  Audit outputs stay inside the project and replace a previously verified bundle
+  only through a rollback-safe directory exchange. Release packs require rights
+  rows for the exact video, cover, and publishing-copy hashes; they revalidate
+  copied bytes, privacy, rights, publication authorization, every manifest entry,
+  and reused-pack integrity, and record `upload_performed: false`.
+- Feedback is user-supplied, source-hash deduplicated, release/video/cover/copy/
+  motion/version bound, and advisory only. One video's repeated observations
+  cannot create a durable preference.

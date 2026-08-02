@@ -4,8 +4,8 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 8. New projects write both
-`schema_version: 8` and `version: 8`. Legacy projects that only contain
+The current project schema is version 9. New projects write both
+`schema_version: 9` and `version: 9`. Legacy projects that only contain
 `version: 1` or `version: 2` are deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
@@ -134,7 +134,7 @@ The Director replaces the placeholder with an absolute, hash-bound JSON request
 manifest. The compatibility alias `assets.use_media_catalog: true` still enables
 this route for legacy configuration, without rewriting the project file.
 
-## Schema-v8 production governance
+## Schema-v8 production governance (retained in schema v9)
 
 Schema v8 adds these non-destructive defaults. Migration deep-copies the source
 mapping and never rewrites the user's YAML:
@@ -314,7 +314,7 @@ delivery:
 
 This produces an editor-neutral package and `action_required`; it does not call
 OpenMontage, depend on it, or claim an API, MCP, CLI, or headless renderer.
-Do not enable `manual_finish` and `openmontage_handoff` together; schema v8
+Do not enable `manual_finish` and `openmontage_handoff` together; schema v9
 rejects that ambiguous double handoff.
 
 Configure the blocking Studio/render parity tolerance as follows:
@@ -332,3 +332,64 @@ These values are migration defaults and project-level maximums. A parity report
 may use stricter values but cannot relax them.
 
 Rendering permission does not authorize uploading or publishing. External publication remains a separate hard gate.
+
+## Schema v9 optional capabilities
+
+These blocks default off and are added only in memory for legacy projects:
+
+```yaml
+analysis:
+  semantic_confidence:
+    enabled: false
+    low_confidence_threshold: 0.7
+    second_provider: {enabled: false}
+render:
+  cache:
+    enabled: false
+    event_level: {enabled: false, fallback_to_full_render: true}
+review:
+  interactive:
+    enabled: false
+    host: 127.0.0.1
+    port: 8765
+    max_body_bytes: 65536
+cover:
+  reference_pack:
+    enabled: false
+    manifest: null
+    required_roles: [front, smiling, explaining]
+preferences:
+  learning:
+    enabled: false
+    minimum_samples: 2
+    default_scope: video
+feedback:
+  learning_loop:
+    enabled: false
+    minimum_snapshots: 2
+    minimum_views: 200
+    minimum_elapsed_hours: 24.0
+delivery:
+  audit_bundle:
+    enabled: false
+    output_dir: work/director/portable-audit-bundle
+  release_pack:
+    enabled: false
+    privacy_manifest: null
+    rights_manifest: null
+    publication_authorization: null
+    output_dir: exports/release-pack
+    require_privacy_audit: true
+    require_rights_authorization: true
+    require_publication_authorization: true
+```
+
+Only loopback review hosts are valid. Booleans must be real booleans; ports,
+body limits, sample counts, and view counts are positive integers. Thresholds
+must be finite and bounded. Unknown future schemas are rejected, and migration
+never rewrites `project.yaml`.
+Audit- and release-pack output directories must resolve to dedicated descendants
+of `paths.root`; the project root itself and external absolute directories are
+rejected. When `delivery.release_pack.enabled` is true, privacy review, exact
+video/cover/copy rights coverage, and separate publication authorization remain
+mandatory and cannot be disabled by the three `require_*` flags.

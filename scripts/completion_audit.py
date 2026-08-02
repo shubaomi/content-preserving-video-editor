@@ -40,6 +40,8 @@ from test_acceptance_report import validate_report as validate_test_suite_report
 from technical_qa import validate_report as validate_technical_report
 from validate_platform_export import validate_bound_report as validate_platform_report
 from visual_dynamics_qa import validate_report as validate_visual_dynamics_report
+from current_golden_regression import validate_report as validate_current_golden_report
+from representative_short_media import validate as validate_representative_short_media
 
 
 REQUIRED_FIXTURE_TYPES = {
@@ -377,7 +379,7 @@ def build(
         full_project = (context.root / full_project).resolve()
     tests = read_json(test_report) if test_report and test_report.is_file() else {}
     test_report_errors = (
-        validate_test_suite_report(tests, Path(__file__).parents[1])
+        validate_test_suite_report(tests, Path(__file__).parents[1], test_report)
         if test_report and test_report.is_file() else ["test-suite receipt is missing"]
     )
     fixture_report = fixture_report or (
@@ -732,6 +734,34 @@ def build(
         else "The structured or retained real-media six-fixture evidence is missing or failed.",
         [fixture_report, fixture_source_path, fixture_implementation_path, six_media_manifest],
     )
+    golden_report = (
+        Path(__file__).parents[1] / "references" / "validation" /
+        "current-golden-regression.json"
+    )
+    golden_policy = Path(__file__).parents[1] / "tests" / "fixtures" / "current-golden-policy.json"
+    golden_errors = validate_current_golden_report(
+        golden_report, fixture_source_path, golden_policy,
+        media_manifest=six_media_manifest,
+    )
+    criteria["15_current_golden_regression"] = _row(
+        "pass" if not golden_errors else "failed",
+        "Current Director/schema/implementation golden evidence is reproducible."
+        if not golden_errors else
+        f"Current golden regression has {len(golden_errors)} issue(s).",
+        [golden_report, golden_policy, six_media_manifest],
+    )
+    representative_manifest = (
+        Path(__file__).parents[1] / "references" / "validation" /
+        "representative-short-media" / "manifest.json"
+    )
+    representative_errors = validate_representative_short_media(representative_manifest)
+    criteria["16_landscape_portrait_30s_media"] = _row(
+        "pass" if not representative_errors else "failed",
+        "Current 30-second landscape and portrait media decode, probe, audio, and frames pass."
+        if not representative_errors else
+        f"Representative short media has {len(representative_errors)} issue(s).",
+        [representative_manifest],
+    )
     inventory_path = root / "capability-inventory.json"
     inventory = read_json(inventory_path) if inventory_path.is_file() else {}
     capability_rows = {
@@ -752,6 +782,10 @@ def build(
         "brand_motion_playbook", "visual_dynamics_qa", "editorial_regression",
         "review_dashboard", "clip_factory", "podcast_pipeline",
         "localization_pipeline", "openmontage_handoff",
+        "project_initializer", "doctor_preflight", "semantic_confidence",
+        "interactive_review", "event_render_cache", "cover_reference_pack",
+        "preference_learning", "feedback_learning_loop", "portable_audit_bundle",
+        "release_delivery_pack",
     }
     maturity_floor = CAPABILITY_LEVELS.index("director_integrated")
     capability_contract_pass = (

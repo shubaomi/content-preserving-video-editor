@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,9 @@ RATIO_FIELDS = {"completion_rate", "two_second_hold_rate", "five_second_hold_rat
 SECONDS_FIELDS = {"average_watch_seconds"}
 
 
-def import_metrics(source: Path, output: Path) -> dict[str, Any]:
+def import_metrics(
+    source: Path, output: Path, *, binding: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     source = source.resolve()
     payload = read_json(source)
     if not isinstance(payload, dict):
@@ -36,6 +39,8 @@ def import_metrics(source: Path, output: Path) -> dict[str, Any]:
     for name, value in metrics.items():
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"metric {name} must be numeric")
+        if not math.isfinite(float(value)):
+            raise ValueError(f"metric {name} must be finite")
         if name in COUNT_FIELDS:
             if value < 0 or int(value) != value:
                 raise ValueError(f"metric {name} must be a non-negative integer")
@@ -48,12 +53,29 @@ def import_metrics(source: Path, output: Path) -> dict[str, Any]:
             if float(value) < 0:
                 raise ValueError(f"metric {name} must be non-negative")
             normalized[name] = float(value)
+    normalized_binding: dict[str, Any] | None = None
+    if binding is not None:
+        required = {
+            "publication_id", "release_manifest_sha256", "video_sha256",
+            "cover_sha256", "publishing_copy_sha256", "motion_structure_sha256",
+            "version_id",
+        }
+        missing = sorted(required - set(binding))
+        if missing:
+            raise ValueError("metrics binding is incomplete: " + ", ".join(missing))
+        for field in required - {"publication_id", "version_id"}:
+            value = str(binding.get(field) or "")
+            if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+                raise ValueError(f"metrics binding {field} must be a lowercase SHA-256")
+        normalized_binding = {name: binding[name] for name in sorted(required)}
     report = {
         "schema_version": 1, "platform": platform,
         "published_at": payload["published_at"], "metrics": normalized,
         "source": str(source), "source_sha256": sha256_file(source),
         "acquisition": "user_supplied_export", "platform_api_claimed": False,
         "imported_at": datetime.now(timezone.utc).isoformat(),
+        "observed_at": payload.get("observed_at") or datetime.now(timezone.utc).isoformat(),
+        "binding": normalized_binding,
         "interpretation_policy": "observed metrics only; no causal performance claim",
     }
     write_json(output, report)

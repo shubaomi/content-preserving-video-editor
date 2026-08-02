@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install local test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Compile Python sources
+        run: python -m compileall -q scripts tests
+      - name: Run schema, cache, security, and acceptance targets
+        env:
+          PYTHONUTF8: "1"
+        run: >-
+          python -m unittest
+          tests.test_project_config_migration
+          tests.test_state_migrations
+          tests.test_event_cache
+          tests.test_event_render_pipeline
+          tests.test_review_server
+          tests.test_action_required_contract
+          tests.test_fixture_acceptance
+          tests.test_technical_qa
+          tests.test_completion_audit
+      - name: Generate current structured fixture evidence
+        env:
+          PYTHONUTF8: "1"
+        run: >-
+          python scripts/fixture_acceptance.py
+          --fixtures tests/fixtures/acceptance-scenarios.json
+          --out ci-artifacts/six-fixture-acceptance.json
+      - name: Verify committed current Golden evidence
+        env:
+          PYTHONUTF8: "1"
+        run: >-
+          python scripts/current_golden_regression.py
+          --fixtures tests/fixtures/acceptance-scenarios.json
+          --policy tests/fixtures/current-golden-policy.json
+          --validate-report references/validation/current-golden-regression.json
+      - name: Record truthful Doctor capability differences
+        env:
+          PYTHONUTF8: "1"
+        run: >-
+          python -c "import json,sys;from pathlib import Path;sys.path.insert(0,'scripts');from doctor import run_doctor;Path('ci-artifacts').mkdir(exist_ok=True);Path('ci-artifacts/doctor.json').write_text(json.dumps(run_doctor(),indent=2),encoding='utf-8')"
+      - name: Run offline test suite
+        env:
+          PYTHONUTF8: "1"
+        run: python -m unittest discover -s tests -p "test_*.py"
+      - name: Verify committed full-suite receipt
+        env:
+          PYTHONUTF8: "1"
+        run: >-
+          python -c "import json,sys;from pathlib import Path;sys.path.insert(0,'scripts');from test_acceptance_report import validate_report;p=Path('references/validation/test-suite-report.json').resolve();errors=validate_report(json.loads(p.read_text(encoding='utf-8')),Path('.').resolve(),p);print(errors);sys.exit(bool(errors))"
+      - name: Upload local-only validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: ci-artifacts
+          if-no-files-found: error

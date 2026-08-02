@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "status": "pass",
+  "evidence_boundary": "synthetic technical media; not human aesthetic or provider validation",
+  "scenarios": [
+    {
+      "orientation": "landscape",
+      "rights_basis": "generated deterministic synthetic fixture",
+      "media": "landscape-representative.mp4",
+      "sha256": "b3f1e9dffc59bcbb9bc13e8d4d3a6eead0e5dc84c5ac145abb433ace77343563",
+      "duration_seconds": 30.0,
+      "width": 320,
+      "height": 180,
+      "video_codec": "h264",
+      "audio_codec": "aac",
+      "audio_sample_rate": 48000,
+      "full_decode": "pass",
+      "representative_frames": [
+        {
+          "phase": "entrance",
+          "timestamp": 3.0,
+          "path": "landscape-entrance.png",
+          "sha256": "fb8dc420e028d8f3ea92a90e954b19607a7df408ef2de1c46c9d6e174ca0854d"
+        },
+        {
+          "phase": "midpoint",
+          "timestamp": 15.0,
+          "path": "landscape-midpoint.png",
+          "sha256": "6a1186864c3bbe019ec241623ae113c7d12246459646c2c92ca4f3be30eea941"
+        },
+        {
+          "phase": "exit",
+          "timestamp": 27.0,
+          "path": "landscape-exit.png",
+          "sha256": "6a1186864c3bbe019ec241623ae113c7d12246459646c2c92ca4f3be30eea941"
+        }
+      ]
+    },
+    {
+      "orientation": "portrait",
+      "rights_basis": "generated deterministic synthetic fixture",
+      "media": "portrait-representative.mp4",
+      "sha256": "bcb674b1447d2ed649af74e5a9a83b1276b30c8ea1d9113d4720023e0edd6c42",
+      "duration_seconds": 30.0,
+      "width": 180,
+      "height": 320,
+      "video_codec": "h264",
+      "audio_codec": "aac",
+      "audio_sample_rate": 48000,
+      "full_decode": "pass",
+      "representative_frames": [
+        {
+          "phase": "entrance",
+          "timestamp": 3.0,
+          "path": "portrait-entrance.png",
+          "sha256": "86552fef293cc0ef37c9ebd70287cb669853ff717238f0b9304feb380c1b93cd"
+        },
+        {
+          "phase": "midpoint",
+          "timestamp": 15.0,
+          "path": "portrait-midpoint.png",
+          "sha256": "59f894856aa4c0e0dd1bdb5b5e5c99dd3abb92a21eb51b7d688f45a0a74c27f2"
+        },
+        {
+          "phase": "exit",
+          "timestamp": 27.0,
+          "path": "portrait-exit.png",
+          "sha256": "59f894856aa4c0e0dd1bdb5b5e5c99dd3abb92a21eb51b7d688f45a0a74c27f2"
+        }
+      ]
+    }
+  ],
+  "implementation_sha256": {
+    "scripts/representative_short_media.py": "b88769ed4aa32cb435b112b0b1771a4cab45fd9c28c6461532ab2517ab911309"
+  }
+}

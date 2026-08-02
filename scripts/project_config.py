@@ -7,7 +7,7 @@ import math
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 8
+CURRENT_PROJECT_SCHEMA_VERSION = 9
 MANUAL_FINISH_BACKENDS = {"opencut", "other_nle", "none"}
 MANUAL_FINISH_DEFAULTS: dict[str, Any] = {
     "enabled": False,
@@ -55,6 +55,51 @@ OPENMONTAGE_HANDOFF_DEFAULTS: dict[str, Any] = {
     "returned_final": None,
     "modifications": [],
     "assets": {},
+}
+SEMANTIC_CONFIDENCE_DEFAULTS = {
+    "enabled": False,
+    "low_confidence_threshold": 0.7,
+    "second_provider": {"enabled": False},
+}
+INTERACTIVE_REVIEW_DEFAULTS = {
+    "enabled": False,
+    "host": "127.0.0.1",
+    "port": 8765,
+    "max_body_bytes": 65536,
+}
+EVENT_CACHE_DEFAULTS = {
+    "enabled": False,
+    "fallback_to_full_render": True,
+}
+REFERENCE_PACK_DEFAULTS = {
+    "enabled": False,
+    "manifest": None,
+    "required_roles": ["front", "smiling", "explaining"],
+}
+PREFERENCE_LEARNING_DEFAULTS = {
+    "enabled": False,
+    "minimum_samples": 2,
+    "default_scope": "video",
+}
+FEEDBACK_LOOP_DEFAULTS = {
+    "enabled": False,
+    "minimum_snapshots": 2,
+    "minimum_views": 200,
+    "minimum_elapsed_hours": 24.0,
+}
+AUDIT_BUNDLE_DEFAULTS = {
+    "enabled": False,
+    "output_dir": "work/director/portable-audit-bundle",
+}
+RELEASE_PACK_DEFAULTS = {
+    "enabled": False,
+    "require_privacy_audit": True,
+    "require_rights_authorization": True,
+    "require_publication_authorization": True,
+    "privacy_manifest": None,
+    "rights_manifest": None,
+    "publication_authorization": None,
+    "output_dir": "exports/release-pack",
 }
 
 
@@ -205,6 +250,23 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         subject_tracking.setdefault("enabled", False), bool
     ):
         raise ValueError("analysis.subject_tracking.enabled must be a boolean")
+    semantic_confidence = analysis.setdefault("semantic_confidence", {})
+    if not isinstance(semantic_confidence, dict):
+        raise ValueError("analysis.semantic_confidence must be a mapping")
+    for key, value in SEMANTIC_CONFIDENCE_DEFAULTS.items():
+        semantic_confidence.setdefault(key, deepcopy(value))
+    if not isinstance(semantic_confidence.get("enabled"), bool):
+        raise ValueError("analysis.semantic_confidence.enabled must be a boolean")
+    threshold = semantic_confidence.get("low_confidence_threshold")
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) \
+            or not math.isfinite(float(threshold)) or not 0 < float(threshold) <= 1:
+        raise ValueError("analysis.semantic_confidence.low_confidence_threshold must be in (0, 1]")
+    semantic_confidence["low_confidence_threshold"] = float(threshold)
+    second_provider = semantic_confidence.get("second_provider")
+    if not isinstance(second_provider, dict) or not isinstance(
+        second_provider.setdefault("enabled", False), bool
+    ):
+        raise ValueError("analysis.semantic_confidence.second_provider.enabled must be a boolean")
     transcription = migrated.setdefault("transcription", {})
     if not isinstance(transcription, dict):
         raise ValueError("transcription must be a mapping")
@@ -223,6 +285,14 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     cache = render.setdefault("cache", {"enabled": False})
     if not isinstance(cache, dict) or not isinstance(cache.setdefault("enabled", False), bool):
         raise ValueError("render.cache.enabled must be a boolean")
+    event_cache = cache.setdefault("event_level", {})
+    if not isinstance(event_cache, dict):
+        raise ValueError("render.cache.event_level must be a mapping")
+    for key, value in EVENT_CACHE_DEFAULTS.items():
+        event_cache.setdefault(key, value)
+    for key in ("enabled", "fallback_to_full_render"):
+        if not isinstance(event_cache.get(key), bool):
+            raise ValueError(f"render.cache.event_level.{key} must be a boolean")
     extensions = migrated.setdefault("extensions", {})
     if not isinstance(extensions, dict):
         raise ValueError("extensions must be a mapping")
@@ -242,6 +312,22 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     metrics = feedback.setdefault("metrics_import", {"enabled": False})
     if not isinstance(metrics, dict) or not isinstance(metrics.setdefault("enabled", False), bool):
         raise ValueError("feedback.metrics_import.enabled must be a boolean")
+    feedback_loop = feedback.setdefault("learning_loop", {})
+    if not isinstance(feedback_loop, dict):
+        raise ValueError("feedback.learning_loop must be a mapping")
+    for key, value in FEEDBACK_LOOP_DEFAULTS.items():
+        feedback_loop.setdefault(key, value)
+    if not isinstance(feedback_loop.get("enabled"), bool):
+        raise ValueError("feedback.learning_loop.enabled must be a boolean")
+    for key in ("minimum_snapshots", "minimum_views"):
+        value = feedback_loop.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"feedback.learning_loop.{key} must be a positive integer")
+    elapsed = feedback_loop.get("minimum_elapsed_hours")
+    if isinstance(elapsed, bool) or not isinstance(elapsed, (int, float)) \
+            or not math.isfinite(float(elapsed)) or float(elapsed) < 0:
+        raise ValueError("feedback.learning_loop.minimum_elapsed_hours must be non-negative")
+    feedback_loop["minimum_elapsed_hours"] = float(elapsed)
     audio = migrated.setdefault("audio", {})
     if not isinstance(audio, dict):
         raise ValueError("audio must be a mapping")
@@ -308,6 +394,15 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     for key in ("authentic_frames", "supporting_assets"):
         if not isinstance(cover_editorial.get(key), list):
             raise ValueError(f"cover.editorial.{key} must be a list")
+    reference_pack = cover.setdefault("reference_pack", {})
+    if not isinstance(reference_pack, dict):
+        raise ValueError("cover.reference_pack must be a mapping")
+    for key, value in REFERENCE_PACK_DEFAULTS.items():
+        reference_pack.setdefault(key, deepcopy(value))
+    if not isinstance(reference_pack.get("enabled"), bool):
+        raise ValueError("cover.reference_pack.enabled must be a boolean")
+    if not isinstance(reference_pack.get("required_roles"), list):
+        raise ValueError("cover.reference_pack.required_roles must be a list")
     visuals = migrated.setdefault("visuals", {})
     if not isinstance(visuals, dict):
         raise ValueError("visuals must be a mapping")
@@ -359,6 +454,18 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         preferences.setdefault("enabled", False), bool
     ):
         raise ValueError("preferences.enabled must be a boolean")
+    learning = preferences.setdefault("learning", {})
+    if not isinstance(learning, dict):
+        raise ValueError("preferences.learning must be a mapping")
+    for key, value in PREFERENCE_LEARNING_DEFAULTS.items():
+        learning.setdefault(key, value)
+    if not isinstance(learning.get("enabled"), bool):
+        raise ValueError("preferences.learning.enabled must be a boolean")
+    minimum_samples = learning.get("minimum_samples")
+    if isinstance(minimum_samples, bool) or not isinstance(minimum_samples, int) or minimum_samples < 1:
+        raise ValueError("preferences.learning.minimum_samples must be a positive integer")
+    if learning.get("default_scope") not in {"video", "content_type", "profile"}:
+        raise ValueError("preferences.learning.default_scope is unsupported")
     provider_governance = migrated.setdefault("provider_governance", {
         "enabled": True,
         "mode": "observe",
@@ -400,6 +507,53 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         dashboard.setdefault("enabled", True), bool
     ):
         raise ValueError("review.dashboard.enabled must be a boolean")
+    interactive = review.setdefault("interactive", {})
+    if not isinstance(interactive, dict):
+        raise ValueError("review.interactive must be a mapping")
+    for key, value in INTERACTIVE_REVIEW_DEFAULTS.items():
+        interactive.setdefault(key, value)
+    if not isinstance(interactive.get("enabled"), bool):
+        raise ValueError("review.interactive.enabled must be a boolean")
+    if interactive.get("host") not in {"127.0.0.1", "localhost", "::1"}:
+        raise ValueError("review.interactive.host must be loopback")
+    for key in ("port", "max_body_bytes"):
+        value = interactive.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"review.interactive.{key} must be a positive integer")
+    audit_bundle = delivery.setdefault("audit_bundle", {})
+    if not isinstance(audit_bundle, dict):
+        raise ValueError("delivery.audit_bundle must be a mapping")
+    for key, value in AUDIT_BUNDLE_DEFAULTS.items():
+        audit_bundle.setdefault(key, value)
+    if not isinstance(audit_bundle.get("enabled"), bool):
+        raise ValueError("delivery.audit_bundle.enabled must be a boolean")
+    if not isinstance(audit_bundle.get("output_dir"), str) or not audit_bundle["output_dir"].strip():
+        raise ValueError("delivery.audit_bundle.output_dir must be a non-empty string")
+    release_pack = delivery.setdefault("release_pack", {})
+    if not isinstance(release_pack, dict):
+        raise ValueError("delivery.release_pack must be a mapping")
+    for key, value in RELEASE_PACK_DEFAULTS.items():
+        release_pack.setdefault(key, value)
+    for key in (
+        "enabled", "require_privacy_audit", "require_rights_authorization",
+        "require_publication_authorization",
+    ):
+        if not isinstance(release_pack.get(key), bool):
+            raise ValueError(f"delivery.release_pack.{key} must be a boolean")
+    if release_pack.get("enabled") is True:
+        required_release_gates = {
+            "require_privacy_audit": "privacy audit",
+            "require_rights_authorization": "rights authorization",
+            "require_publication_authorization": "publication authorization",
+        }
+        for key, label in required_release_gates.items():
+            if release_pack.get(key) is not True:
+                raise ValueError(f"enabled release pack requires {label}")
+    for key in ("privacy_manifest", "rights_manifest", "publication_authorization"):
+        if release_pack.get(key) is not None and not isinstance(release_pack.get(key), str):
+            raise ValueError(f"delivery.release_pack.{key} must be a string or null")
+    if not isinstance(release_pack.get("output_dir"), str) or not release_pack["output_dir"].strip():
+        raise ValueError("delivery.release_pack.output_dir must be a non-empty string")
     derived_content = migrated.setdefault("derived_content", {})
     if not isinstance(derived_content, dict):
         raise ValueError("derived_content must be a mapping")

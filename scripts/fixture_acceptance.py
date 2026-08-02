@@ -49,6 +49,8 @@ IMPLEMENTATION_DEPENDENCIES = (
     Path(__file__).with_name("asr_router.py").resolve(),
     Path(__file__).with_name("hyperframes_router.py").resolve(),
     Path(__file__).with_name("director_contracts.py").resolve(),
+    Path(__file__).with_name("semantic_confidence.py").resolve(),
+    Path(__file__).with_name("event_cache.py").resolve(),
 )
 LOW_INFORMATION = {"打开", "点击", "添加", "然后", "接着", "这里", "下面", "这个", "那个"}
 

@@ -22,7 +22,11 @@ from director_contracts import STAGES, VISUAL_VOCABULARY, sha256_file  # noqa: E
 from production_contract import build_contract  # noqa: E402
 from project_config import migrate_project_config  # noqa: E402
 from provider_governance import build_decision_report, create_cost_ledger  # noqa: E402
-from test_acceptance_report import REQUIRED_TEST_IDS, write_report_from_output  # noqa: E402
+from test_acceptance_report import (  # noqa: E402
+    REQUIRED_TEST_CASES,
+    REQUIRED_TEST_IDS,
+    write_report_from_output,
+)
 from technical_qa import run_technical_qa  # noqa: E402
 from visual_dynamics_qa import build_report as build_visual_dynamics_report  # noqa: E402
 from validate_platform_export import (  # noqa: E402
@@ -522,8 +526,8 @@ class CompletionAuditTests(unittest.TestCase):
             }), encoding="utf-8")
             test_report = root / "tests.json"
             test_log = "\n".join([
-                *(f"{test_id} (tests.synthetic.ReceiptTests.{test_id}) ... ok"
-                  for test_id in REQUIRED_TEST_IDS),
+                *(f"{test_id} ({test_case}) ... ok"
+                  for test_id, test_case in zip(REQUIRED_TEST_IDS, REQUIRED_TEST_CASES)),
                 "Ran 5 tests in 1.0s", "", "OK",
             ])
             write_report_from_output(

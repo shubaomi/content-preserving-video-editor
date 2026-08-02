@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "passed": true,
-  "test_count": 339,
+  "test_count": 457,
   "failed": 0,
   "skipped": 0,
   "exit_code": 0,
   "command": [
-    "C:\\Users\\hongr\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+    "python",
     "-m",
     "unittest",
     "discover",
@@ -21,9 +21,16 @@
     "test_concurrent_identical_request_set_serializes_manifest_creation",
     "test_platform_validation_rebuilds_reports_when_cover_bytes_change"
   ],
-  "source_tree_sha256": "5703bbe4bc0ff6e0aa42b6151ca923fde24542bdbd80b50a6696706b0467a408",
-  "runner_implementation": "E:\\Projects\\Skills\\content-preserving-video-editor\\scripts\\test_acceptance_report.py",
-  "runner_implementation_sha256": "5656fc6edc19347113764715845f09502729fa7de1cad0bbb3ed7d334f572c39",
-  "log": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\validation\\test-suite.log",
-  "log_sha256": "446c9eff4c7acc36368fa1adb058cf7c58308f9fad35254f4b3124e462096b05"
+  "required_test_cases": [
+    "test_technical_qa.TechnicalQaTests.test_all_six_acceptance_types_have_real_decodable_short_media_evidence",
+    "test_completion_audit.CompletionAuditTests.test_complete_hash_bound_fixture_passes_all_completion_criteria",
+    "test_director.DirectorTests.test_old_state_migration_invalidates_all_unverifiable_completed_work",
+    "test_media_catalog_adapter.MediaCatalogAdapterTests.test_concurrent_identical_request_set_serializes_manifest_creation",
+    "test_director.DirectorTests.test_platform_validation_rebuilds_reports_when_cover_bytes_change"
+  ],
+  "source_tree_sha256": "f47e7ec973c179cb346b34ff32874f127434c582501f8c3897721517f8fa4d26",
+  "runner_implementation": "scripts/test_acceptance_report.py",
+  "runner_implementation_sha256": "38b2a07010d581ea080b0bb0092697d57a23a1b4b7a89bf520f824bc46a9d3a7",
+  "log": "test-suite.log",
+  "log_sha256": "bc4b04c54c9194c3713f2fc2318b3a23c2c517cd8fc8dcb355a5839841150c2d"
 }

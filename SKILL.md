@@ -50,7 +50,7 @@ moving projects.
 
 Load legacy project YAML through the versioned in-memory migrator. Never rewrite
 an existing `project.yaml` merely to add defaults. New projects use project
-schema version 8; migrated legacy projects receive disabled optional adapters, disabled manual finishing, and
+schema version 9; migrated legacy projects receive disabled optional adapters, disabled manual finishing, and
 the current preview/render parity tolerances in memory.
 
 ## Use the single entry
@@ -58,16 +58,29 @@ the current preview/render parity tolerances in memory.
 Run the director from the Skill root:
 
 ```powershell
+python scripts/director.py init-project --root <videos-root> --video-id <id> --source <video> --preset auto
+python scripts/director.py doctor --out <doctor.json>
+python scripts/director.py preflight --project <project.yaml> --out <preflight.json>
 python scripts/director.py run --project <project.yaml> --until sample_qa
 python scripts/director.py resume --project <project.yaml>
 python scripts/director.py status --project <project.yaml>
 python scripts/director.py review --project <project.yaml>
+python scripts/director.py review --project <project.yaml> --interactive
+python scripts/director.py apply-correction --project <project.yaml> --proposal <pending.json> --approved-by <name>
 python scripts/director.py open-preview --project <project.yaml>
 python scripts/director.py open-studio --project <project.yaml>
 python scripts/director.py approve-sample --project <project.yaml> --approved-by <name>
 python scripts/director.py authorize-final-render --project <project.yaml> --authorized-by <name>
 python scripts/director.py deliver --project <project.yaml>
+python scripts/director.py import-metrics --project <project.yaml> --input <user-export.json>
 ```
+
+`init-project` never overwrites an existing project. `doctor` and `preflight`
+are read-only and never install tools, expose environment-variable values, or
+approve a gate. Interactive review is default-off, loopback-only, and requires
+`DIRECTOR_REVIEW_TOKEN` plus `DIRECTOR_REVIEW_CSRF_TOKEN`; the browser writes
+only pending hash-bound proposals. Only `apply-correction` may append an
+explicitly approved correction ledger entry.
 
 The state lives at `<project>/work/director/director-state.json`. Resume with the
 same `run` command. Do not manually assemble the legacy script collection.
@@ -450,6 +463,30 @@ scripts/tests tree and required regressions. Completion audit must freshly
 rebuild capability/toolchain discovery, verify all five HyperFrames Skill file
 hashes, and validate Director-generated strict-check/render receipts; a copied
 render or a standalone `pass` field is not execution evidence.
+
+## Schema-v9 optional execution capabilities
+
+Event-level rendering is default-off. When enabled, accept only explicit
+HyperFrames event-window and assembly commands with frame, audio-sample,
+visual-equivalence, and ordered-segment-hash evidence. If equivalence cannot be
+proved, fall back to the complete HyperFrames render when configured; never
+substitute PIL cards or FFmpeg motion.
+
+Cover reference packs remain private local production artifacts. Require
+authorization, role coverage, distinct content hashes, at least two identity
+references, matching expression, deterministic selection, and two structurally
+different candidates. User likeness approval remains a separate gate.
+
+Preference learning writes pending candidates only from explicitly approved,
+hash-current corrections; it never auto-applies them. Feedback accepts only
+user-exported release-bound snapshots and never treats repeated observations of
+one publication as independent videos. Portable audit and release packs are
+default-off, sanitize/exclude sensitive material, require privacy/rights and
+publication evidence, remain local, and never upload.
+Their output directories must be project descendants. Audit replacement first
+verifies the old bundle and builds/verifies the new bundle off-path; release
+packing requires exact publication-scope rights coverage for the video, cover,
+and publishing copy and revalidates every copied or reused byte.
 
 ## Legacy compatibility
 

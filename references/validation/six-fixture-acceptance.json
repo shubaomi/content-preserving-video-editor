@@ -12,12 +12,14 @@
   "fixture_source": "tests/fixtures/acceptance-scenarios.json",
   "fixture_source_sha256": "de8caaed91228f242f12000c8096e38489b11d6a76e2258cc1952600a125caa7",
   "implementation": "scripts/fixture_acceptance.py",
-  "implementation_sha256": "dbc81a616e3930693fd28ed017a65699437aedf30e02b36761bdfe0415554e03",
+  "implementation_sha256": "b4a16c49d2b1f0349979114ac88e398548ddf016e1b6ad4d3bc24022e5537236",
   "implementation_dependencies": {
-    "scripts/fixture_acceptance.py": "dbc81a616e3930693fd28ed017a65699437aedf30e02b36761bdfe0415554e03",
-    "scripts/asr_router.py": "4e45b7ae994ad56111e3ec19d9172fe91a4be626a4d9e30532601d584750e303",
+    "scripts/fixture_acceptance.py": "b4a16c49d2b1f0349979114ac88e398548ddf016e1b6ad4d3bc24022e5537236",
+    "scripts/asr_router.py": "2c253511ce375d2ba7e02342d41a55f276e03f554c915eb3e9d7b3b4b94bfb83",
     "scripts/hyperframes_router.py": "d9dc36257565f596d29bb86972e9260afce0d741126c147b2da7ad1d184debf4",
-    "scripts/director_contracts.py": "51cf14af5fb55e9f708e1fcfbcaaf7b0e0e06919945c058c7035b04fd0513a7a"
+    "scripts/director_contracts.py": "51cf14af5fb55e9f708e1fcfbcaaf7b0e0e06919945c058c7035b04fd0513a7a",
+    "scripts/semantic_confidence.py": "12f0126b6fa44e9821e930a1aa46f5c7644c5d36ec5a8761daa14657a1b49027",
+    "scripts/event_cache.py": "9d8d7dc7d77d2e8d89692f3b288182bc8553496055a6360552852d1b0e31528f"
   },
   "missing_types": [],
   "duplicate_types": [],
@@ -114,16 +116,39 @@
           "schema_version": 1,
           "selected_backend": "local_faster_whisper",
           "reason": "stable local default",
-          "fallbacks": [],
+          "pipeline": [
+            {
+              "role": "transcription",
+              "backend": "local_faster_whisper"
+            }
+          ],
+          "required_capabilities": [],
+          "missing_required_capabilities": [],
           "evidence": {
             "language": "zh",
             "hotwords": [],
             "speaker_count": 1,
             "precise_word_alignment": false,
-            "speaker_labels": false
+            "speaker_labels": false,
+            "diarization": false,
+            "noise_score": 0.0,
+            "existing_captions_available": false,
+            "existing_captions_sha256": null,
+            "timing_drift_seconds": 0.0,
+            "drift_threshold_seconds": 0.12,
+            "forced_alignment_triggered": false
+          },
+          "route_input_sha256": "6406bd9c6504302033d412aadcc8cd5991b23b6353007e95ff6794f6c58b8c2b",
+          "ownership": {
+            "routing_adapter_and_qa": "content-preserving-video-editor",
+            "word_transcript": "video-use",
+            "timeline_and_edl": "video-use",
+            "final_edit_correctness": "video-use"
           },
           "semantic_deletion_authority": false,
-          "output_contract": "video-use top-level word timestamps"
+          "output_contract": "video-use top-level word timestamps",
+          "route_sha256": "524a6606c0732a2e053cbf8e86611f015ed3963b89d377247ad7e909e27690cc",
+          "fallbacks": []
         }
       }
     },
@@ -217,16 +242,39 @@
           "schema_version": 1,
           "selected_backend": "local_faster_whisper",
           "reason": "stable local default",
-          "fallbacks": [],
+          "pipeline": [
+            {
+              "role": "transcription",
+              "backend": "local_faster_whisper"
+            }
+          ],
+          "required_capabilities": [],
+          "missing_required_capabilities": [],
           "evidence": {
             "language": "zh",
             "hotwords": [],
             "speaker_count": 1,
             "precise_word_alignment": false,
-            "speaker_labels": false
+            "speaker_labels": false,
+            "diarization": false,
+            "noise_score": 0.0,
+            "existing_captions_available": false,
+            "existing_captions_sha256": null,
+            "timing_drift_seconds": 0.0,
+            "drift_threshold_seconds": 0.12,
+            "forced_alignment_triggered": false
+          },
+          "route_input_sha256": "6406bd9c6504302033d412aadcc8cd5991b23b6353007e95ff6794f6c58b8c2b",
+          "ownership": {
+            "routing_adapter_and_qa": "content-preserving-video-editor",
+            "word_transcript": "video-use",
+            "timeline_and_edl": "video-use",
+            "final_edit_correctness": "video-use"
           },
           "semantic_deletion_authority": false,
-          "output_contract": "video-use top-level word timestamps"
+          "output_contract": "video-use top-level word timestamps",
+          "route_sha256": "524a6606c0732a2e053cbf8e86611f015ed3963b89d377247ad7e909e27690cc",
+          "fallbacks": []
         }
       }
     },
@@ -320,16 +368,39 @@
           "schema_version": 1,
           "selected_backend": "local_faster_whisper",
           "reason": "stable local default",
-          "fallbacks": [],
+          "pipeline": [
+            {
+              "role": "transcription",
+              "backend": "local_faster_whisper"
+            }
+          ],
+          "required_capabilities": [],
+          "missing_required_capabilities": [],
           "evidence": {
             "language": "zh",
             "hotwords": [],
             "speaker_count": 1,
             "precise_word_alignment": false,
-            "speaker_labels": false
+            "speaker_labels": false,
+            "diarization": false,
+            "noise_score": 0.0,
+            "existing_captions_available": false,
+            "existing_captions_sha256": null,
+            "timing_drift_seconds": 0.0,
+            "drift_threshold_seconds": 0.12,
+            "forced_alignment_triggered": false
+          },
+          "route_input_sha256": "6406bd9c6504302033d412aadcc8cd5991b23b6353007e95ff6794f6c58b8c2b",
+          "ownership": {
+            "routing_adapter_and_qa": "content-preserving-video-editor",
+            "word_transcript": "video-use",
+            "timeline_and_edl": "video-use",
+            "final_edit_correctness": "video-use"
           },
           "semantic_deletion_authority": false,
-          "output_contract": "video-use top-level word timestamps"
+          "output_contract": "video-use top-level word timestamps",
+          "route_sha256": "524a6606c0732a2e053cbf8e86611f015ed3963b89d377247ad7e909e27690cc",
+          "fallbacks": []
         }
       }
     },
@@ -422,17 +493,43 @@
         "asr": {
           "schema_version": 1,
           "selected_backend": "whisperx",
-          "reason": "multiple speakers or precise word alignment requested",
-          "fallbacks": [],
+          "reason": "speaker, diarization, or alignment evidence requested",
+          "pipeline": [
+            {
+              "role": "transcription",
+              "backend": "whisperx"
+            }
+          ],
+          "required_capabilities": [
+            "speaker_labels",
+            "word_alignment"
+          ],
+          "missing_required_capabilities": [],
           "evidence": {
             "language": "zh",
             "hotwords": [],
             "speaker_count": 2,
             "precise_word_alignment": true,
-            "speaker_labels": false
+            "speaker_labels": true,
+            "diarization": false,
+            "noise_score": 0.0,
+            "existing_captions_available": false,
+            "existing_captions_sha256": null,
+            "timing_drift_seconds": 0.0,
+            "drift_threshold_seconds": 0.12,
+            "forced_alignment_triggered": false
+          },
+          "route_input_sha256": "d9fbcd52aaf7dd0c7fb2c1f3c412765e9962a69adba76143f08f4e71057f5ff7",
+          "ownership": {
+            "routing_adapter_and_qa": "content-preserving-video-editor",
+            "word_transcript": "video-use",
+            "timeline_and_edl": "video-use",
+            "final_edit_correctness": "video-use"
           },
           "semantic_deletion_authority": false,
-          "output_contract": "video-use top-level word timestamps"
+          "output_contract": "video-use top-level word timestamps",
+          "route_sha256": "f5242e6f1aee0d9928c93366b667df47dfe3a4915b12353c233c7f2904ff92e3",
+          "fallbacks": []
         }
       }
     },
@@ -525,8 +622,15 @@
         "asr": {
           "schema_version": 1,
           "selected_backend": "funasr",
-          "reason": "Chinese hotwords or speaker labels requested",
-          "fallbacks": [],
+          "reason": "Chinese terminology or noisy-audio evidence requested",
+          "pipeline": [
+            {
+              "role": "transcription",
+              "backend": "funasr"
+            }
+          ],
+          "required_capabilities": [],
+          "missing_required_capabilities": [],
           "evidence": {
             "language": "zh-cn",
             "hotwords": [
@@ -535,10 +639,26 @@
             ],
             "speaker_count": 1,
             "precise_word_alignment": false,
-            "speaker_labels": false
+            "speaker_labels": false,
+            "diarization": false,
+            "noise_score": 0.0,
+            "existing_captions_available": false,
+            "existing_captions_sha256": null,
+            "timing_drift_seconds": 0.0,
+            "drift_threshold_seconds": 0.12,
+            "forced_alignment_triggered": false
+          },
+          "route_input_sha256": "9a42d7cad5a869658b801a8b4b14ebe8bb01b513aba604d5812dfa1406cfcea8",
+          "ownership": {
+            "routing_adapter_and_qa": "content-preserving-video-editor",
+            "word_transcript": "video-use",
+            "timeline_and_edl": "video-use",
+            "final_edit_correctness": "video-use"
           },
           "semantic_deletion_authority": false,
-          "output_contract": "video-use top-level word timestamps"
+          "output_contract": "video-use top-level word timestamps",
+          "route_sha256": "a32839321a1b50df71a2347847536ba486b9eca8b405e55d462c2c1a3572a7e7",
+          "fallbacks": []
         }
       }
     },
@@ -632,16 +752,39 @@
           "schema_version": 1,
           "selected_backend": "local_faster_whisper",
           "reason": "stable local default",
-          "fallbacks": [],
+          "pipeline": [
+            {
+              "role": "transcription",
+              "backend": "local_faster_whisper"
+            }
+          ],
+          "required_capabilities": [],
+          "missing_required_capabilities": [],
           "evidence": {
             "language": "zh",
             "hotwords": [],
             "speaker_count": 1,
             "precise_word_alignment": false,
-            "speaker_labels": false
+            "speaker_labels": false,
+            "diarization": false,
+            "noise_score": 0.0,
+            "existing_captions_available": false,
+            "existing_captions_sha256": null,
+            "timing_drift_seconds": 0.0,
+            "drift_threshold_seconds": 0.12,
+            "forced_alignment_triggered": false
+          },
+          "route_input_sha256": "6406bd9c6504302033d412aadcc8cd5991b23b6353007e95ff6794f6c58b8c2b",
+          "ownership": {
+            "routing_adapter_and_qa": "content-preserving-video-editor",
+            "word_transcript": "video-use",
+            "timeline_and_edl": "video-use",
+            "final_edit_correctness": "video-use"
           },
           "semantic_deletion_authority": false,
-          "output_contract": "video-use top-level word timestamps"
+          "output_contract": "video-use top-level word timestamps",
+          "route_sha256": "524a6606c0732a2e053cbf8e86611f015ed3963b89d377247ad7e909e27690cc",
+          "fallbacks": []
         }
       }
     }

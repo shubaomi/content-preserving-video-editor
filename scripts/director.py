@@ -24,15 +24,26 @@ from pathlib import Path
 from typing import Any, Callable
 
 from aesthetic_qa import validate as validate_aesthetic_review
-from asr_router import choose_backend as choose_asr_backend, normalize_transcript
+from asr_router import (
+    build_asr_quality_report,
+    choose_backend as choose_asr_backend,
+    normalize_transcript,
+    validate_pipeline_reports,
+)
 from audio_qa import validate as validate_audio_plan
 from audio_production import produce_audio_assets
 from brand_motion_playbook import compile_playbook, validate_playbook
 from build_motion_snapshot_plan import build_motion_sidecar, build_plan as build_motion_snapshot_plan
 from capability_registry import build_capability_inventory, build_toolchain_report, capability_config
 from clip_factory import build_clip_manifest, validate_clip_manifest
-from correction_ledger import new_ledger, validate_ledger
+from correction_ledger import append_correction, new_ledger, validate_ledger
 from cover_production import CoverProductionActionRequired, produce_cover, write_cover_request
+from cover_reference_pack import (
+    build_candidate_specs,
+    privacy_projection as cover_reference_privacy_projection,
+    select_references as select_cover_references,
+    validate_reference_pack,
+)
 from conditional_extensions import route_extensions, run_extension_adapters
 from director_adapters import AdapterExecutionError, AdapterRunner
 from director_contracts import (
@@ -73,6 +84,7 @@ from normalize_social_audio import (
 from localization_pipeline import build_localization_manifest, validate_localization_manifest
 from otio_adapter import edl_to_otio, otio_to_internal, validate_roundtrip as validate_otio_roundtrip
 from post_publish_metrics import import_metrics as import_post_publish_metrics
+from feedback_loop import analyze_feedback_snapshots
 from podcast_pipeline import build_podcast_manifest, validate_podcast_manifest
 from platform_occlusion_gate import evaluate_geometry as evaluate_platform_occlusion
 from preview_render_parity import validate as validate_preview_render_parity
@@ -87,8 +99,22 @@ from provider_governance import (
     write_provider_result_receipt,
 )
 from render_with_cache import run_pipeline as run_cached_pipeline
+from event_render_pipeline import EventRenderUnavailable, execute_event_render_pipeline
+from state_migrations import CURRENT_STATE_SCHEMA_VERSION, load_and_migrate_state
+from project_initializer import PRESETS as PROJECT_PRESETS, initialize_project
+from doctor import run_doctor
+from preflight import run_preflight
+from action_required_contract import create_action_packet
+from semantic_confidence import build_candidate_report, validate_candidate_report
 from review_dashboard import generate_dashboard
+from review_server import ReviewServerConfig, create_review_server
+from preference_learning import build_preference_candidates, write_preference_candidates
 from technical_qa import run_technical_qa, validate_report as validate_technical_report
+from portable_audit_bundle import create_portable_audit_bundle
+from verify_audit_bundle import verify_audit_bundle
+from prepublish_privacy_audit import create_privacy_audit
+from rights_authorization_manifest import create_rights_authorization_report
+from release_delivery_pack import create_release_delivery_pack, verify_release_delivery_pack
 from validate_platform_export import validate_bound_report as validate_platform_report
 from video_use_bridge import render_command, render_helper_path
 from visual_dynamics_qa import (
@@ -97,8 +123,8 @@ from visual_dynamics_qa import (
 )
 
 
-STATE_VERSION = 6
-DIRECTOR_VERSION = "2.2.0"
+STATE_VERSION = CURRENT_STATE_SCHEMA_VERSION
+DIRECTOR_VERSION = "2.3.0"
 
 ROLE_CONTRACT = {
     "director": [
@@ -141,6 +167,87 @@ def _json_sha256(value: Any) -> str:
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def prepare_cover_reference_pack(
+    project: dict[str, Any], *, project_root: Path,
+    semantic_brief: Path, work_dir: Path,
+) -> tuple[dict[str, Any], list[Path]]:
+    """Resolve an authorized private cover pack into production inputs and safe evidence."""
+    config = project.get("cover", {}).get("reference_pack", {})
+    if config.get("enabled") is not True:
+        return project, []
+    raw_manifest = config.get("manifest")
+    if not str(raw_manifest or "").strip():
+        raise ValueError("cover.reference_pack.manifest is required when enabled")
+    manifest = Path(str(raw_manifest))
+    if not manifest.is_absolute():
+        manifest = (project_root / manifest).resolve()
+    if not manifest.is_file():
+        raise ValueError("cover reference pack manifest is missing")
+    pack = validate_reference_pack(read_json(manifest))
+    required = {str(value) for value in config.get("required_roles") or []}
+    missing = sorted(required - set(pack.get("covered_roles") or []))
+    if missing:
+        raise ValueError("cover reference pack is missing configured roles: " + ", ".join(missing))
+    brief = read_json(semantic_brief)
+    topic = str(
+        config.get("topic")
+        or brief.get("summary")
+        or project.get("content", {}).get("title")
+        or project.get("video_id")
+        or ""
+    ).strip()
+    if not topic:
+        raise ValueError("cover reference selection requires a grounded topic")
+    direction = str(config.get("direction") or "credible energetic topic tutorial").strip()
+    target_expression = str(config.get("target_expression") or "smiling").strip().lower()
+    selection = select_cover_references(
+        pack, topic=topic, direction=direction, target_expression=target_expression,
+        minimum_identity_references=int(config.get("minimum_identity_references", 2)),
+        maximum_references=int(config.get("maximum_references", 4)),
+        expected_subject_id=(
+            str(config.get("expected_subject_id")).strip()
+            if config.get("expected_subject_id") else None
+        ),
+    )
+    specs = build_candidate_specs(selection, topic=topic, direction=direction)
+    work_dir.mkdir(parents=True, exist_ok=True)
+    private_selection = work_dir / "cover-reference-selection.json"
+    public_projection = work_dir / "cover-reference-pack-public.json"
+    candidate_specs = work_dir / "cover-reference-candidate-specs.json"
+    write_json(private_selection, {
+        **selection,
+        "manifest_sha256": sha256_file(manifest),
+        "privacy": "private local production artifact; do not publish or commit",
+    })
+    write_json(public_projection, {
+        **cover_reference_privacy_projection(pack),
+        "manifest_sha256": sha256_file(manifest),
+    })
+    write_json(candidate_specs, {
+        "schema_version": 1, "topic": topic, "direction": direction,
+        "candidates": specs, "identity_user_approval": "pending",
+    })
+    prepared = json.loads(json.dumps(project))
+    cover = prepared.setdefault("cover", {})
+    references = [str(row["path"]) for row in selection["selected_references"]]
+    expression = [
+        str(row["path"]) for row in selection["selected_references"]
+        if str(row.get("expression") or "").lower() == target_expression
+    ]
+    cover["identity_references"] = references
+    cover["expression_references"] = expression or references
+    cover["target_expression"] = target_expression
+    variants = cover.setdefault("variants", {})
+    for spec in specs:
+        row = variants.setdefault(spec["candidate_id"], {})
+        row.setdefault("template_family", spec["structure"]["template_family"])
+        row.setdefault("text_side", spec["structure"]["negative_space"])
+        row.setdefault("strategy", spec["communication_strategy"])
+    cover["reference_pack"]["resolved_selection"] = str(private_selection)
+    cover["reference_pack"]["candidate_specs"] = str(candidate_specs)
+    return prepared, [manifest, private_selection, public_projection, candidate_specs]
 
 
 def _review_evidence_files(review: dict[str, Any]) -> list[Path]:
@@ -239,7 +346,7 @@ class Director:
 
     def _load_or_create_state(self) -> dict[str, Any]:
         if self.state_path.is_file():
-            state = read_json(self.state_path)
+            state = load_and_migrate_state(self.state_path)
             if state.get("project_file") != str(self.context.project_file):
                 raise DirectorContractError("director state belongs to a different project")
             stages = state.setdefault("stages", {})
@@ -294,6 +401,11 @@ class Director:
             "project_root": str(self.context.root),
             "input_mode": self.context.input_mode,
             "single_universal_output": True,
+            "dependency_state": {
+                "schema_version": 1,
+                "event_fingerprints": {},
+                "last_plan": None,
+            },
             "input_fingerprints": {
                 "project_file": _file_fingerprint(self.context.project_file),
                 "source_video": _file_fingerprint(self.context.source_video),
@@ -425,14 +537,45 @@ class Director:
             raise DirectorContractError(f"capability {name} failed: {error}") from error
 
     def _action_required(self, stage: str, reason: str, actions: list[dict[str, Any]]) -> None:
-        packet = {
-            "schema_version": 1,
-            "stage": stage,
-            "reason": reason,
-            "actions": actions,
-            "resume_command": f'"{sys.executable}" "{Path(__file__).resolve()}" run --project "{self.context.project_file}" --resume',
-        }
-        write_json(self.action_path, packet)
+        normalized: list[dict[str, Any]] = []
+        for index, action in enumerate(actions):
+            expected = action.get("expected_outputs", action.get("expected_artifacts"))
+            if expected is None and action.get("expected_artifact") is not None:
+                expected = [action.get("expected_artifact")]
+            if not isinstance(expected, list):
+                expected = [expected] if expected is not None else []
+            inputs = action.get("inputs")
+            if not isinstance(inputs, list):
+                inputs = [
+                    str(action[key]) for key in ("request", "route", "report")
+                    if action.get(key) is not None
+                ]
+            normalized.append({
+                **action,
+                "id": str(action.get("id") or f"{stage}-{index + 1}"),
+                "owner": str(action.get("owner") or "user"),
+                "instruction": str(
+                    action.get("instruction") or action.get("capability")
+                    or action.get("note") or reason
+                ),
+                "command": action.get("command") or [],
+                "inputs": inputs,
+                "expected_outputs": [str(value) for value in expected if value is not None],
+            })
+        resume_command = (
+            f'"{sys.executable}" "{Path(__file__).resolve()}" run '
+            f'--project "{self.context.project_file}" --resume'
+        )
+        owners = sorted({row["owner"] for row in normalized})
+        create_action_packet(
+            self.action_path,
+            stage=stage,
+            owner=owners[0] if len(owners) == 1 else "director_coordinated",
+            reason=reason,
+            actions=normalized,
+            reference_root=self.context.root,
+            resume_command=resume_command,
+        )
         row = self.state["stages"][stage]
         row.update({"status": "action_required", "updated_at": utc_now(), "error": reason,
                     "artifacts": [str(self.action_path.resolve())]})
@@ -936,15 +1079,25 @@ class Director:
             self._adopt_cached_word_transcript(transcript_path)
         router_config = self.project.get("transcription", {}).get("router", {})
         route_path = self.video_use_dir / "asr-route.json"
-        if not transcript_path.is_file() and router_config.get("enabled") is True:
+        route: dict[str, Any] | None = None
+        if router_config.get("enabled") is True:
             route = choose_asr_backend(router_config, {
                 "language": router_config.get("language", "zh"),
                 "hotwords": router_config.get("hotwords", []),
+                "project_terms": router_config.get("project_terms", {}),
+                "profile_terms": router_config.get("profile_terms", {}),
                 "speaker_count": router_config.get("speaker_count", 1),
                 "precise_word_alignment": router_config.get("precise_word_alignment", False),
                 "speaker_labels": router_config.get("speaker_labels", False),
+                "diarization": router_config.get("diarization", False),
+                "noise_score": router_config.get("noise_score", 0.0),
+                "timing_drift_seconds": router_config.get("timing_drift_seconds", 0.0),
+                "drift_threshold_seconds": router_config.get("drift_threshold_seconds", 0.12),
+                "existing_captions": router_config.get("existing_captions", {}),
+                "required_capabilities": router_config.get("required_capabilities", []),
             })
             write_json(route_path, route)
+        if not transcript_path.is_file() and route is not None:
             raw_result_value = router_config.get("result")
             raw_result = self._project_path(raw_result_value) if raw_result_value else None
             if raw_result and raw_result.is_file() and route.get("selected_backend") != "none":
@@ -980,6 +1133,43 @@ class Director:
                     "note": "Do not substitute summarized captions or broad ASR segment text.",
                 }],
             )
+        asr_artifacts: list[Path] = []
+        if route is not None:
+            required = set(route.get("required_capabilities") or [])
+            speaker_path = self._project_path(
+                router_config.get("speaker_report") or "edit/video-use/speaker-report.json"
+            )
+            alignment_path = self._project_path(
+                router_config.get("alignment_report") or "edit/video-use/alignment-report.json"
+            )
+            missing_reports = [
+                str(path) for capability, path in (
+                    ("speaker_labels", speaker_path), ("word_alignment", alignment_path),
+                ) if capability in required and not path.is_file()
+            ]
+            if missing_reports:
+                self._action_required(
+                    "video_use_timeline",
+                    "selected ASR pipeline requires hash-bound speaker/alignment reports",
+                    [{
+                        "owner": "video-use",
+                        "capability": "ASR speaker/alignment evidence",
+                        "inputs": [str(transcript_path), str(route_path)],
+                        "expected_outputs": missing_reports,
+                    }],
+                )
+            pipeline_report = validate_pipeline_reports(
+                read_json(transcript_path), route=route,
+                speaker_report=read_json(speaker_path) if speaker_path.is_file() else None,
+                alignment_report=read_json(alignment_path) if alignment_path.is_file() else None,
+            )
+            pipeline_path = self.video_use_dir / "asr-pipeline-qa.json"
+            write_json(pipeline_path, pipeline_report)
+            asr_artifacts.extend([
+                pipeline_path,
+                *([speaker_path] if speaker_path.is_file() else []),
+                *([alignment_path] if alignment_path.is_file() else []),
+            ])
         duration = _ffprobe_duration(self.context.source_video)
         if not edl_path.is_file():
             request = self.video_use_dir / "edl-request.json"
@@ -1136,12 +1326,34 @@ class Director:
         sync = read_json(sync_report)
         if sync.get("passed") is not True:
             raise DirectorContractError("video-use caption synchronization sampling did not pass")
+        if route is not None:
+            drift = max((
+                max(float(row.get("lead_error_s", 0)), float(row.get("tail_error_s", 0)))
+                for row in (sync.get("samples") or []) if row.get("passed") is not None
+            ), default=0.0)
+            quality = build_asr_quality_report(
+                read_json(transcript_path), route=route,
+                source_media_sha256=sha256_file(self.context.source_video),
+                measured_drift_seconds=drift,
+                drift_threshold_seconds=float(router_config.get("drift_threshold_seconds", 0.12)),
+            )
+            quality_path = self.video_use_dir / "asr-quality-report.json"
+            write_json(quality_path, quality)
+            asr_artifacts.append(quality_path)
+            if quality.get("status") != "pass":
+                self._action_required(
+                    "video_use_timeline",
+                    "ASR terminology or forced-alignment quality gate requires review",
+                    [{"owner": "video-use", "capability": "ASR quality remediation",
+                      "report": str(quality_path), "expected_artifact": str(transcript_path)}],
+                )
         self._complete("video_use_timeline", [edl_path, transcript_path, plan_path,
                                                media_analysis_path, edit_preflight_path,
                                                self.video_use_dir / "mapped-words.json",
                                                self.video_use_dir / "captions.json",
                                                self.video_use_dir / "master.srt", sync_report,
-                                               *otio_artifacts, *([route_path] if route_path.is_file() else [])])
+                                               *otio_artifacts, *asr_artifacts,
+                                               *([route_path] if route_path.is_file() else [])])
 
     def stage_evidence_acquisition(self) -> None:
         transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
@@ -1289,6 +1501,7 @@ class Director:
             brief, transcript_path=transcript, evidence_bundle_path=self.evidence_bundle_path,
         ), "semantic brief evidence binding")
         artifacts = [self.semantic_brief_path]
+        artifacts.extend(self._semantic_confidence_gate(brief))
         evidence = read_json(self.evidence_bundle_path)
         extension_routes = route_extensions(self.project, evidence, brief)
         extension_report = self.root / "conditional-extensions.json"
@@ -1357,6 +1570,51 @@ class Director:
             if publishing_result.get("status") in {"complete", "reused"}:
                 artifacts.append(publishing_path)
         self._complete("semantic_brief", artifacts)
+
+    def _semantic_confidence_gate(self, brief: dict[str, Any]) -> list[Path]:
+        config = self.project.get("analysis", {}).get("semantic_confidence", {})
+        if config.get("enabled") is not True:
+            return []
+        candidates = brief.get("confidence_candidates")
+        if not isinstance(candidates, list) or not candidates:
+            self._action_required(
+                "semantic_brief",
+                "enabled semantic confidence requires evidence-complete confidence_candidates",
+                [{
+                    "owner": "director_with_llm",
+                    "capability": "semantic confidence evidence and counterexample review",
+                    "request": str(self.root / "semantic-brief-request.json"),
+                    "expected_artifact": str(self.semantic_brief_path),
+                }],
+            )
+        event_ids = {
+            str(row.get("id")) for row in (brief.get("events") or [])
+            if isinstance(row, dict) and row.get("treatment") != "quiet_source"
+        }
+        candidate_ids = {str(row.get("event_id")) for row in candidates if isinstance(row, dict)}
+        if candidate_ids != event_ids:
+            raise DirectorContractError(
+                "semantic confidence candidates must cover exactly the non-quiet semantic events"
+            )
+        report = build_candidate_report(
+            candidates,
+            low_confidence_threshold=float(config.get("low_confidence_threshold", 0.7)),
+        )
+        validate_candidate_report(report)
+        output = self.root / "semantic-confidence.json"
+        write_json(output, report)
+        if report.get("status") == "action_required":
+            self._action_required(
+                "semantic_brief",
+                "meaning-changing semantic candidates require explicit review",
+                [{
+                    "owner": "user",
+                    "capability": "review low-confidence semantic decisions",
+                    "report": str(output),
+                    "expected_artifact": str(output),
+                }],
+            )
+        return [output]
 
     def stage_production_contract(self) -> None:
         transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
@@ -1678,13 +1936,40 @@ class Director:
                                   "reason": "project explicitly disabled cover production"})
             self._complete("cover", [path, decision])
             return
+        prepared_project = self.project
+        reference_artifacts: list[Path] = []
+        try:
+            prepared_project, reference_artifacts = prepare_cover_reference_pack(
+                self.project,
+                project_root=self.context.root,
+                semantic_brief=self.semantic_brief_path,
+                work_dir=self.context.edit_dir / "cover" / "reference-pack",
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            request = self.root / "cover-reference-pack-request.json"
+            write_json(request, {
+                "schema_version": 1,
+                "status": "action_required",
+                "reason": str(error),
+                "required": [
+                    "authorized non-revoked multi-photo manifest",
+                    "at least two distinct identity references",
+                    "target expression and role coverage",
+                ],
+                "privacy": "keep reference paths and photos local; only public projection may be shared",
+            })
+            self._action_required(
+                "cover",
+                "Authorized private cover reference pack requires repair",
+                [{"owner": "user_or_director_asset_curator", "request": str(request)}],
+            )
         configured = self.project.get("delivery", {}).get("cover", "exports/cover-portrait.png")
         output = self._project_path(configured)
         try:
             artifacts = self._metered_provider_call(
                 ("image_generation",),
                 lambda: produce_cover(
-                    project=self.project, project_root=self.context.root,
+                    project=prepared_project, project_root=self.context.root,
                     semantic_brief=self.semantic_brief_path, output=output,
                     work_dir=self.context.edit_dir / "cover", runner=self.adapter_runner,
                     execute_external=self.execute_external,
@@ -1699,7 +1984,7 @@ class Director:
                 [{"owner": "director_with_image_generation_and_visual_review",
                   "request": str(request), "expected_artifact": str(output)}],
             )
-        self._complete("cover", [path, *artifacts])
+        self._complete("cover", [path, *reference_artifacts, *artifacts])
 
     def stage_sample_qa(self) -> None:
         self._validate_current_production_contract()
@@ -2251,7 +2536,61 @@ class Director:
             if resolved_executable:
                 command[0] = resolved_executable
             cache_config = self.project.get("render", {}).get("cache", {})
-            if cache_config.get("enabled") is True:
+            event_cache_completed = False
+            event_config = cache_config.get("event_level", {})
+            if cache_config.get("enabled") is True and event_config.get("enabled") is True:
+                event_report_path = self.root / "event-render-cache-report.json"
+                previous: dict[str, dict[str, Any]] = {}
+                if event_report_path.is_file():
+                    try:
+                        previous = read_json(event_report_path).get("fingerprints") or {}
+                    except (OSError, ValueError, json.JSONDecodeError):
+                        previous = {}
+                all_commands = read_json(self.root / "full-hyperframes-commands.json")
+                try:
+                    event_report = execute_event_render_pipeline(
+                        command_record=all_commands,
+                        storyboard_path=self.full_hyperframes_project / "storyboard.json",
+                        captions_path=self.video_use_dir / "captions.json",
+                        safe_zones_path=self.production_contract_path,
+                        design_tokens_path=self.context.edit_dir / "design-tokens.json",
+                        provider_evidence_path=self.root / "provider-decision.json",
+                        rights_evidence_path=self.production_contract_path,
+                        implementation_paths=[
+                            Path(__file__).resolve(),
+                            Path(__file__).with_name("event_render_pipeline.py"),
+                            Path(__file__).with_name("event_cache.py"),
+                            self.full_hyperframes_project / "index.html",
+                            self.full_hyperframes_project / "frame.md",
+                        ],
+                        cache_root=self.root / "event-render-cache",
+                        output=output,
+                        previous_fingerprints=previous,
+                    )
+                    write_json(event_report_path, event_report)
+                    stdout_path.write_text(
+                        json.dumps(event_report, ensure_ascii=False, sort_keys=True),
+                        encoding="utf-8",
+                    )
+                    stderr_path.write_text("", encoding="utf-8")
+                    execution_mode = "hyperframes_event_cache"
+                    event_cache_completed = True
+                    render_artifacts.append(event_report_path)
+                except EventRenderUnavailable as error:
+                    fallback_path = self.root / "event-render-cache-fallback.json"
+                    write_json(fallback_path, {
+                        "schema_version": 1,
+                        "status": "fallback_full_render",
+                        "reason": str(error),
+                        "fallback_is_safe": True,
+                        "no_ffmpeg_or_static_motion_substitute": True,
+                    })
+                    render_artifacts.append(fallback_path)
+                    if event_config.get("fallback_to_full_render", True) is not True:
+                        raise DirectorContractError(
+                            "event-level HyperFrames rendering is unavailable and full-render fallback is disabled"
+                        ) from error
+            if cache_config.get("enabled") is True and not event_cache_completed:
                 project_root = Path(command_record["cwd"]).resolve()
                 pipeline_path = self.root / "render-cache-pipeline.json"
                 status_path = self.root / "render-cache-status.json"
@@ -2262,6 +2601,15 @@ class Director:
                     and path.resolve() != output.resolve()
                     and not {"node_modules", ".git"}.intersection(path.parts)
                 })
+                final_relative = os.path.relpath(output, project_root)
+                cache_working = output.with_name(
+                    f"{output.stem}.render-cache.partial{output.suffix}"
+                )
+                working_relative = os.path.relpath(cache_working, project_root)
+                cached_command = [
+                    str(cache_working) if str(value) == str(output) else value
+                    for value in command
+                ]
                 pipeline = {
                     "schema_version": 1,
                     "name": "hyperframes-full-render",
@@ -2272,8 +2620,13 @@ class Director:
                     "stages": [{
                         "id": "graphics_render",
                         "inputs": relative_inputs,
-                        "outputs": [os.path.relpath(output, project_root)],
-                        "command": command,
+                        "outputs": [final_relative],
+                        "partial_outputs": [working_relative],
+                        "atomic_outputs": [{
+                            "working": working_relative,
+                            "final": final_relative,
+                        }],
+                        "command": cached_command,
                     }],
                 }
                 write_json(pipeline_path, pipeline)
@@ -2287,7 +2640,7 @@ class Director:
                 stderr_path.write_text("", encoding="utf-8")
                 execution_mode = "render_cache"
                 render_artifacts.extend([pipeline_path, status_path])
-            else:
+            elif not event_cache_completed:
                 temporary_output = output.with_name(
                     f".{output.stem}.{uuid.uuid4().hex}.rendering{output.suffix}"
                 )
@@ -2771,6 +3124,15 @@ class Director:
             return candidate.resolve()
         return ((base or self.context.root) / candidate).resolve()
 
+    def _project_output_path(self, value: Any, label: str) -> Path:
+        path = self._optional_project_path(value)
+        if path is None:
+            raise DirectorContractError(f"{label} output path is required")
+        root = self.context.root.resolve()
+        if path == root or root not in path.parents:
+            raise DirectorContractError(f"{label} output must stay inside the project root")
+        return path
+
     def _manual_sfx_stems(self) -> list[Path]:
         audio_plan = self.full_hyperframes_project / "audio-plan.json"
         if not audio_plan.is_file():
@@ -3005,6 +3367,133 @@ class Director:
             media_report_path, returned_qa_path, final_correctness_path, returned,
         ])
 
+    def _build_optional_delivery_packages(
+        self, *, output: Path, cover: Path, delivery_contract: Path,
+        required_evidence: list[Path],
+    ) -> list[Path]:
+        artifacts: list[Path] = []
+        audit = self.project.get("delivery", {}).get("audit_bundle", {})
+        release = self.project.get("delivery", {}).get("release_pack", {})
+        if audit.get("enabled") is not True and release.get("enabled") is not True:
+            return []
+        doctor_path = self.root / "doctor-report.json"
+        write_json(doctor_path, run_doctor())
+
+        if audit.get("enabled") is True:
+            audit_output = self._project_output_path(
+                audit.get("output_dir") or "work/director/portable-audit-bundle",
+                "portable audit bundle",
+            )
+            safe_inputs = [
+                self.context.project_file, self.state_path, doctor_path,
+                delivery_contract, self.root / "provider-decision.json",
+                self.root / "cost-ledger.json", self.root / "toolchain-compatibility.json",
+                *[path for path in required_evidence if path.suffix.lower() == ".json"],
+            ]
+            safe_inputs = [path for path in dict.fromkeys(safe_inputs) if path.is_file()]
+            replace = (audit_output / "audit-bundle.json").is_file()
+            create_portable_audit_bundle(
+                self.context.root, audit_output, safe_inputs, replace=replace,
+            )
+            verification = verify_audit_bundle(audit_output)
+            verification_path = self.root / "portable-audit-verification.json"
+            write_json(verification_path, {
+                "schema_version": 1,
+                **verification,
+                "manifest": str(audit_output / "audit-bundle.json"),
+                "manifest_sha256": sha256_file(audit_output / "audit-bundle.json"),
+            })
+            artifacts.extend([audit_output / "audit-bundle.json", verification_path])
+
+        if release.get("enabled") is not True:
+            return [doctor_path, *artifacts]
+        publishing_copy = self.root / "publish-metadata.json"
+        privacy_manifest = self._optional_project_path(release.get("privacy_manifest"))
+        rights_manifest = self._optional_project_path(release.get("rights_manifest"))
+        authorization = self._optional_project_path(release.get("publication_authorization"))
+        missing = [
+            label for label, path in (
+                ("publishing copy", publishing_copy),
+                ("privacy review manifest", privacy_manifest),
+                ("rights authorization manifest", rights_manifest),
+                ("separate publication authorization", authorization),
+            ) if path is None or not path.is_file()
+        ]
+        if missing:
+            request = self.root / "release-pack-request.json"
+            write_json(request, {
+                "schema_version": 1,
+                "status": "action_required",
+                "missing": missing,
+                "universal_video": str(output),
+                "cover": str(cover),
+                "publishing_copy": str(publishing_copy),
+                "automatic_upload_or_publication": False,
+            })
+            self._action_required(
+                "delivery_qa",
+                "Release delivery pack requires explicit privacy, rights, copy, and publication evidence",
+                [{"owner": "user_and_director_release_reviewer", "request": str(request)}],
+            )
+        assert privacy_manifest is not None and rights_manifest is not None and authorization is not None
+        privacy_report = self.root / "release" / "prepublish-privacy-audit.json"
+        rights_report = self.root / "release" / "rights-authorization-report.json"
+        try:
+            create_privacy_audit(privacy_manifest, privacy_report)
+            create_rights_authorization_report(rights_manifest, rights_report)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            request = self.root / "release-evidence-repair-request.json"
+            write_json(request, {"schema_version": 1, "status": "action_required",
+                                 "reason": str(error)})
+            self._action_required(
+                "delivery_qa", "Release privacy or rights evidence failed closed",
+                [{"owner": "user_and_director_release_reviewer", "request": str(request)}],
+            )
+        release_output = self._project_output_path(
+            release.get("output_dir") or "exports/release-pack",
+            "release pack",
+        )
+        additional = {
+            "hyperframes_storyboard": self.full_hyperframes_project / "storyboard.json",
+            "hyperframes_index": self.full_hyperframes_project / "index.html",
+            "hyperframes_frame": self.full_hyperframes_project / "frame.md",
+            "captions": self.video_use_dir / "captions.json",
+            "subtitles": self.video_use_dir / "master.srt",
+            "edl": self.video_use_dir / "edl.json",
+            "semantic_brief": self.full_semantic_brief_path,
+            "audio_plan": self.full_hyperframes_project / "audio-plan.json",
+            "production_contract": self.production_contract_path,
+            "delivery_qa": delivery_contract,
+            "doctor_report": doctor_path,
+            "provider_decision": self.root / "provider-decision.json",
+            "cost_ledger": self.root / "cost-ledger.json",
+        }
+        additional = {name: path for name, path in additional.items() if path.is_file()}
+        if release_output.exists():
+            try:
+                verify_release_delivery_pack(
+                    release_output, video=output, cover=cover,
+                    publishing_copy=publishing_copy, privacy_audit=privacy_report,
+                    rights_report=rights_report, publication_authorization=authorization,
+                )
+            except (OSError, ValueError, json.JSONDecodeError) as error:
+                self._action_required(
+                    "delivery_qa",
+                    "Existing release pack is stale, tampered, or no longer authorized",
+                    [{"owner": "user", "expected_artifact": str(release_output),
+                      "reason": str(error)}],
+                )
+        else:
+            create_release_delivery_pack(
+                video=output, cover=cover, publishing_copy=publishing_copy,
+                privacy_audit=privacy_report, rights_report=rights_report,
+                publication_authorization=authorization, output_dir=release_output,
+                additional_artifacts=additional,
+                project_root=self.context.root,
+            )
+        return [doctor_path, *artifacts, privacy_report, rights_report,
+                release_output / "release-pack.json"]
+
     def stage_delivery_qa(self) -> None:
         output = self.delivery_qa_output
         if not output.is_file():
@@ -3161,7 +3650,12 @@ class Director:
                              ),
                              "automatic_master": str(self.delivery_output),
                             "manual_finish": self.manual_finish_active})
+        optional_delivery = self._build_optional_delivery_packages(
+            output=output, cover=cover_path, delivery_contract=report,
+            required_evidence=required,
+        )
         self._complete("delivery_qa", [output, cover_path, report, *required,
+                                       *optional_delivery,
                                        *_review_evidence_files(final_review)])
         self.state.update({"status": "complete", "current_stage": None})
         self._save()
@@ -3380,9 +3874,130 @@ def authorize_final_render(director: Director, authorized_by: str) -> Path:
     return path
 
 
+_CORRECTION_PROPERTIES = {
+    "approve": "approved",
+    "reject": "approved",
+    "move": "position",
+    "resize": "scale",
+    "hide": "visible",
+    "change_variant": "variant",
+    "change_anchor": "anchor",
+    "change_sfx": "sfx",
+    "request_regeneration": "regeneration_requested",
+}
+
+
+def apply_review_correction(
+    director: Director, proposal_path: Path, *, approved_by: str,
+) -> Path:
+    """Approve one pending browser proposal into the auditable correction ledger."""
+    approver = approved_by.strip()
+    if not approver:
+        raise DirectorContractError("approved_by is required")
+    proposal_path = proposal_path.resolve()
+    project_root = director.context.root.resolve()
+    if not proposal_path.is_relative_to(project_root) or not proposal_path.is_file():
+        raise DirectorContractError("correction proposal must be inside the project")
+    proposal = read_json(proposal_path)
+    if proposal.get("status") != "pending" or proposal.get("applied") is not False:
+        raise DirectorContractError("correction proposal is not pending")
+    action = str(proposal.get("action") or "")
+    if action not in _CORRECTION_PROPERTIES:
+        raise DirectorContractError("correction proposal action is unsupported")
+    target = Path(str(proposal.get("target_path") or "")).resolve()
+    if not target.is_relative_to(project_root) or not target.is_file():
+        raise DirectorContractError("correction target must be an existing project file")
+    if proposal.get("target_sha256") != sha256_file(target):
+        raise DirectorContractError("correction target hash is stale")
+    related_files: list[Path] = []
+    for index, row in enumerate(proposal.get("related_files") or []):
+        path = Path(str((row or {}).get("path") or "")).resolve()
+        if not path.is_relative_to(project_root) or not path.is_file():
+            raise DirectorContractError(f"correction related_files[{index}] is invalid")
+        if (row or {}).get("sha256") != sha256_file(path):
+            raise DirectorContractError(f"correction related_files[{index}] hash is stale")
+        related_files.append(path)
+    if not related_files:
+        raise DirectorContractError("correction proposal requires related file hashes")
+    ledger_path = director.manual_finish_dir / "correction-ledger.json"
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    if not ledger_path.is_file():
+        new_ledger(ledger_path, project_root=project_root)
+    correction = append_correction(
+        ledger_path,
+        event_id=str(proposal.get("event_id") or "").strip(),
+        target_file=target,
+        selector=str(proposal.get("selector") or "").strip() or None,
+        property_name=_CORRECTION_PROPERTIES[action],
+        before_value=proposal.get("before_value"),
+        after_value=proposal.get("after_value"),
+        reason=str(proposal.get("reason") or "").strip(),
+        approved_by=approver,
+        approved_at=utc_now(),
+        related_files=related_files,
+    )
+    proposal.update({
+        "status": "applied", "applied": True,
+        "approved_by": approver, "approved_at": correction["approved_at"],
+        "correction_id": correction["correction_id"],
+        "ledger": str(ledger_path), "ledger_sha256": sha256_file(ledger_path),
+    })
+    learning = director.project.get("preferences", {}).get("learning", {})
+    if learning.get("enabled") is True:
+        scope = str(learning.get("default_scope") or "video")
+        report = build_preference_candidates(
+            validate_ledger(ledger_path),
+            video_id=str(director.project.get("video_id") or project_root.name),
+            scope=scope,
+            scope_key=(
+                str(learning.get("scope_key") or "").strip() or None
+            ),
+            cross_project_approved_by=(
+                str(learning.get("cross_project_approved_by") or "").strip() or None
+            ),
+        )
+        minimum = int(learning.get("minimum_samples", 2))
+        for candidate in report["candidates"]:
+            candidate["minimum_samples"] = minimum
+            candidate["eligible_for_approval"] = candidate["sample_count"] >= minimum
+        candidate_path = director.root / "preferences" / "preference-candidates.json"
+        write_preference_candidates(candidate_path, report)
+        proposal["preference_candidates"] = str(candidate_path)
+        proposal["preference_candidates_sha256"] = sha256_file(candidate_path)
+    write_json(proposal_path, proposal)
+    invalidation_path = director.root / "event-correction-invalidation.json"
+    write_json(invalidation_path, {
+        "schema_version": 1,
+        "event_id": correction["event_id"],
+        "action": action,
+        "correction_id": correction["correction_id"],
+        "target_sha256": sha256_file(target),
+        "invalidated_stage": "audio" if action == "change_sfx" else "full_hyperframes_storyboard",
+        "event_level_cache_must_recompute": True,
+    })
+    reset_stage(
+        director.state_path,
+        "audio" if action == "change_sfx" else "full_hyperframes_storyboard",
+    )
+    director.action_path.unlink(missing_ok=True)
+    return ledger_path
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
+    init = sub.add_parser("init-project", help="initialize a project without overwriting")
+    init.add_argument("--root", required=True)
+    init.add_argument("--video-id", required=True)
+    init.add_argument("--source", default=".")
+    init.add_argument("--preset", choices=sorted(PROJECT_PRESETS), default="auto")
+    init.add_argument("--title")
+    init.add_argument("--profile")
+    doctor = sub.add_parser("doctor", help="inspect the local toolchain without changing it")
+    doctor.add_argument("--out")
+    preflight = sub.add_parser("preflight", help="inspect one project without changing it")
+    preflight.add_argument("--project", required=True)
+    preflight.add_argument("--out")
     run = sub.add_parser("run", help="run or resume the workflow")
     run.add_argument("--project", required=True)
     run.add_argument("--resume", action="store_true", help="document intent; completed stages are always resumed")
@@ -3417,6 +4032,16 @@ def parser() -> argparse.ArgumentParser:
     review = sub.add_parser("review", help="generate a local read-only Director evidence dashboard")
     review.add_argument("--project", required=True)
     review.add_argument("--output")
+    review.add_argument("--interactive", action="store_true",
+                        help="serve the optional localhost-only proposal API")
+    review.add_argument("--host")
+    review.add_argument("--port", type=int)
+    apply_correction_command = sub.add_parser(
+        "apply-correction", help="approve one pending review proposal into the correction ledger",
+    )
+    apply_correction_command.add_argument("--project", required=True)
+    apply_correction_command.add_argument("--proposal", required=True)
+    apply_correction_command.add_argument("--approved-by", required=True)
     metrics = sub.add_parser("import-metrics", help="import a user-exported platform metrics file")
     metrics.add_argument("--project", required=True)
     metrics.add_argument("--input", required=True)
@@ -3428,6 +4053,25 @@ def parser() -> argparse.ArgumentParser:
 
 
 def _dispatch(args: argparse.Namespace) -> int:
+    if args.command == "init-project":
+        project_file = initialize_project(
+            args.root, args.video_id, args.source, preset=args.preset,
+            title=args.title, profile=args.profile,
+        )
+        print(project_file)
+        return 0
+    if args.command == "doctor":
+        report = run_doctor()
+        if args.out:
+            write_json(Path(args.out), report)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report.get("ok") else 2
+    if args.command == "preflight":
+        report = run_preflight(args.project)
+        if args.out:
+            write_json(Path(args.out), report)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report.get("ok") else 2
     deliver = args.command == "deliver"
     director = Director(Path(args.project),
                         approve_final_render=getattr(args, "approve_final_render", False) or deliver,
@@ -3439,9 +4083,36 @@ def _dispatch(args: argparse.Namespace) -> int:
         configured = director.project.get("review", {}).get("dashboard", {})
         if configured.get("enabled", True) is not True:
             raise DirectorContractError("review.dashboard.enabled must be true")
+        interactive = director.project.get("review", {}).get("interactive", {})
+        if args.interactive and interactive.get("enabled") is not True:
+            raise DirectorContractError("review.interactive.enabled must be true")
         output = Path(args.output).resolve() if args.output else director.root / "review" / "index.html"
-        print(generate_dashboard(
+        dashboard = generate_dashboard(
             project_root=director.context.root, director_root=director.root, output=output,
+        )
+        print(dashboard)
+        if args.interactive:
+            host = args.host or str(interactive.get("host") or "127.0.0.1")
+            port = args.port if args.port is not None else int(interactive.get("port", 8765))
+            config = ReviewServerConfig(
+                root=director.context.root,
+                proposal_dir=director.root / "review" / "proposals",
+                auth_token=os.environ.get("DIRECTOR_REVIEW_TOKEN", ""),
+                csrf_token=os.environ.get("DIRECTOR_REVIEW_CSRF_TOKEN", ""),
+                max_body_bytes=int(interactive.get("max_body_bytes", 64 * 1024)),
+            )
+            server = create_review_server(config, host=host, port=port)
+            print(f"http://{host}:{server.server_port}")
+            try:
+                server.serve_forever()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                server.server_close()
+        return 0
+    if args.command == "apply-correction":
+        print(apply_review_correction(
+            director, Path(args.proposal), approved_by=args.approved_by,
         ))
         return 0
     if args.command == "reset-stage":
@@ -3461,8 +4132,75 @@ def _dispatch(args: argparse.Namespace) -> int:
         configured = director.project.get("feedback", {}).get("metrics_import", {})
         if configured.get("enabled") is not True:
             raise DirectorContractError("feedback.metrics_import.enabled must be true")
-        output = Path(args.out).resolve() if args.out else director.root / "post-publish-metrics.json"
-        import_post_publish_metrics(Path(args.input), output)
+        learning = director.project.get("feedback", {}).get("learning_loop", {})
+        source = Path(args.input).resolve()
+        if learning.get("enabled") is not True:
+            output = Path(args.out).resolve() if args.out else director.root / "post-publish-metrics.json"
+            import_post_publish_metrics(source, output)
+            print(output)
+            return 0
+        release_dir = director._optional_project_path(
+            director.project.get("delivery", {}).get("release_pack", {}).get("output_dir")
+            or "exports/release-pack"
+        )
+        release_manifest = release_dir / "release-pack.json" if release_dir else None
+        storyboard = director.full_hyperframes_project / "storyboard.json"
+        delivery_contract = director.root / "delivery-contract.json"
+        required = [path for path in (release_manifest, storyboard, delivery_contract) if path]
+        if len(required) != 3 or any(not path.is_file() for path in required):
+            raise DirectorContractError(
+                "feedback learning requires the exact release manifest, storyboard, and delivery contract"
+            )
+        assert release_manifest is not None
+        release = read_json(release_manifest)
+        bindings = release.get("release_bindings") or {}
+        publication = release.get("publication") or {}
+        binding = {
+            "publication_id": str(publication.get("id") or ""),
+            "release_manifest_sha256": sha256_file(release_manifest),
+            "video_sha256": str(bindings.get("video_sha256") or ""),
+            "cover_sha256": str(bindings.get("cover_sha256") or ""),
+            "publishing_copy_sha256": str(bindings.get("copy_sha256") or ""),
+            "motion_structure_sha256": sha256_file(storyboard),
+            "version_id": sha256_file(delivery_contract)[:16],
+        }
+        snapshots_dir = director.root / "feedback" / "snapshots"
+        snapshots_dir.mkdir(parents=True, exist_ok=True)
+        source_hash = sha256_file(source)
+        for existing in snapshots_dir.glob("*.json"):
+            try:
+                if read_json(existing).get("source_sha256") == source_hash:
+                    raise DirectorContractError("this exported metrics file was already imported")
+            except json.JSONDecodeError:
+                continue
+        output = (
+            Path(args.out).resolve() if args.out
+            else snapshots_dir / f"{source_hash[:20]}.json"
+        )
+        if not output.is_relative_to(snapshots_dir.resolve()):
+            raise DirectorContractError(
+                "feedback learning snapshot output must remain in the project feedback/snapshots directory"
+            )
+        import_post_publish_metrics(source, output, binding=binding)
+        snapshots = sorted(snapshots_dir.glob("*.json"))
+        analysis_path = director.root / "feedback" / "analysis.json"
+        minimum = int(learning.get("minimum_snapshots", 2))
+        if len(snapshots) >= minimum:
+            analyze_feedback_snapshots(
+                snapshots, analysis_path,
+                min_views=int(learning.get("minimum_views", 200)),
+                min_elapsed_hours=float(learning.get("minimum_elapsed_hours", 24.0)),
+            )
+        else:
+            write_json(analysis_path, {
+                "schema": "content-preserving-video-editor/feedback-loop",
+                "schema_version": 1,
+                "status": "insufficient_evidence",
+                "snapshots_collected": len(snapshots),
+                "minimum_snapshots": minimum,
+                "preference_candidates": [],
+                "automatic_changes": [],
+            })
         print(output)
         return 0
     return director.run(getattr(args, "until", None))
@@ -3471,8 +4209,10 @@ def _dispatch(args: argparse.Namespace) -> int:
 def main() -> int:
     args = parser().parse_args()
     try:
-        # One CLI command owns the project transaction. This prevents concurrent
-        # run/reset/approve processes from losing stage transitions.
+        if args.command in {"init-project", "doctor", "preflight"}:
+            return _dispatch(args)
+        # One mutating CLI command owns the project transaction. This prevents
+        # concurrent run/reset/approve processes from losing stage transitions.
         with exclusive_file_lock(Path(args.project).resolve(), stale_seconds=24 * 3600):
             return _dispatch(args)
     except (OSError, ValueError, KeyError, json.JSONDecodeError, yaml_error()) as error:

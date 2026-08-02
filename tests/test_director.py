@@ -281,6 +281,44 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(director.state["stages"]["provider_governance"]["status"], "complete")
         self.assertEqual(json.loads(ledger.read_text(encoding="utf-8"))["totals"]["actual"], 0.0)
 
+    def test_enabled_semantic_confidence_is_a_real_hash_bound_director_gate(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["analysis"] = {"semantic_confidence": {
+            "enabled": True, "low_confidence_threshold": 0.7,
+        }}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        frame = director.root / "evidence" / "frame.png"
+        frame.parent.mkdir(parents=True)
+        frame.write_bytes(b"frame")
+        candidate = {
+            "event_id": "event-1", "anchor": "request validation path",
+            "raw_word_ids": ["w1"], "raw_quote": "request validation path",
+            "source_timing": {"start": 1.0, "end": 2.0},
+            "output_timing": {"start": 1.0, "end": 2.0},
+            "frame_evidence": [{"path": str(frame), "sha256": sha256_file(frame),
+                                "timestamp": 1.5}],
+            "anchor_specificity": 0.9, "claim_grounding": 0.9,
+            "explanatory_value": 0.9, "asr_confidence": 0.9,
+            "term_confidence": 0.9, "caption_duplication": 0.1,
+            "motion_duplication": 0.0, "ip_duplication": 0.0,
+            "counterexamples": [], "conflicts": [], "semantic_effect": "emphasis",
+        }
+        director._start("semantic_brief")
+        artifacts = director._semantic_confidence_gate({
+            "events": [{"id": "event-1", "treatment": "structure"}],
+            "confidence_candidates": [candidate],
+        })
+        report = json.loads(artifacts[0].read_text(encoding="utf-8"))
+        self.assertEqual(report["status"], "pass")
+        self.assertFalse(report["semantic_deletion_authority"])
+        frame.write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "hash is stale"):
+            director._semantic_confidence_gate({
+                "events": [{"id": "event-1", "treatment": "structure"}],
+                "confidence_candidates": [candidate],
+            })
+
     def test_metered_provider_call_reconciles_real_production_wrapper(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["provider_governance"] = {"enabled": True, "mode": "cap",
@@ -1391,6 +1429,11 @@ class DirectorTests(unittest.TestCase):
         output = director.root / "render" / "full-hyperframes.mp4"
 
         def fake_pipeline(config, root, cache, status_path, stop_after):
+            stage = config["stages"][0]
+            self.assertEqual(len(stage["atomic_outputs"]), 1)
+            self.assertNotEqual(stage["atomic_outputs"][0]["working"],
+                                stage["atomic_outputs"][0]["final"])
+            self.assertIn(stage["atomic_outputs"][0]["working"], stage["partial_outputs"])
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(b"render")
             status_path.write_text(json.dumps({"state": "completed"}), encoding="utf-8")
@@ -1402,6 +1445,85 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(run.call_count, 1)
         self.assertIn(str(director.root / "render-cache-status.json"),
                       director.state["stages"]["final_render"]["artifacts"])
+
+    def test_event_render_cache_is_used_only_with_explicit_hyperframes_contract(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["render"] = {"cache": {"enabled": True, "event_level": {
+            "enabled": True, "fallback_to_full_render": True,
+        }}}
+        config["provider_governance"] = {"providers": {
+            task: [{"name": f"local-{task}", "available": True, "task_fit": 1.0,
+                    "incremental_cost": 0.0, "cost_basis": "test local provider",
+                    "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.0,
+                    "failure_incremental_cost": 0.0}]
+            for task in ("sfx", "bgm")
+        }}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project, approve_final_render=True, execute_external=True)
+        director._start("provider_governance"); director.stage_provider_governance()
+        self._write_full_hyperframes_contract(director)
+        director._start("full_hyperframes_storyboard")
+        director.stage_full_hyperframes_storyboard()
+        self._pass_full_hyperframes_qa(director)
+        authorize_final_render(Director(self.project), "tester")
+        director = Director(self.project, approve_final_render=True, execute_external=True)
+
+        def fake_event_render(**kwargs):
+            output = Path(kwargs["output"])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"event-render")
+            return {"schema_version": 1, "mode": "hyperframes_event_cache",
+                    "fingerprints": {}, "output_sha256": sha256_file(output)}
+
+        director._start("final_render")
+        with patch("director.execute_event_render_pipeline", side_effect=fake_event_render) as event_run, \
+             patch("director.run_cached_pipeline") as full_run:
+            director.stage_final_render()
+        self.assertEqual(event_run.call_count, 1)
+        full_run.assert_not_called()
+        receipt = json.loads((director.root / "final-render-receipt.json")
+                             .read_text(encoding="utf-8"))
+        self.assertEqual(receipt["execution_mode"], "hyperframes_event_cache")
+
+    def test_event_render_cache_safely_falls_back_to_full_hyperframes_render(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["render"] = {"cache": {"enabled": True, "event_level": {
+            "enabled": True, "fallback_to_full_render": True,
+        }}}
+        config["provider_governance"] = {"providers": {
+            task: [{"name": f"local-{task}", "available": True, "task_fit": 1.0,
+                    "incremental_cost": 0.0, "cost_basis": "test local provider",
+                    "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.0,
+                    "failure_incremental_cost": 0.0}]
+            for task in ("sfx", "bgm")
+        }}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project, approve_final_render=True, execute_external=True)
+        director._start("provider_governance"); director.stage_provider_governance()
+        self._write_full_hyperframes_contract(director)
+        director._start("full_hyperframes_storyboard")
+        director.stage_full_hyperframes_storyboard()
+        self._pass_full_hyperframes_qa(director)
+        authorize_final_render(Director(self.project), "tester")
+        director = Director(self.project, approve_final_render=True, execute_external=True)
+        output = director.root / "render" / "full-hyperframes.mp4"
+
+        def fake_full(config, root, cache, status_path, stop_after):
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"full-render")
+            status_path.write_text(json.dumps({"state": "completed"}), encoding="utf-8")
+            return {"state": "completed"}
+
+        director._start("final_render")
+        with patch("director.execute_event_render_pipeline",
+                   side_effect=__import__("event_render_pipeline").EventRenderUnavailable(
+                       "missing event commands")), \
+             patch("director.run_cached_pipeline", side_effect=fake_full):
+            director.stage_final_render()
+        fallback = json.loads((director.root / "event-render-cache-fallback.json")
+                              .read_text(encoding="utf-8"))
+        self.assertEqual(fallback["status"], "fallback_full_render")
+        self.assertTrue(fallback["no_ffmpeg_or_static_motion_substitute"])
 
     def test_cover_likeness_waits_as_action_required_instead_of_failing(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
@@ -1466,6 +1588,56 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(director.state["stages"]["delivery_qa"]["status"], "action_required")
         packet = json.loads(director.action_path.read_text(encoding="utf-8"))
         self.assertEqual(packet["actions"][0]["owner"], "user")
+
+    def test_optional_portable_audit_bundle_is_director_integrated_and_relocatable(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config.setdefault("delivery", {})["audit_bundle"] = {
+            "enabled": True, "output_dir": "work/director/portable-audit-bundle",
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        contract = director.root / "delivery-contract.json"
+        contract.parent.mkdir(parents=True, exist_ok=True)
+        contract.write_text(json.dumps({"status": "pass", "project": str(self.root)}),
+                            encoding="utf-8")
+        output = director.context.exports_dir / "video.mp4"
+        cover = director.context.exports_dir / "cover.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"video")
+        cover.write_bytes(b"cover")
+        artifacts = director._build_optional_delivery_packages(
+            output=output, cover=cover, delivery_contract=contract,
+            required_evidence=[contract],
+        )
+        manifest = next(path for path in artifacts if path.name == "audit-bundle.json")
+        self.assertTrue(manifest.is_file())
+        verification = json.loads((director.root / "portable-audit-verification.json")
+                                  .read_text(encoding="utf-8"))
+        self.assertEqual(verification["status"], "pass")
+        bundled_contract = manifest.parent / "artifacts" / contract.relative_to(self.root)
+        self.assertNotIn(str(self.root), bundled_contract.read_text(encoding="utf-8"))
+
+    def test_portable_audit_bundle_rejects_output_outside_project_root(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config.setdefault("delivery", {})["audit_bundle"] = {
+            "enabled": True,
+            "output_dir": str(self.root.parent / "outside-audit-bundle"),
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        contract = director.root / "delivery-contract.json"
+        contract.parent.mkdir(parents=True, exist_ok=True)
+        contract.write_text("{}", encoding="utf-8")
+        output = director.context.exports_dir / "video.mp4"
+        cover = director.context.exports_dir / "cover.png"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"video")
+        cover.write_bytes(b"cover")
+        with self.assertRaisesRegex(DirectorContractError, "inside the project root"):
+            director._build_optional_delivery_packages(
+                output=output, cover=cover, delivery_contract=contract,
+                required_evidence=[contract],
+            )
 
     def test_platform_validation_generates_two_reports_for_same_universal_bytes(self) -> None:
         director = Director(self.project, execute_external=True)

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "purpose": "portable local Director interface; no provider credentials or private paths",
+  "runtime": {
+    "python": ">=3.11,<3.14",
+    "node": ">=18,<25",
+    "ffmpeg": ">=5,<9",
+    "ffprobe": ">=5,<9"
+  },
+  "python_dependencies": "requirements.txt",
+  "interfaces": {
+    "director_artifacts": "schema-v9 JSON/YAML contracts",
+    "video_use": "external Skill; word transcript, EDL, captions, edit correctness",
+    "hyperframes": "five external Skills plus adapter_contract_v1; never vendored",
+    "opencut_openmontage_other_nle": "optional human-only handoff; no API/CLI/headless claim"
+  },
+  "optional_providers": "disabled unless explicitly configured and governed",
+  "installation_policy": "doctor and preflight never install, upgrade, download models, or print secret values"
+}

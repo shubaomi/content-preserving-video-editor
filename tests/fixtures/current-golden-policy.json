@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "suite_version": "2026.08-p0p1p2",
+  "max_age_days": 45,
+  "required_checks": [
+    "caption_timing_and_sentence_segmentation",
+    "content_preservation",
+    "semantic_relevance",
+    "keyword_and_form_repetition",
+    "geometry_occlusion_crop_whitespace",
+    "sfx_audibility_and_repetition",
+    "bgm_speech_loudness",
+    "studio_render_parity",
+    "manual_correction_cost",
+    "hyperframes_route",
+    "asr_route"
+  ],
+  "human_boundaries": [
+    "aesthetic approval",
+    "real-person likeness approval",
+    "platform performance"
+  ]
+}

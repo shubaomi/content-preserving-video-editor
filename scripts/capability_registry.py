@@ -12,12 +12,14 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 
 CAPABILITY_LEVELS = (
+    "policy_only",
     "documented",
     "utility_implemented",
     "director_integrated",
@@ -65,6 +67,14 @@ def _capability(
 
 
 _REGISTRY = (
+    _capability("project_initializer", "director", dependencies=["ffprobe"],
+                inputs=["source_video", "preset", "optional_profile"],
+                outputs=["project.yaml", "initialization-manifest.json", "INITIALIZATION.md"],
+                maturity="fixture_validated", failure_fallback="action_required"),
+    _capability("doctor_preflight", "director", dependencies=[],
+                inputs=["toolchain", "optional_project"],
+                outputs=["doctor-report.json", "preflight-report.json"],
+                maturity="fixture_validated", failure_fallback="report_unavailable_only"),
     _capability("input_mode_analysis", "director", dependencies=["ffprobe"],
                 inputs=["source_video"], outputs=["input-mode-evidence.json"], optional=False,
                 maturity="director_integrated", failure_fallback="select_preserve"),
@@ -96,6 +106,10 @@ _REGISTRY = (
     _capability("semantic_visual_plan", "director_with_llm", dependencies=["word_transcript", "evidence_bundle"],
                 inputs=["word_transcript", "evidence_bundle"], outputs=["semantic-brief.json"],
                 optional=False, maturity="director_integrated", failure_fallback="action_required"),
+    _capability("semantic_confidence", "director", dependencies=["semantic_visual_plan"],
+                inputs=["word_ids", "screen_evidence", "counterexamples", "asr_confidence"],
+                outputs=["semantic-confidence.json"], maturity="fixture_validated",
+                failure_fallback="caption_only_or_action_required"),
     _capability("production_contract", "director", dependencies=[],
                 inputs=["source_video", "word_transcript", "edl", "semantic_brief"],
                 outputs=["production-contract.json"], optional=False,
@@ -123,6 +137,10 @@ _REGISTRY = (
     _capability("review_dashboard", "director", dependencies=[],
                 inputs=["director_artifacts"], outputs=["review/index.html"],
                 maturity="director_integrated", failure_fallback="record_unavailable_and_continue"),
+    _capability("interactive_review", "director", dependencies=["localhost_http"],
+                inputs=["hash_bound_artifacts", "explicit_auth_and_csrf"],
+                outputs=["pending-proposals", "correction-ledger.json"],
+                maturity="fixture_validated", failure_fallback="read_only_dashboard"),
     _capability("clip_factory", "director", dependencies=["video-use", "HyperFrames", "ffmpeg"],
                 inputs=["word_transcript", "edl", "semantic_brief", "production_contract"],
                 outputs=["clip-factory-manifest.json"], maturity="director_integrated"),
@@ -155,6 +173,10 @@ _REGISTRY = (
                 inputs=["identity_references", "semantic_cover_direction", "supporting_assets"],
                 outputs=["cover-editorial-plan.json", "cover-manifest.json", "cover-qa.json"],
                 maturity="director_integrated", failure_fallback="action_required"),
+    _capability("cover_reference_pack", "director", dependencies=["authorized_private_photos"],
+                inputs=["reference_manifest", "semantic_cover_direction"],
+                outputs=["cover-reference-selection.json", "cover-reference-candidate-specs.json"],
+                maturity="fixture_validated", failure_fallback="action_required"),
     _capability("bgm_pipeline", "director", dependencies=["media-use_optional", "MiniMax_optional", "MusicGen_optional"],
                 inputs=["semantic_chapters", "authorized_audio_assets"], outputs=["bgm-stem.wav", "bgm-provenance.json"],
                 maturity="director_integrated"),
@@ -172,12 +194,19 @@ _REGISTRY = (
     _capability("render_cache", "director", dependencies=["filesystem"],
                 inputs=["render_inputs", "dependency_signature"], outputs=["render-cache-status.json"],
                 maturity="director_integrated", failure_fallback="clean_rebuild"),
+    _capability("event_render_cache", "hyperframes", dependencies=["HyperFrames", "filesystem"],
+                inputs=["event_render_commands", "equivalence_evidence", "ordered_segment_hashes"],
+                outputs=["event-render-cache-report.json", "universal_motion_render"],
+                maturity="fixture_validated", failure_fallback="full_hyperframes_render"),
     _capability("manual_finish_handoff", "human-editor", dependencies=[],
                 inputs=["automatic_master", "editable_assets"], outputs=["handoff-manifest.json"],
                 maturity="director_integrated", failure_fallback="action_required"),
     _capability("motion_preferences", "director", dependencies=["correction-ledger.json"],
                 inputs=["approved_corrections"], outputs=["motion-preferences.json"],
                 maturity="director_integrated"),
+    _capability("preference_learning", "director", dependencies=["correction-ledger.json"],
+                inputs=["explicitly_approved_corrections"], outputs=["preference-candidates.json"],
+                maturity="fixture_validated", failure_fallback="never_auto_apply"),
     _capability("hook_pacing", "director", dependencies=["word_transcript", "representative_frames"],
                 inputs=["word_transcript", "chapters"], outputs=["hook-pacing-audit.json"],
                 maturity="director_integrated"),
@@ -201,6 +230,17 @@ _REGISTRY = (
                 inputs=["visual_beat_plan", "react_brand_components"], outputs=["motion-render.mov"], maturity="director_integrated"),
     _capability("post_publish_metrics", "director", dependencies=[],
                 inputs=["user_imported_metrics"], outputs=["post-publish-metrics.json"], maturity="director_integrated"),
+    _capability("feedback_learning_loop", "director", dependencies=["release_delivery_pack"],
+                inputs=["multiple_hash_bound_metric_snapshots"], outputs=["feedback/analysis.json"],
+                maturity="fixture_validated", failure_fallback="collect_more_evidence"),
+    _capability("portable_audit_bundle", "director", dependencies=[],
+                inputs=["configuration", "state", "logs", "non_sensitive_diagnostics"],
+                outputs=["portable-audit-bundle/audit-bundle.json"],
+                maturity="fixture_validated", failure_fallback="action_required"),
+    _capability("release_delivery_pack", "director", dependencies=["privacy_review", "rights_review"],
+                inputs=["universal_mp4", "cover", "publishing_copy", "publication_authorization"],
+                outputs=["release-pack/release-pack.json"], maturity="fixture_validated",
+                failure_fallback="action_required"),
     _capability("media_catalog", "media-use", dependencies=["media-use_optional", "HyperFrames_Catalog_optional"],
                 inputs=["evidence_backed_asset_requests"], outputs=["catalog-results.json"],
                 maturity="director_integrated"),
@@ -236,6 +276,14 @@ _CANONICAL_CONFIG_PATHS = {
     "visual_dynamics_qa": ("qa", "visual_dynamics"),
     "editorial_regression": ("editorial_regression",),
     "review_dashboard": ("review", "dashboard"),
+    "interactive_review": ("review", "interactive"),
+    "semantic_confidence": ("analysis", "semantic_confidence"),
+    "event_render_cache": ("render", "cache", "event_level"),
+    "cover_reference_pack": ("cover", "reference_pack"),
+    "preference_learning": ("preferences", "learning"),
+    "feedback_learning_loop": ("feedback", "learning_loop"),
+    "portable_audit_bundle": ("delivery", "audit_bundle"),
+    "release_delivery_pack": ("delivery", "release_pack"),
     "clip_factory": ("derived_content", "clip_factory"),
     "podcast_pipeline": ("derived_content", "podcast"),
     "localization_pipeline": ("derived_content", "localization"),
@@ -347,6 +395,12 @@ def build_toolchain_report(*, probe_versions: bool = False) -> dict[str, Any]:
         "update_policy": "never_silent",
         "runtime": {"python": platform.python_version(), "platform": platform.platform()},
         "tools": {
+            "python": {
+                "available": bool(sys.executable and Path(sys.executable).is_file()),
+                "path": str(Path(sys.executable).resolve()),
+                "constraint": ">=3.11",
+                "version": platform.python_version(),
+            },
             "ffmpeg": _tool("ffmpeg", ["-version"], ">=5", probe_version=probe_versions),
             "ffprobe": _tool("ffprobe", ["-version"], ">=5", probe_version=probe_versions),
             "hyperframes": {
@@ -354,6 +408,7 @@ def build_toolchain_report(*, probe_versions: bool = False) -> dict[str, Any]:
                 "invocation_fallback": "npx hyperframes",
             },
             "npx": _tool("npx", ["--version"], ">=8", probe_version=probe_versions),
+            "npm": _tool("npm", ["--version"], ">=8", probe_version=probe_versions),
             "node": _tool("node", ["--version"], ">=18", probe_version=probe_versions),
         },
         "skill_roots": {

@@ -10,6 +10,7 @@ ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from test_acceptance_report import (  # noqa: E402
+    REQUIRED_TEST_CASES,
     REQUIRED_TEST_IDS,
     source_tree_sha256,
     validate_report,
@@ -22,9 +23,9 @@ class TestAcceptanceReportTests(unittest.TestCase):
     def _result_lines(*, statuses: dict[str, str] | None = None) -> list[str]:
         statuses = statuses or {}
         return [
-            f"{test_id} (test_acceptance.AcceptanceTests.{test_id}) ... "
+            f"{test_id} ({test_case}) ... "
             f"{statuses.get(test_id, 'ok')}"
-            for test_id in REQUIRED_TEST_IDS
+            for test_id, test_case in zip(REQUIRED_TEST_IDS, REQUIRED_TEST_CASES)
         ]
 
     @classmethod
@@ -96,6 +97,83 @@ class TestAcceptanceReportTests(unittest.TestCase):
             report["test_count"] = int(report["test_count"]) + 1
 
             self.assertTrue(validate_report(report, root))
+
+    def test_receipt_uses_portable_paths_and_sanitizes_machine_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = self._source_root(folder)
+            raw_log = "\n".join([
+                f"diagnostic repository={root}",
+                r"diagnostic private=C:\Users\person\secret\token.txt",
+                r"diagnostic unc=\\server\share\private\token.txt",
+                r"diagnostic device=\\?\C:\private\token.txt",
+                "diagnostic unix=/tmp/private/token.txt",
+                "diagnostic mac=/private/var/folders/private/token.txt",
+                "Authorization: Bearer abc.def.secret",
+                "api_key=private-value",
+                "DIRECTOR_REVIEW_TOKEN=review-value",
+                "OPENAI_API_KEY=openai-value",
+                "AWS_SECRET_ACCESS_KEY=aws-value",
+                self._successful_log(),
+            ])
+
+            report = self._write(root, raw_log)
+            stored_log = (root / str(report["log"])).read_text(encoding="utf-8")
+            serialized_report = (root / "receipt.json").read_text(encoding="utf-8")
+
+            self.assertEqual(report["log"], "receipt.log")
+            self.assertEqual(report["runner_implementation"],
+                             "scripts/test_acceptance_report.py")
+            self.assertEqual(report["command"][0], "python")
+            self.assertNotIn(str(root), stored_log)
+            self.assertNotIn(r"C:\Users\person", stored_log)
+            self.assertNotIn(r"\\server\share", stored_log)
+            self.assertNotIn("/tmp/private", stored_log)
+            self.assertNotIn("abc.def.secret", stored_log)
+            self.assertNotIn("private-value", stored_log)
+            self.assertNotIn("review-value", stored_log)
+            self.assertNotIn("openai-value", stored_log)
+            self.assertNotIn("aws-value", stored_log)
+            self.assertNotIn(str(root), serialized_report)
+            self.assertEqual(validate_report(report, root), [])
+
+    def test_validation_rejects_absolute_or_escaping_log_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = self._source_root(folder)
+            report = self._write(root, self._successful_log())
+
+            report["log"] = str((root / "receipt.log").resolve())
+            self.assertTrue(validate_report(report, root))
+            report["log"] = "../receipt.log"
+            self.assertTrue(validate_report(report, root))
+
+    def test_required_test_names_cannot_be_satisfied_by_other_test_cases(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = self._source_root(folder)
+            impostor = "\n".join([
+                *(f"{test_id} (impostor.Case.{test_id}) ... ok"
+                  for test_id in REQUIRED_TEST_IDS),
+                f"Ran {len(REQUIRED_TEST_IDS)} tests in 0.001s",
+                "",
+                "OK",
+            ])
+
+            report = self._write(root, impostor)
+
+            self.assertFalse(report["passed"])
+            self.assertTrue(validate_report(report, root))
+
+    def test_receipt_rejects_output_inside_hashed_source_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = self._source_root(folder)
+
+            with self.assertRaisesRegex(ValueError, "scripts/ or tests"):
+                write_report_from_output(
+                    root,
+                    self._successful_log(),
+                    root / "tests" / "receipt.json",
+                    root / "tests" / "receipt.log",
+                    returncode=0,
+                )
 
     def test_skips_and_failures_are_taken_from_bound_log(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

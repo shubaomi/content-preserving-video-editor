@@ -1,0 +1,541 @@
+{
+  "schema_version": 1,
+  "suite_version": "2026.08-p0p1p2",
+  "generated_at": "2026-08-02T16:43:25.493569+00:00",
+  "status": "pass",
+  "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
+  "source": {
+    "path": "tests/fixtures/acceptance-scenarios.json",
+    "sha256": "de8caaed91228f242f12000c8096e38489b11d6a76e2258cc1952600a125caa7"
+  },
+  "policy": {
+    "path": "tests/fixtures/current-golden-policy.json",
+    "sha256": "03c15683bbea8954b24d786a5acf866493013b29b19c2192613e44988071cd2b"
+  },
+  "media_manifest": {
+    "path": "references/validation/six-media-acceptance.json",
+    "sha256": "54f37ccda7b799e612e4d7c99ef0c854cac4c1f244b891c519256e044da8027c",
+    "errors": []
+  },
+  "bindings": {
+    "director_version": "2.3.0",
+    "project_schema_version": 9,
+    "implementation_sha256": {
+      "scripts/current_golden_regression.py": "845a2e76bddc41b4a8dc8fdf7b4d57d66ab90cfcda88aafdeebe23d2ae3377c9",
+      "scripts/director.py": "9b9e6f62b177cee9e40b768c32803c01eae500c25da35837b1086986f8b9c515",
+      "scripts/project_config.py": "85b12ba92f1dd3e8c54d4408f42ee7a5de18f9373a6e7194e45dd337c624fc8d",
+      "scripts/fixture_acceptance.py": "b4a16c49d2b1f0349979114ac88e398548ddf016e1b6ad4d3bc24022e5537236",
+      "scripts/asr_router.py": "2c253511ce375d2ba7e02342d41a55f276e03f554c915eb3e9d7b3b4b94bfb83",
+      "scripts/semantic_confidence.py": "12f0126b6fa44e9821e930a1aa46f5c7644c5d36ec5a8761daa14657a1b49027",
+      "scripts/preview_render_parity.py": "c7927eee89e0adb289bd07a116059d8f41b8815bab967f3bdd76e89296ca78f2",
+      "scripts/audio_qa.py": "c2476b8d4bc67471963f7796023b603b644f4766239e08a5a3626f12372fa3b0",
+      "scripts/ip_production.py": "2591753b2ab6fabf511639a2f570b501810bf1ad25c6dcd97038805f70f86e54",
+      "scripts/cover_quality.py": "d2e411dacd7fb13659a3d5e01d43ff3aaffff53a2a0ad48d0cec6a3b7e36dd7b",
+      "scripts/event_cache.py": "9d8d7dc7d77d2e8d89692f3b288182bc8553496055a6360552852d1b0e31528f",
+      "scripts/event_render_pipeline.py": "95f5c168286192595387762788257ee7d7064d0ec1670ad837618bcace0f6b0a",
+      "scripts/review_server.py": "4d9013e708ada6e25c9d5b619238de9552f817fa1c78b2718203fbb3a2f92d2b",
+      "scripts/cover_reference_pack.py": "113d239fca4ce1408e4c6bb55d67d35f2358f178fb271455507d6d91a92a4dde",
+      "scripts/preference_learning.py": "41d37cd11346f8963e0af04ed251e3318cee1ce7a4a6bcc801e3abb66255f8e6",
+      "scripts/portable_audit_bundle.py": "b8be8ba2e4d550369273b056d5e149ffb0d67b80fc10a333a48f93b9be845435",
+      "scripts/release_delivery_pack.py": "dfb558275cbfe50415faba93e1a9260f3ce617161ebec42da54e5f8767844fa6",
+      "scripts/feedback_loop.py": "f91f19b815f414ce9d01e8e4bc924c8ed2284b4368def180bf82e47834c5a6db",
+      "scripts/representative_short_media.py": "b88769ed4aa32cb435b112b0b1771a4cab45fd9c28c6461532ab2517ab911309"
+    },
+    "fixture_suite_sha256": "78d94a1aa5c37e993c6accedf8561d14b5d1949a5177d83245676feafa3cf2e7"
+  },
+  "cases": [
+    {
+      "id": "screen-16x9",
+      "fixture_type": "landscape_screen_tutorial",
+      "scenario_evidence_sha256": "c6820acf382eea4d346cda9794f7aa35ce025edb1355b2afc29e33f347644ae5",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected general-video"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected local_faster_whisper"
+        }
+      ],
+      "media_evidence": {
+        "media_sha256": "4dd57f17ac8af65e0540c3269cf79339947af53da43a22ccdadd84ab96a996eb",
+        "technical_report_sha256": "0c505b2ddf05aa0ce10f0ee30ee3ae1729f406b7eafcbaea6f2febf532ed998d",
+        "representative_frames": [
+          {
+            "timestamp": null,
+            "sha256": "1036701d17a5029fec88ca879b0dc01dc9f34fd1048607e891ee7620d5b4dc04"
+          },
+          {
+            "timestamp": null,
+            "sha256": "6339ff2a965449b1afe2de264055abd9ac283eb2097361658c54765136e41b13"
+          },
+          {
+            "timestamp": null,
+            "sha256": "6339ff2a965449b1afe2de264055abd9ac283eb2097361658c54765136e41b13"
+          }
+        ],
+        "visual_fingerprint": "59ae7d6d6d59f268e665b9f52de86b4bb3142977c550612d0b0af7e73f2e94ad",
+        "audio_fingerprint": "cb1c953f5c03a9897e44d6e79d13ebd331ff4ab27aa758a7094efd9b3b153836"
+      }
+    },
+    {
+      "id": "talk-9x16",
+      "fixture_type": "portrait_talking_head",
+      "scenario_evidence_sha256": "67e61f884d7603606d1a5e8d8a9879cb7f16440d28eb1524cf3e1ef998fe7050",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected talking-head-recut"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected local_faster_whisper"
+        }
+      ],
+      "media_evidence": {
+        "media_sha256": "2c711f4f93e4ebb3c65369f2a0d7828c9e2fddbba0bd2108e36f2221e531358b",
+        "technical_report_sha256": "067e0b44db510c44e52cc527dd11827cc1dfe0042dab4734fe5397d5edd7b902",
+        "representative_frames": [
+          {
+            "timestamp": null,
+            "sha256": "6112887e676580b1259e13fad2d7695064bc09f95a36570bd1bd1a9228490866"
+          },
+          {
+            "timestamp": null,
+            "sha256": "625105095ffab3e3be93ef029cee83a431dc3720278843c88e8b87c455797779"
+          },
+          {
+            "timestamp": null,
+            "sha256": "625105095ffab3e3be93ef029cee83a431dc3720278843c88e8b87c455797779"
+          }
+        ],
+        "visual_fingerprint": "bb3ec1b5ef12efa98b4336d17911a622de0654928bc0fc06070aa47b50cfbdd2",
+        "audio_fingerprint": "c0ad48727214e5d3334e8b9e31c2fc667d86455a632eb04394ede7861172c882"
+      }
+    },
+    {
+      "id": "polish-existing",
+      "fixture_type": "published_edit_polish",
+      "scenario_evidence_sha256": "cd74ba4d506bb234fc6a3dc7c6ab32e6a95335d766d9ae8ad28d7a4352b74b1e",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected general-video"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected local_faster_whisper"
+        }
+      ],
+      "media_evidence": {
+        "media_sha256": "e83ebb707fe08acdd5a9917e633b85d3f21d0c0fa6f575a280949590e82f1c0f",
+        "technical_report_sha256": "0c36f5d081d5c679c5bdcf80cd766d517b728333961a8a075dd3563c341963fd",
+        "representative_frames": [
+          {
+            "timestamp": null,
+            "sha256": "fc39ec3f13655e1c2ad33f6ea2abf2e53544f1da0f775de7f75d83027c390009"
+          },
+          {
+            "timestamp": null,
+            "sha256": "cff8b16f8ae41a333d6145f85d8c7e7ad5fd2164d453e19d6614864094c317f6"
+          },
+          {
+            "timestamp": null,
+            "sha256": "4d2c7cd2aa584314fc8049a8dd69daeba4b03bfc67038781d20aba1aec0ae703"
+          }
+        ],
+        "visual_fingerprint": "de0c1141e3590289fe394ff2dc06009cee3a32849fdec0abcea7ae4294d09e90",
+        "audio_fingerprint": "fe52f705f1c28a19c05f83e3c849fa4f9e264037e09df3d3db7fdad20a32d7d4"
+      }
+    },
+    {
+      "id": "interview-two",
+      "fixture_type": "two_person_interview",
+      "scenario_evidence_sha256": "72103766466cb6f3168bfa1945ef5fdbef9c5290f747c5778801ab135f90dda4",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected talking-head-recut"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected whisperx"
+        }
+      ],
+      "media_evidence": {
+        "media_sha256": "e69b859b5c55962a76e3bc8ba701a71fe4573fd4ce8e5df8e4027db1a5f9be43",
+        "technical_report_sha256": "8db2a54d22ad525f206d714b5eff577556f454fd56c1889a528fddc2a2d1e116",
+        "representative_frames": [
+          {
+            "timestamp": null,
+            "sha256": "c47843d183bfc81dc7fe0d1d11f8b6190b7997a3f8441cba42c660a3c3e242d2"
+          },
+          {
+            "timestamp": null,
+            "sha256": "1174445baa6087be141d6bd82b535e3698197998dbd4536fb483a391ac756868"
+          },
+          {
+            "timestamp": null,
+            "sha256": "1174445baa6087be141d6bd82b535e3698197998dbd4536fb483a391ac756868"
+          }
+        ],
+        "visual_fingerprint": "7dd19a204e7189883debc4af9f14b4cec735036fa13793ebb7d6cd8194345500",
+        "audio_fingerprint": "6782cd3a8489e3a3cc6434107600a8f7d6aa3783af79cea0d15b76971af09f4f"
+      }
+    },
+    {
+      "id": "noisy-hotwords",
+      "fixture_type": "noisy_audio_hotwords",
+      "scenario_evidence_sha256": "f2fc4d0f54479e0b19bb6c5dced53d875c45f1f47eab5055f2af179656f66b3e",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected general-video"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected funasr"
+        }
+      ],
+      "media_evidence": {
+        "media_sha256": "bd0d72849fe1716cb378d9ac640f3effada0978827931011143b5d968569680b",
+        "technical_report_sha256": "34a3307d5136404eeb4ae6f1b698981b323cb366cdda3d7b221979f0849a601d",
+        "representative_frames": [
+          {
+            "timestamp": null,
+            "sha256": "d3850eb8bdd1f6b33fc816dc6e6e8fce32168a6ed87eb2728ff4b2ca9c83ba10"
+          },
+          {
+            "timestamp": null,
+            "sha256": "7c3958ed20b4bd5094da2ae6fdca84deff0e66d0245af01acf9042bbac6d3665"
+          },
+          {
+            "timestamp": null,
+            "sha256": "7c3958ed20b4bd5094da2ae6fdca84deff0e66d0245af01acf9042bbac6d3665"
+          }
+        ],
+        "visual_fingerprint": "d406e0fb947421beab24b806786756c90d7a45eeb86c0dade6f555806b1296d8",
+        "audio_fingerprint": "f7e2c5d8fc2866e13af6b9d9e42528e3ca1cf1b99ecdb01bd8c222c8e8ae82ae"
+      }
+    },
+    {
+      "id": "screen-camera",
+      "fixture_type": "screen_camera_mixed",
+      "scenario_evidence_sha256": "2e724f45509e330ec64e17b7d2e05b724bd4f00099ca4eefec8e44e4f3307ca8",
+      "checks": [
+        {
+          "name": "caption_timing_and_sentence_segmentation",
+          "status": "pass",
+          "detail": "word alignment, sentence boundaries, and <=120 ms fixture error"
+        },
+        {
+          "name": "content_preservation",
+          "status": "pass",
+          "detail": "tail covered, no unapproved semantic deletion, >=98% coverage"
+        },
+        {
+          "name": "semantic_relevance",
+          "status": "pass",
+          "detail": "every event is evidence-backed and avoids low-information anchors"
+        },
+        {
+          "name": "keyword_and_form_repetition",
+          "status": "pass",
+          "detail": "anchors and structural signatures are distinct"
+        },
+        {
+          "name": "geometry_occlusion_crop_whitespace",
+          "status": "pass",
+          "detail": "no seeded overflow, collision, crop, or excess whitespace"
+        },
+        {
+          "name": "sfx_audibility_and_repetition",
+          "status": "pass",
+          "detail": "all visual events have cue/silence decisions; cues audible and varied"
+        },
+        {
+          "name": "bgm_speech_loudness",
+          "status": "pass",
+          "detail": "speech remains >=8 LU above BGM and true peak is safe"
+        },
+        {
+          "name": "studio_render_parity",
+          "status": "pass",
+          "detail": "representative Studio and render snapshots match within tolerance"
+        },
+        {
+          "name": "manual_correction_cost",
+          "status": "pass",
+          "detail": "fixture needs at most two small corrections and ten minutes"
+        },
+        {
+          "name": "hyperframes_route",
+          "status": "pass",
+          "detail": "selected general-video"
+        },
+        {
+          "name": "asr_route",
+          "status": "pass",
+          "detail": "selected local_faster_whisper"
+        }
+      ],
+      "media_evidence": {
+        "media_sha256": "cb295063b3224b65207175b2ded4b1f79ad314e658fe2e2da9382b98d9ba37b5",
+        "technical_report_sha256": "364006f3b6dddf4d71634967cef7e3e28fb0b0f1d144032b721c7221081376de",
+        "representative_frames": [
+          {
+            "timestamp": null,
+            "sha256": "55da1cd118c7c121caf995e79a9872f77397277da8905b6d18b65bef6696cb23"
+          },
+          {
+            "timestamp": null,
+            "sha256": "f20a1e5da4dffb07e791db0372b2af27fa1069f07e61957587ce36012dd28735"
+          },
+          {
+            "timestamp": null,
+            "sha256": "f20a1e5da4dffb07e791db0372b2af27fa1069f07e61957587ce36012dd28735"
+          }
+        ],
+        "visual_fingerprint": "6e3936185bff3242231b27e4f7f0c7d444f45f543cd1b84854e21eb1c05dd535",
+        "audio_fingerprint": "c4e4710e4ed12ffebe38268bb96a672436b869c1b49187b032d3bc2c968357bc"
+      }
+    }
+  ],
+  "report_integrity_sha256": "b789af2e4688f494a4559413efeffe2c5c91350563d1902effa4e5f6819cf117"
+}

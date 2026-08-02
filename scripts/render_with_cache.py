@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Run a dependency-aware render pipeline with hash-compatible resumable stages."""
 from __future__ import annotations
-import argparse,hashlib,json,os,subprocess,time
+import argparse,hashlib,json,os,re,subprocess,time
 from pathlib import Path
 
+from dependency_graph import DependencyGraph, DependencyGraphError
+
 ORDER=("extraction","graphics_render","video_encode","audio_mix","mux","verification")
+SAFE_STAGE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 def file_hash(path:Path)->str:
     h=hashlib.sha256()
     with path.open("rb") as f:
@@ -24,9 +27,14 @@ def valid_marker(marker:Path,signature:str,root:Path)->bool:
 def atomic_json(path:Path,value:dict):
     path.parent.mkdir(parents=True,exist_ok=True);temp=path.with_suffix(path.suffix+".partial");temp.write_text(json.dumps(value,ensure_ascii=False,indent=2)+"\n",encoding="utf-8");os.replace(temp,path)
 def run_pipeline(config:dict,root:Path,cache:Path,status_path:Path,stop_after:str|None)->dict:
-    stages={s["id"]:s for s in config["stages"]};dep_sigs={};status={"schema_version":1,"pipeline":config.get("name"),"started_at":time.time(),"stages":{},"state":"running"};atomic_json(status_path,status)
-    for name in ORDER:
-        if name not in stages:continue
+    declared=config.get("stages")
+    if not isinstance(declared,list) or not declared:raise ValueError("render pipeline requires non-empty stages")
+    for stage in declared:
+        if not SAFE_STAGE_ID.fullmatch(str(stage.get("id") or "")):raise ValueError(f"unsafe render stage id: {stage.get('id')}")
+    graph=DependencyGraph(declared);order=graph.topological_order();stages={s["id"]:s for s in declared}
+    if stop_after is not None and stop_after not in stages:raise ValueError(f"unknown stop-after stage: {stop_after}")
+    dep_sigs={};status={"schema_version":2,"pipeline":config.get("name"),"execution_order":order,"started_at":time.time(),"stages":{},"state":"running"};atomic_json(status_path,status)
+    for name in order:
         stage=stages[name];sig=stage_signature(stage,root,dep_sigs,config.get("settings",{}));dep_sigs[name]=sig;marker=cache/name/"done.json"
         if valid_marker(marker,sig,root):status["stages"][name]={"state":"reused","signature":sig};atomic_json(status_path,status)
         else:
@@ -46,5 +54,5 @@ def run_pipeline(config:dict,root:Path,cache:Path,status_path:Path,stop_after:st
         if stop_after==name:status["state"]="interrupted_for_test";atomic_json(status_path,status);return status
     status["state"]="completed";status["completed_at"]=time.time();atomic_json(status_path,status);return status
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument("--pipeline",required=True);p.add_argument("--root",required=True);p.add_argument("--cache-dir",required=True);p.add_argument("--status",required=True);p.add_argument("--stop-after",choices=ORDER);a=p.parse_args();result=run_pipeline(json.loads(Path(a.pipeline).read_text(encoding="utf-8")),Path(a.root).resolve(),Path(a.cache_dir).resolve(),Path(a.status).resolve(),a.stop_after);print(Path(a.status).resolve());return 0 if result["state"] in ("completed","interrupted_for_test") else 2
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument("--pipeline",required=True);p.add_argument("--root",required=True);p.add_argument("--cache-dir",required=True);p.add_argument("--status",required=True);p.add_argument("--stop-after");a=p.parse_args();result=run_pipeline(json.loads(Path(a.pipeline).read_text(encoding="utf-8")),Path(a.root).resolve(),Path(a.cache_dir).resolve(),Path(a.status).resolve(),a.stop_after);print(Path(a.status).resolve());return 0 if result["state"] in ("completed","interrupted_for_test") else 2
 if __name__=="__main__":raise SystemExit(main())

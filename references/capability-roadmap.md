@@ -454,3 +454,24 @@ Durable evidence: `references/validation/cross-project-validation-2026-07-13.jso
 The 2026-07-13 report passes all thirteen hard checks across the landscape TabOut screen tutorial and portrait `talk-with-gpt-live` existing edit. It includes the corrected reference-guided generative-cover policy, independent A/B evidence, platform-package validation, resumable-cache evidence, and explicit publishing boundaries. Final human likeness approval remains a release gate after delivery; it is not an unfinished implementation item or an automated claim.
 
 Two conservative platform-UI-template findings remain visible as human-review warnings rather than being hidden: TabOut caption/facecam placement against the WeChat Channels template, and the portrait video's already burned captions against the Douyin template. These optional engineering templates are not official platform guarantees, so the workflow does not automatically shrink or reframe an otherwise approved video solely from those estimates. Annotated evidence and small repair suggestions are retained in each project.
+
+## 2026-08-02 schema-v9 P0/P1/P2 implementation
+
+Maturity is evidence based: `policy_only`, `utility_implemented`,
+`director_integrated`, `fixture_validated`, or `real_project_validated`.
+
+| Capability | Maturity | Evidence boundary |
+|---|---|---|
+| init-project and Doctor/Preflight | fixture_validated | probe/read-only tests; no install |
+| current golden regression | fixture_validated | hash-bound structured/synthetic evidence; not aesthetics |
+| dependency graph and event render cache | fixture_validated | explicit HyperFrames fixture commands and safe full fallback |
+| semantic confidence and routed ASR QA | fixture_validated | keyword/duplicate/grounding/hotword/diarization/alignment fixtures |
+| interactive review and correction ledger | fixture_validated | localhost/security/stale-hash/replay tests |
+| private cover reference pack | fixture_validated | authorization/selection/A-B/anatomy/approval fixtures |
+| pending preference learning | fixture_validated | scope/sample/conflict/revoke/privacy fixtures; no auto-apply |
+| audit, CI, feedback, release pack | fixture_validated | clean-room/local/hash/privacy/rights/authorization fixtures; no upload |
+
+Promotion to `real_project_validated` requires current landscape and portrait
+30–90 second sample reports from the exact implementation plus human visual and
+audio review. Provider unavailability is a tested governance boundary, not a
+real provider result.

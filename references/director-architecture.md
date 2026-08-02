@@ -227,17 +227,17 @@ both platform reports, and delivery contract bind the exact cover SHA-256 as
 well. Changing either file invalidates delivery evidence instead of reusing a
 path-based pass.
 
-Director state schema v6 binds the exact project and source bytes plus every
+Director state schema v7 binds the exact project and source bytes plus every
 completed stage artifact. Resume always re-hashes these inputs, including when
 file size and modification time are unchanged, and invalidates the earliest
 affected stage and all downstream stages when bytes drift.
-Legacy state that lacks contemporaneous v6 fingerprints is invalidated from
+Legacy state that lacks contemporaneous byte-bound fingerprints is invalidated from
 `inspect`; it is never upgraded by hashing today's files and preserving an old
 `complete` flag. A returned manual-finish file is likewise re-hashed on every
 resume, so same-size and same-mtime byte changes reopen manual finishing and
 delivery QA.
 
-Run `scripts/completion_audit.py` to obtain an honest fourteen-item acceptance
+Run `scripts/completion_audit.py` to obtain an honest sixteen-item acceptance
 report. A paused full render remains `pending`; it must never be reported as
 complete merely because code tests and sample snapshots pass. The audit
 independently revalidates full HyperFrames checks, snapshots, preview/render
@@ -321,3 +321,32 @@ Final technical and platform report reuse is conditional on the production
 validators freshly repeating probe, decode, and loudness measurement. Existing
 evidence images and current file hashes do not make self-declared measurements
 authoritative.
+
+## Schema-v9 P0/P1/P2 execution plane
+
+The v9 additions are optional capabilities inside existing stages and do not
+change the nineteen-stage order. `init-project`, `doctor`, and `preflight` are
+front-door commands. Initialization probes display rotation, orientation,
+streams, duration, and existing-edit evidence. Diagnostics are read-only.
+
+Semantic confidence sits inside `semantic_brief`; it binds word IDs, times,
+screen evidence, grounding, explanatory value, ASR confidence, duplication,
+counterexamples, reasons, and rejection reasons. Low-confidence material falls
+back to source/caption-only unless a meaning-changing choice requires action.
+
+Interactive review extends the static dashboard. Its HTTP surface is
+loopback-only, token/CSRF protected, path allowlisted, and limited to pending
+proposals. A separate CLI validation writes the ledger, refreshes pending
+preference candidates, and invalidates the owning event/stage. It cannot approve
+likeness, sample, render, or publication.
+
+The event cache accepts only HyperFrames-owned render/assembly commands with
+explicit frame/audio/visual equivalence. Per-event fingerprints avoid binding
+unrelated events to the entire Storyboard; final assembly binds ordered segment
+hashes. Unsafe or absent contracts fall back to a complete HyperFrames render.
+
+After `delivery_qa` validates one Universal MP4, optional audit/release packaging
+may run. Portable diagnostics redact machine paths and secrets. Release packaging
+fails closed until privacy, rights, copy, and publication evidence bind the exact
+video/cover/copy. Later user-exported metrics bind to that release and remain
+advisory; they cannot edit preferences.
