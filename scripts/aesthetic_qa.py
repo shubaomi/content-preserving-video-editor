@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
-from director_contracts import REQUIRED_VISUAL_FIELDS, visual_signature, write_json
+from PIL import Image, UnidentifiedImageError
+
+from director_contracts import REQUIRED_VISUAL_FIELDS, sha256_file, visual_signature, write_json
 
 
 REQUIRED_CRITERIA = (
@@ -34,6 +37,43 @@ REQUIRED_ANATOMY_CHECKS = (
     "continuous_limb_connections",
     "no_extra_duplicated_fused_detached_or_ambiguous_limbs",
 )
+
+MIN_REVIEW_IMAGE_SHORT_EDGE_PX = 180
+MIN_REVIEW_IMAGE_LONG_EDGE_PX = 320
+MIN_ANATOMY_IMAGE_EDGE_PX = 256
+REQUIRED_ANATOMY_EVIDENCE_ROLES = ("full_frame", "left_hand", "right_hand")
+
+
+def _image_evidence_errors(
+    value: Any,
+    label: str,
+    *,
+    minimum_short_edge: int = MIN_REVIEW_IMAGE_SHORT_EDGE_PX,
+    minimum_long_edge: int = MIN_REVIEW_IMAGE_LONG_EDGE_PX,
+) -> list[str]:
+    """Reject placeholder files while accepting legacy paths and hash-bound records."""
+    record = value if isinstance(value, dict) else {"path": value}
+    path_value = record.get("path")
+    if not path_value:
+        return [f"{label} is missing"]
+    path = Path(str(path_value))
+    if not path.is_file():
+        return [f"{label} is missing"]
+    declared_hash = record.get("sha256")
+    if isinstance(value, dict):
+        if not re.fullmatch(r"[0-9a-f]{64}", str(declared_hash or "")):
+            return [f"{label} structured record requires sha256"]
+        if declared_hash != sha256_file(path):
+            return [f"{label} hash does not match"]
+    try:
+        with Image.open(path) as image:
+            width, height = image.size
+            image.verify()
+    except (OSError, UnidentifiedImageError, ValueError):
+        return [f"{label} is not a decodable image"]
+    if min(width, height) < minimum_short_edge or max(width, height) < minimum_long_edge:
+        return [f"{label} is too small for full-size visual review"]
+    return []
 
 
 def _requires_human_anatomy_qa(storyboard: dict[str, Any]) -> bool:
@@ -63,10 +103,50 @@ def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
             if row.get("status") != "pass":
                 errors.append(f"aesthetic criterion is not pass: {HUMAN_ANATOMY_CRITERION}")
             evidence = row.get("evidence") or []
-            if len(evidence) < 3 or any(not Path(str(path)).is_file() for path in evidence):
+            anatomy_errors: list[str] = []
+            role_records: dict[str, list[tuple[str, str]]] = {
+                role: [] for role in REQUIRED_ANATOMY_EVIDENCE_ROLES
+            }
+            for index, item in enumerate(evidence):
+                record = item if isinstance(item, dict) else {"path": item}
+                role_value = record.get("role") if isinstance(item, dict) else (
+                    REQUIRED_ANATOMY_EVIDENCE_ROLES[index]
+                    if index < len(REQUIRED_ANATOMY_EVIDENCE_ROLES) else ""
+                )
+                role = str(role_value or "").strip()
+                path_value = record.get("path")
+                path = Path(str(path_value)).resolve() if path_value else None
+                if role in role_records and path is not None and path.is_file():
+                    role_records[role].append((str(path), sha256_file(path)))
+                anatomy_errors.extend(_image_evidence_errors(
+                    item,
+                    f"generated human anatomy evidence[{index}]",
+                    minimum_short_edge=MIN_ANATOMY_IMAGE_EDGE_PX,
+                    minimum_long_edge=MIN_ANATOMY_IMAGE_EDGE_PX,
+                ))
+            if any(len(role_records[role]) != 1 for role in REQUIRED_ANATOMY_EVIDENCE_ROLES):
+                anatomy_errors.append(
+                    "generated human anatomy evidence roles must include exactly one full_frame, "
+                    "left_hand, and right_hand"
+                )
+            required_records = [
+                role_records[role][0]
+                for role in REQUIRED_ANATOMY_EVIDENCE_ROLES
+                if len(role_records[role]) == 1
+            ]
+            if (
+                len(required_records) != len(REQUIRED_ANATOMY_EVIDENCE_ROLES)
+                or len({path for path, _ in required_records}) != 3
+                or len({digest for _, digest in required_records}) != 3
+            ):
+                anatomy_errors.append(
+                    "generated human anatomy requires three unique role-specific evidence images"
+                )
+            if len(evidence) < 3 or anatomy_errors:
                 errors.append(
                     "generated human anatomy requires existing full-resolution, left-hand, and right-hand evidence"
                 )
+                errors.extend(anatomy_errors)
             checks = row.get("checks") or {}
             for name in REQUIRED_ANATOMY_CHECKS:
                 if checks.get(name) is not True:
@@ -92,8 +172,12 @@ def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
         phases = snapshots.get(event_id) or {}
         for phase in REQUIRED_PHASES:
             evidence = phases.get(phase)
-            if not evidence or not Path(str(evidence)).is_file():
+            if not evidence:
                 errors.append(f"event {event_id} missing {phase} snapshot evidence")
+            else:
+                errors.extend(_image_evidence_errors(
+                    evidence, f"event {event_id} {phase} snapshot evidence",
+                ))
         connector_contract = (event.get("geometry_contract") or {}).get("connector_contract")
         if isinstance(connector_contract, dict):
             row = connector_geometry.get(event_id)
@@ -111,8 +195,12 @@ def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
                 if row.get(check) is not True:
                     errors.append(f"event {event_id} connector check is not pass: {check}")
             evidence = row.get("evidence")
-            if not evidence or not Path(str(evidence)).is_file():
+            if not evidence:
                 errors.append(f"event {event_id} connector geometry evidence is missing")
+            else:
+                errors.extend(_image_evidence_errors(
+                    evidence, f"event {event_id} connector geometry evidence",
+                ))
     if review.get("verdict") != "pass":
         errors.append("review verdict is not pass")
     return errors

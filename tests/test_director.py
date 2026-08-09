@@ -14,7 +14,14 @@ import yaml
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from director import Director, ROLE_CONTRACT, _json_sha256, approve_sample, authorize_final_render  # noqa: E402
+from director import (  # noqa: E402
+    Director,
+    ROLE_CONTRACT,
+    _json_sha256,
+    _review_evidence_files,
+    approve_sample,
+    authorize_final_render,
+)
 from director_contracts import DirectorContractError, STAGES, VISUAL_VOCABULARY, sha256_file  # noqa: E402
 from editorial_regression import create_baseline  # noqa: E402
 
@@ -110,16 +117,40 @@ class DirectorTests(unittest.TestCase):
             }],
         }
         director.full_semantic_brief_path.write_text(json.dumps(full_brief), encoding="utf-8")
+        storyboard_events = []
+        for semantic_event in full_brief["events"]:
+            storyboard_event = {
+                "id": semantic_event["id"],
+                "semantic_event_id": semantic_event["id"],
+                "treatment": semantic_event["treatment"],
+                "source_start": semantic_event["source_start"],
+                "source_end": semantic_event["source_end"],
+                "output_start": semantic_event["output_start"],
+                "output_end": semantic_event["output_end"],
+                "visible_copy_manifest": (
+                    [semantic_event["approved_visible_copy"]]
+                    if semantic_event.get("approved_visible_copy") else []
+                ),
+            }
+            if semantic_event["treatment"] == "quiet_source":
+                storyboard_event["source_activity_evidence"] = semantic_event[
+                    "source_activity_evidence"
+                ]
+            else:
+                storyboard_event.update({
+                    "anchor": semantic_event["anchor"],
+                    "transcript_word_ids": semantic_event["transcript_word_ids"],
+                    "viewer_takeaway": semantic_event["viewer_takeaway"],
+                    "visual_structure": semantic_event["visual_structure"],
+                })
+            storyboard_events.append(storyboard_event)
         storyboard = {
             "renderer": "hyperframes",
             "motion_output": "hyperframes_render",
             "capability_skills": ["hyperframes", "hyperframes-core", "hyperframes-creative",
                                   "hyperframes-animation", "hyperframes-cli"],
             "composition": {"duration": duration},
-            "events": events + [{
-                "id": "quiet-tail", "treatment": "quiet_source",
-                "source_activity_evidence": ["source screen activity continues"],
-            }],
+            "events": storyboard_events,
         }
         (project / "storyboard.json").write_text(json.dumps(storyboard), encoding="utf-8")
         categories = {}
@@ -471,7 +502,14 @@ class DirectorTests(unittest.TestCase):
         director.stage_production_contract()
         review = director.root / "sample-qa" / "aesthetic-review.json"
         review.parent.mkdir(parents=True, exist_ok=True)
-        review.write_text(json.dumps({"verdict": "pass"}), encoding="utf-8")
+        snapshot = review.parent / "structured-snapshot.png"
+        snapshot.write_bytes(b"snapshot-v1")
+        review.write_text(json.dumps({
+            "verdict": "pass",
+            "snapshots": {"e0": {"entrance": {
+                "path": str(snapshot), "sha256": sha256_file(snapshot),
+            }}},
+        }), encoding="utf-8")
         audio = director.sample_hyperframes_project / "audio-plan.json"
         audio.write_text(json.dumps({}), encoding="utf-8")
 
@@ -485,6 +523,23 @@ class DirectorTests(unittest.TestCase):
         self.assertTrue(dynamics.is_file())
         self.assertEqual(gate["visual_dynamics_sha256"], sha256_file(dynamics))
         self.assertEqual(json.loads(dynamics.read_text(encoding="utf-8"))["status"], "pass")
+        self.assertIn(
+            str(snapshot.resolve()), director.state["stages"]["sample_qa"]["artifacts"],
+        )
+
+        snapshot.write_bytes(b"snapshot-v2")
+        resumed = Director(self.project)
+        self.assertEqual(resumed.state["stages"]["sample_qa"]["status"], "pending")
+        self.assertEqual(resumed.state["last_invalidation"]["from_stage"], "sample_qa")
+
+    def test_structured_review_evidence_requires_sha256(self) -> None:
+        snapshot = self.root / "snapshot.png"
+        snapshot.write_bytes(b"snapshot")
+
+        with self.assertRaisesRegex(DirectorContractError, "requires sha256"):
+            _review_evidence_files({"snapshots": {"e0": {"entrance": {
+                "path": str(snapshot),
+            }}}})
 
     def test_revalidating_upstream_stage_preserves_downstream_action_required(self) -> None:
         director = Director(self.project)
@@ -518,6 +573,23 @@ class DirectorTests(unittest.TestCase):
 
         for name in STAGES:
             self.assertEqual(migrated.state["stages"][name]["status"], "pending")
+
+    def test_existing_complete_contract_stages_receive_truthful_readiness(self) -> None:
+        director = Director(self.project)
+        audio_contract = director.root / "audio-contract.json"
+        cover_contract = director.root / "cover-contract.json"
+        audio_contract.write_text("{}", encoding="utf-8")
+        cover_contract.write_text("{}", encoding="utf-8")
+        director._complete("audio", [audio_contract])
+        director._complete("cover", [cover_contract])
+        del director.state["stages"]["audio"]["readiness"]
+        del director.state["stages"]["cover"]["readiness"]
+        director._save()
+
+        resumed = Director(self.project)
+
+        self.assertEqual(resumed.state["stages"]["audio"]["readiness"], "contract_ready")
+        self.assertEqual(resumed.state["stages"]["cover"]["readiness"], "contract_ready")
 
     def test_changed_completed_stage_artifact_reopens_that_stage_and_downstream(self) -> None:
         director = Director(self.project)
@@ -1126,6 +1198,19 @@ class DirectorTests(unittest.TestCase):
             director.stage_audio()
         self.assertEqual(produce.call_count, 1)
         self.assertIn(str(audio_plan), director.state["stages"]["audio"]["artifacts"])
+        self.assertEqual(director.state["stages"]["audio"]["readiness"], "asset_ready")
+
+    def test_audio_and_cover_contracts_do_not_claim_assets_are_ready(self) -> None:
+        director = Director(self.project)
+        director._start("audio")
+        director.stage_audio()
+        director._start("cover")
+        director.stage_cover()
+
+        self.assertEqual(director.state["stages"]["audio"]["status"], "complete")
+        self.assertEqual(director.state["stages"]["audio"]["readiness"], "contract_ready")
+        self.assertEqual(director.state["stages"]["cover"]["status"], "complete")
+        self.assertEqual(director.state["stages"]["cover"]["readiness"], "contract_ready")
 
     def test_final_compose_adds_authorized_bgm_with_speech_ducking(self) -> None:
         bgm = self.root / "assets" / "bgm.wav"

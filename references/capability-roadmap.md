@@ -475,3 +475,30 @@ Promotion to `real_project_validated` requires current landscape and portrait
 30–90 second sample reports from the exact implementation plus human visual and
 audio review. Provider unavailability is a tested governance boundary, not a
 real provider result.
+
+## 2026-08-08 semantic and workflow-truth hardening
+
+The current implementation is newer than the 2026-07-13 cross-project report.
+That historical report remains useful evidence for its exact artifacts, but it
+does not promote the present code to `real_project_validated`.
+
+Implemented in this increment:
+
+- bounded full-duration evidence sampling with per-frame timestamps, coverage
+  intervals and explicit cap metadata;
+- strict sample/full Storyboard inheritance from the approved semantic brief,
+  including event identity, word evidence, time windows, takeaway, treatment,
+  and approved visible copy;
+- rejection of Storyboard semantic fallback when an approved event is absent;
+- decodable, reviewable-size snapshot/connector/anatomy evidence instead of
+  path-existence-only aesthetic evidence;
+- stage readiness that distinguishes contracts from produced assets, plus a
+  concise creator-facing `next` command.
+
+The durable five-angle audit, external-method comparison, license boundaries,
+and next evidence-gated increments are recorded in
+`references/workflow-optimization-2026-08-08.md`.
+
+Promotion remains blocked until the exact current implementation produces one
+60–90 second landscape canary and one portrait canary with human paired review,
+semantic-accuracy findings, motion/audio judgments, and correction-time data.

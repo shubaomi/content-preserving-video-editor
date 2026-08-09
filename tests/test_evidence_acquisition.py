@@ -19,7 +19,9 @@ from director_contracts import (  # noqa: E402
     DirectorContractError, STAGES, sha256_file, validate_semantic_brief,
     validate_semantic_evidence_binding,
 )
-from evidence_acquisition import build_evidence_bundle, extract_frames  # noqa: E402
+from evidence_acquisition import (  # noqa: E402
+    acquire, build_evidence_bundle, extract_frames, representative_timestamps,
+)
 
 
 class EvidenceAcquisitionTests(unittest.TestCase):
@@ -50,8 +52,237 @@ class EvidenceAcquisitionTests(unittest.TestCase):
             self.assertEqual(bundle["display"]["orientation"], "portrait")
             self.assertEqual(bundle["transcript"]["word_count"], 1)
             self.assertEqual(bundle["representative_frames"][0]["path"], str(frame.resolve()))
+            self.assertIsNone(bundle["representative_frames"][0]["timestamp_seconds"])
+            self.assertEqual(
+                bundle["representative_frames"][0]["sampling_policy"], "legacy_unspecified",
+            )
             self.assertIn("palette", bundle["design_tokens"])
             self.assertEqual(bundle["optional_adapters"]["pyscenedetect"]["status"], "disabled")
+
+    def test_representative_timestamps_cover_medium_videos_without_unbounded_growth(self) -> None:
+        short = representative_timestamps(30.0)
+        six_minutes = representative_timestamps(6 * 60.0)
+        ten_minutes = representative_timestamps(10 * 60.0)
+        very_long = representative_timestamps(4 * 60 * 60.0)
+
+        self.assertLessEqual(len(short), 5)
+        self.assertGreater(len(six_minutes), 5)
+        self.assertGreater(len(ten_minutes), len(six_minutes))
+        self.assertLessEqual(len(very_long), 32)
+        self.assertEqual(len(ten_minutes), 32)
+        for duration, timestamps in ((360.0, six_minutes), (600.0, ten_minutes)):
+            self.assertEqual(timestamps, sorted(set(timestamps)))
+            self.assertLessEqual(timestamps[0], 0.5)
+            self.assertGreaterEqual(timestamps[-1], duration - 0.5)
+            self.assertLessEqual(
+                max(right - left for left, right in zip(timestamps, timestamps[1:])),
+                20.0,
+            )
+
+    def test_acquire_records_timestamp_filename_coverage_and_sampling_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            media = root / "source.mp4"
+            media.write_bytes(b"fixture")
+            transcript = root / "transcript.json"
+            transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+            probe = {
+                "format": {"duration": "60.0"},
+                "streams": [{"codec_type": "video", "width": 1920, "height": 1080}],
+            }
+
+            def fake_run(command, **_kwargs):
+                Image.new("RGB", (32, 18), "#335577").save(Path(command[-1]))
+
+            with patch("evidence_acquisition.probe_media", return_value=probe), \
+                    patch("evidence_acquisition.subprocess.run", side_effect=fake_run):
+                bundle_path = acquire(
+                    media=media, transcript_path=transcript, output_dir=root / "evidence",
+                )
+
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            timestamps = representative_timestamps(60.0)
+            sampling = bundle["representative_frame_sampling"]
+            self.assertEqual(sampling["policy"], "bounded_uniform_full_duration_v1")
+            self.assertEqual(sampling["target_interval_seconds"], 15.0)
+            self.assertEqual(sampling["maximum_frame_count"], 32)
+            self.assertEqual(sampling["requested_frame_count"], len(timestamps))
+            self.assertEqual(sampling["extracted_frame_count"], len(timestamps))
+            self.assertEqual(sampling["coverage"]["start_seconds"], 0.0)
+            self.assertEqual(sampling["coverage"]["end_seconds"], 60.0)
+
+            records = bundle["representative_frames"]
+            self.assertEqual(len(records), len(timestamps))
+            for index, (record, timestamp) in enumerate(zip(records, timestamps)):
+                self.assertEqual(record["timestamp_seconds"], timestamp)
+                self.assertEqual(record["sampling_policy"], sampling["policy"])
+                self.assertTrue(record["path"].endswith(f"-{timestamp:08.3f}.png"))
+                self.assertLessEqual(record["coverage"]["start_seconds"], timestamp)
+                self.assertGreaterEqual(record["coverage"]["end_seconds"], timestamp)
+                if index:
+                    self.assertEqual(
+                        records[index - 1]["coverage"]["end_seconds"],
+                        record["coverage"]["start_seconds"],
+                    )
+            self.assertEqual(records[0]["coverage"]["start_seconds"], 0.0)
+            self.assertEqual(records[-1]["coverage"]["end_seconds"], 60.0)
+
+    def test_acquire_fails_closed_when_only_a_subset_of_requested_frames_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            media = root / "source.mp4"
+            media.write_bytes(b"fixture")
+            transcript = root / "transcript.json"
+            transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+            probe = {
+                "format": {"duration": "60.0"},
+                "streams": [{"codec_type": "video", "width": 1920, "height": 1080}],
+            }
+
+            def partial_extract(_media, timestamps, output_dir):
+                frame_dir = output_dir / "frames"
+                frame_dir.mkdir(parents=True)
+                path = frame_dir / f"frame-00-{timestamps[0]:08.3f}.png"
+                Image.new("RGB", (32, 18), "#335577").save(path)
+                return [path]
+
+            with patch("evidence_acquisition.probe_media", return_value=probe), \
+                    patch("evidence_acquisition.extract_frames", side_effect=partial_extract):
+                with self.assertRaisesRegex(RuntimeError, "requested.*extracted"):
+                    acquire(
+                        media=media, transcript_path=transcript,
+                        output_dir=root / "evidence",
+                    )
+            self.assertFalse((root / "evidence" / "evidence-bundle.json").exists())
+
+    def test_acquire_fails_closed_when_extracted_timestamps_do_not_match_request(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            media = root / "source.mp4"
+            media.write_bytes(b"fixture")
+            transcript = root / "transcript.json"
+            transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+            probe = {
+                "format": {"duration": "30.0"},
+                "streams": [{"codec_type": "video", "width": 1920, "height": 1080}],
+            }
+
+            def shifted_extract(_media, timestamps, output_dir):
+                frame_dir = output_dir / "frames"
+                frame_dir.mkdir(parents=True)
+                frames = []
+                for index, timestamp in enumerate(timestamps):
+                    shifted = timestamp + (0.25 if index == 0 else 0.0)
+                    path = frame_dir / f"frame-{index:02d}-{shifted:08.3f}.png"
+                    Image.new("RGB", (32, 18), "#335577").save(path)
+                    frames.append(path)
+                return frames
+
+            with patch("evidence_acquisition.probe_media", return_value=probe), \
+                    patch("evidence_acquisition.extract_frames", side_effect=shifted_extract):
+                with self.assertRaisesRegex(RuntimeError, "timestamps do not match"):
+                    acquire(
+                        media=media, transcript_path=transcript,
+                        output_dir=root / "evidence",
+                    )
+
+    def test_known_partial_frames_report_actual_gap_without_full_duration_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            frames = []
+            for index in range(2):
+                frame = root / f"sample-{index}.png"
+                Image.new("RGB", (32, 18), "#335577").save(frame)
+                frames.append(frame)
+            transcript = root / "transcript.json"
+            transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+            media = root / "source.mp4"
+            media.write_bytes(b"fixture")
+            probe = {
+                "format": {"duration": "60.0"},
+                "streams": [{"codec_type": "video", "width": 1920, "height": 1080}],
+            }
+
+            bundle = build_evidence_bundle(
+                media, transcript, probe, frames, frame_timestamps=[10.0, 50.0],
+            )
+
+            sampling = bundle["representative_frame_sampling"]
+            self.assertEqual(bundle["status"], "partial")
+            self.assertEqual(sampling["coverage"]["status"], "partial")
+            self.assertEqual(sampling["coverage"]["start_seconds"], 10.0)
+            self.assertEqual(sampling["coverage"]["end_seconds"], 50.0)
+            self.assertEqual(sampling["coverage"]["maximum_sample_gap_seconds"], 40.0)
+            self.assertEqual(bundle["representative_frames"][0]["coverage"], {
+                "start_seconds": 10.0, "end_seconds": 30.0,
+            })
+            self.assertEqual(bundle["representative_frames"][1]["coverage"], {
+                "start_seconds": 30.0, "end_seconds": 50.0,
+            })
+
+    def test_known_single_frame_never_claims_full_duration_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            frame = root / "sample.png"
+            Image.new("RGB", (32, 18), "#335577").save(frame)
+            transcript = root / "transcript.json"
+            transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+            media = root / "source.mp4"
+            media.write_bytes(b"fixture")
+            probe = {
+                "format": {"duration": "60.0"},
+                "streams": [{"codec_type": "video", "width": 1920, "height": 1080}],
+            }
+
+            bundle = build_evidence_bundle(
+                media, transcript, probe, [frame], frame_timestamps=[30.0],
+            )
+
+            sampling = bundle["representative_frame_sampling"]
+            self.assertEqual(bundle["status"], "partial")
+            self.assertEqual(sampling["coverage"]["status"], "partial")
+            self.assertEqual(sampling["coverage"]["start_seconds"], 30.0)
+            self.assertEqual(sampling["coverage"]["end_seconds"], 30.0)
+            self.assertEqual(bundle["representative_frames"][0]["coverage"], {
+                "start_seconds": 30.0, "end_seconds": 30.0,
+            })
+
+    def test_unverifiable_sampling_policy_cannot_upgrade_partial_frames_to_full(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            frames = []
+            for index in range(2):
+                frame = root / f"sample-{index}.png"
+                Image.new("RGB", (32, 18), "#335577").save(frame)
+                frames.append(frame)
+            transcript = root / "transcript.json"
+            transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+            media = root / "source.mp4"
+            media.write_bytes(b"fixture")
+            probe = {
+                "format": {"duration": "60.0"},
+                "streams": [{"codec_type": "video", "width": 1920, "height": 1080}],
+            }
+
+            bundle = build_evidence_bundle(
+                media,
+                transcript,
+                probe,
+                frames,
+                frame_timestamps=[10.0, 50.0],
+                sampling_policy={
+                    "policy": "bounded_uniform_full_duration_v1",
+                    "requested_frame_count": 5,
+                    "coverage": {"status": "full_duration"},
+                },
+            )
+
+            sampling = bundle["representative_frame_sampling"]
+            self.assertFalse(sampling["timestamps_match_request"])
+            self.assertEqual(sampling["requested_frame_count"], 5)
+            self.assertEqual(sampling["coverage"]["status"], "partial")
+            self.assertEqual(sampling["coverage"]["start_seconds"], 10.0)
+            self.assertEqual(sampling["coverage"]["end_seconds"], 50.0)
 
     def test_director_has_real_evidence_stage_and_completes_with_generated_bundle(self) -> None:
         self.assertLess(STAGES.index("evidence_acquisition"), STAGES.index("semantic_brief"))

@@ -69,8 +69,12 @@ class CompletionAuditTests(unittest.TestCase):
             full = root / "hyperframes-director-full"
             sample.mkdir()
             full.mkdir()
-            events = [{"id": f"e{i}", "treatment": "structure",
-                "anchor": f"concept-{i}", "viewer_takeaway": f"takeaway-{i}",
+            events = [{"id": f"e{i}", "semantic_event_id": f"e{i}",
+                "treatment": "structure", "source_start": 0.0, "source_end": 1.0,
+                "output_start": 0.0, "output_end": 1.0,
+                "anchor": f"concept-{i}", "transcript_word_ids": ["w0"],
+                "viewer_takeaway": f"takeaway-{i}",
+                "visible_copy_manifest": [],
                 "visual_mechanism": f"mechanism-{i}",
                 "relevance_rationale": "fixture explanatory value",
                 "motion": {"entrance": "fade", "reveal": "step", "hold": "steady", "exit": "fade"},
@@ -147,7 +151,7 @@ class CompletionAuditTests(unittest.TestCase):
             snapshots = []
             for index in range(4):
                 path = full_qa / f"snapshot-{index}.png"
-                path.write_bytes(b"snapshot")
+                Image.new("RGB", (320, 180), (40 + index * 20, 90, 70)).save(path)
                 snapshots.append(str(path))
             review_path = full_qa / "snapshot-review.json"
             review_path.write_text(json.dumps({
@@ -159,8 +163,8 @@ class CompletionAuditTests(unittest.TestCase):
             }), encoding="utf-8")
             studio = full_qa / "studio.png"
             rendered_snapshot = full_qa / "render.png"
-            studio.write_bytes(b"studio")
-            rendered_snapshot.write_bytes(b"rendered")
+            Image.new("RGB", (320, 180), "#315d4e").save(studio)
+            Image.new("RGB", (320, 180), "#335f50").save(rendered_snapshot)
             parity_path = full_qa / "preview-render-parity.json"
             parity_path.write_text(json.dumps({
                 "schema_version": 1, "status": "pass",
@@ -298,23 +302,23 @@ class CompletionAuditTests(unittest.TestCase):
                 "evidence_frames": [str(frame)],
                 "opening_hook": {"status": "not_selected", "evidence": ["direct start"]},
                 "events": [{
-                    "id": "semantic-1", "anchor": "proof", "transcript_quote": "proof",
-                    "transcript_word_ids": ["w0"], "source_start": 0.0, "source_end": 1.0,
-                    "output_start": 0.0, "output_end": 1.0,
-                    "viewer_job": "understand", "viewer_takeaway": "proof",
-                    "visual_mechanism": "evidence focus", "target_frame_evidence": [str(frame)],
+                    "id": event["semantic_event_id"], "treatment": event["treatment"],
+                    "anchor": event["anchor"], "transcript_quote": "proof",
+                    "transcript_word_ids": event["transcript_word_ids"],
+                    "source_start": event["source_start"], "source_end": event["source_end"],
+                    "output_start": event["output_start"], "output_end": event["output_end"],
+                    "viewer_job": "understand", "viewer_takeaway": event["viewer_takeaway"],
+                    "visual_mechanism": event["visual_mechanism"],
+                    "target_frame_evidence": [str(frame)],
                     "protected_zones": {"face": [], "ui": [], "caption": [], "cursor": []},
                     "form": "focus", "placement": "center", "size": "medium",
                     "background": "transparent", "read_time": 1.0,
-                    "motion": {"entrance": "fade", "reveal": "focus",
-                               "hold": "steady", "exit": "fade"},
+                    "motion": event["motion"],
                     "audio_decision": {"type": "intentionally_silent", "reason": "fixture"},
                     "deduplication": {"semantic": "unique", "visual": "unique"},
-                    "relevance_rationale": "direct transcript and frame evidence",
-                    "visual_structure": {"dom_structure": "focus", "information_hierarchy": "one",
-                        "layout_archetype": "center", "animation_choreography": "fade",
-                        "use_case": "proof"},
-                }],
+                    "relevance_rationale": event["relevance_rationale"],
+                    "visual_structure": event["visual_structure"],
+                } for event in events],
             }), encoding="utf-8")
             project_data = migrate_project_config(
                 yaml.safe_load(project.read_text(encoding="utf-8"))

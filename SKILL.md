@@ -64,6 +64,7 @@ python scripts/director.py preflight --project <project.yaml> --out <preflight.j
 python scripts/director.py run --project <project.yaml> --until sample_qa
 python scripts/director.py resume --project <project.yaml>
 python scripts/director.py status --project <project.yaml>
+python scripts/director.py next --project <project.yaml>
 python scripts/director.py review --project <project.yaml>
 python scripts/director.py review --project <project.yaml> --interactive
 python scripts/director.py apply-correction --project <project.yaml> --proposal <pending.json> --approved-by <name>
@@ -171,6 +172,17 @@ Before semantic planning, run `evidence_acquisition`. Bind its bundle to the
 exact source and word-transcript hashes. Record display rotation/aspect,
 representative frames, scenes, subject/face/UI/caption regions, OCR when
 enabled, design tokens, and existing edit/audio/caption/cover evidence.
+Default frame evidence must use bounded full-duration coverage rather than five
+fixed percentage samples. Record every frame's timestamp, owned coverage window,
+hash, and sampling policy so an event cannot cite an unrelated part of a long
+video. Fail closed if a managed extraction returns fewer frames or different
+timestamps than requested, and require every timestamped target frame cited by
+an event to have overlapping ownership coverage and an actual capture timestamp
+no more than 15 seconds from that event. A capped long-video sample that cannot
+meet that distance is blocked until an event-specific supplemental frame is
+supplied; the built-in sampler does not yet capture that frame automatically and
+must never widen fictional ownership. Keep expensive scene, tracking, and OCR
+adapters optional.
 PySceneDetect, MediaPipe, and PaddleOCR are optional command adapters and remain
 disabled for legacy projects unless explicitly enabled.
 
@@ -186,6 +198,17 @@ optional subtitle, tone, visual concept, subject side, visual route, and existin
 semantic event IDs. Do not invent a cover claim from generic keywords. Read
 [generative-cover-workflow.md](references/generative-cover-workflow.md) before
 producing an enhanced cover.
+
+After a semantic brief is approved, treat it as an immutable meaning contract.
+Every sample and full Storyboard event must map to the same semantic event ID
+and inherit its anchor, transcript word IDs, source/output window, viewer
+takeaway, and approved visible copy. A renderer may change layout and animation;
+it must derive an explicit `visible_copy_manifest` exactly from that approved
+copy. All other strings must be approved copy or an explicitly allowed metadata
+path; nested authority fields and arbitrary render props are rejected. Missing,
+reordered, unrelated, or extra-copy mappings block HyperFrames QA. Final
+rendered DOM/OCR comparison remains a separate HyperFrames visual-review gate;
+the JSON contract does not claim to inspect pixels by itself.
 
 Record a separate opening-hook decision for every video. Select a duplicated
 2–6 second cold open only when a transcript- and frame-backed excerpt is
@@ -286,6 +309,13 @@ aesthetic approval. Require direct relevance, additional explanatory value,
 correct keyword focus, layout variety, speech-synchronous motion, no caption/
 face/cursor/UI occlusion, integrated IP visuals, fitting SFX, natural energetic
 cover identity, and no unexplained long visual stagnation.
+
+Snapshot, connector, and generated-human anatomy evidence must be a real,
+decodable image at reviewable resolution. File existence or placeholder bytes
+never constitute visual evidence; hash-bound evidence records are preferred.
+General review frames must be at least 320x180 (in either orientation). Anatomy
+review requires three unique images for `full_frame`, `left_hand`, and
+`right_hand`; structured records must declare the role and hash.
 
 Only after the sample passes and the user approves may the director render the
 full HyperFrames motion and final universal media.

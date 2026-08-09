@@ -95,6 +95,22 @@ and a real snapshot path.
 
 Keep backend choice separate from editing policy:
 
+- the built-in evidence sampler covers the complete duration with a 15-second
+  target interval, at least three frames, and at most 32 frames; every managed
+  frame records `timestamp_seconds`, an owned coverage interval, its hash, and
+  the sampling policy. Managed count/timestamp mismatch fails closed; partial
+  extraction cannot self-report full coverage. This is an implementation
+  contract, not a project option. The 32-frame cap may enlarge intervals on long
+  sources; a semantic event still needs a cited frame captured within 15 seconds,
+  and the current built-in sampler does not automatically add supplemental frames;
+- legacy caller-supplied frames without timestamps remain readable and are
+  explicitly marked `legacy_unspecified` rather than claiming time coverage;
+- Storyboard event strings are fail-closed: each must either equal approved
+  visible copy or occupy an explicit non-visible metadata path. Only root-level
+  `approved_visible_copy` and `visible_copy_manifest` are authoritative; nested
+  copies and arbitrary custom string props are invalid. Final DOM/OCR review is
+  still required because the JSON validator does not inspect rendered pixels;
+
 - `transcription.preferred: local_faster_whisper`;
 - `transcription.optional: [funclip_funasr]` when Chinese hotwords, speakers, or text-selected candidates are valuable;
 - `cut_candidates.auto_editor.analysis_only: true` when silence, motion, loudness, or subtitle evidence is useful;
@@ -332,6 +348,12 @@ These values are migration defaults and project-level maximums. A parity report
 may use stricter values but cannot relax them.
 
 Rendering permission does not authorize uploading or publishing. External publication remains a separate hard gate.
+
+Director state keeps lifecycle `status` separate from production `readiness`.
+Completed stages normally report `ready`; audio and cover may instead report
+`contract_ready`, `asset_ready`, or `not_applicable`. A contract-ready stage is
+not evidence that its media asset exists. `director.py next` reduces this state
+to the single current owner, instruction, expected output, and resume command.
 
 ## Schema v9 optional capabilities
 

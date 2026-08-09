@@ -104,7 +104,7 @@ from state_migrations import CURRENT_STATE_SCHEMA_VERSION, load_and_migrate_stat
 from project_initializer import PRESETS as PROJECT_PRESETS, initialize_project
 from doctor import run_doctor
 from preflight import run_preflight
-from action_required_contract import create_action_packet
+from action_required_contract import create_action_packet, validate_action_packet
 from semantic_confidence import build_candidate_report, validate_candidate_report
 from review_dashboard import generate_dashboard
 from review_server import ReviewServerConfig, create_review_server
@@ -266,7 +266,19 @@ def _review_evidence_files(review: dict[str, Any]) -> list[Path]:
     for value in values:
         if not value:
             continue
-        path = Path(str(value)).resolve()
+        record = value if isinstance(value, dict) else {"path": value}
+        path_value = record.get("path")
+        if not path_value:
+            continue
+        path = Path(str(path_value)).resolve()
+        declared_hash = record.get("sha256")
+        if isinstance(value, dict):
+            if not re.fullmatch(r"[0-9a-f]{64}", str(declared_hash or "")):
+                raise DirectorContractError(
+                    f"structured review evidence requires sha256: {path}"
+                )
+            if path.is_file() and declared_hash != sha256_file(path):
+                raise DirectorContractError(f"review evidence hash does not match: {path}")
         if path.is_file() and path not in seen:
             seen.add(path)
             result.append(path)
@@ -284,7 +296,28 @@ def _ffprobe_duration(path: Path) -> float:
 
 def _stage_template() -> dict[str, Any]:
     return {"status": "pending", "attempts": 0, "updated_at": None, "artifacts": [],
-            "artifact_records": [], "error": None}
+            "artifact_records": [], "error": None, "readiness": "pending"}
+
+
+def _existing_stage_readiness(
+    stage: str, row: dict[str, Any], project: dict[str, Any],
+) -> str:
+    status = str(row.get("status") or "pending")
+    if status != "complete":
+        return status
+    artifact_paths = [Path(str(value)) for value in (row.get("artifacts") or [])]
+    if stage == "audio":
+        return "asset_ready" if any(
+            path.name.lower() == "audio-plan.json" for path in artifact_paths
+        ) else "contract_ready"
+    if stage == "cover":
+        if project.get("cover", {}).get("enabled", True) is False:
+            return "not_applicable"
+        if any(path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+               for path in artifact_paths):
+            return "asset_ready"
+        return "contract_ready"
+    return "ready"
 
 
 def _file_fingerprint(path: Path, previous: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -353,6 +386,9 @@ class Director:
             previous_state_version = int(state.get("schema_version") or 0)
             for name in STAGES:
                 stages.setdefault(name, _stage_template())
+                row = stages[name]
+                if not str(row.get("readiness") or "").strip():
+                    row["readiness"] = _existing_stage_readiness(name, row, self.project)
             previous_inputs = state.get("input_fingerprints") or {}
             current_inputs = {
                 "project_file": _file_fingerprint(
@@ -478,7 +514,7 @@ class Director:
     def _start(self, stage: str) -> None:
         row = self.state["stages"][stage]
         row.update({"status": "running", "attempts": int(row.get("attempts", 0)) + 1,
-                    "updated_at": utc_now(), "error": None})
+                    "updated_at": utc_now(), "error": None, "readiness": "running"})
         self.state.update({"current_stage": stage, "status": "active"})
         if self.action_path.is_file():
             try:
@@ -493,10 +529,13 @@ class Director:
                 self.action_path.unlink(missing_ok=True)
         self._save()
 
-    def _complete(self, stage: str, artifacts: list[Path] | None = None) -> None:
+    def _complete(
+        self, stage: str, artifacts: list[Path] | None = None, *, readiness: str = "ready",
+    ) -> None:
         row = self.state["stages"][stage]
         resolved_artifacts = [path.resolve() for path in (artifacts or [])]
         row.update({"status": "complete", "updated_at": utc_now(), "error": None,
+                    "readiness": readiness,
                     "artifacts": [str(path) for path in resolved_artifacts],
                     "artifact_records": _artifact_records(resolved_artifacts)})
         _reconcile_state(self.state)
@@ -578,14 +617,16 @@ class Director:
         )
         row = self.state["stages"][stage]
         row.update({"status": "action_required", "updated_at": utc_now(), "error": reason,
-                    "artifacts": [str(self.action_path.resolve())]})
+                    "artifacts": [str(self.action_path.resolve())],
+                    "readiness": "action_required"})
         self.state["status"] = "action_required"
         self._save()
         raise DirectorContractError(reason)
 
     def _fail(self, stage: str, error: Exception) -> None:
         row = self.state["stages"][stage]
-        row.update({"status": "failed", "updated_at": utc_now(), "error": str(error)})
+        row.update({"status": "failed", "updated_at": utc_now(), "error": str(error),
+                    "readiness": "failed"})
         self.state["status"] = "failed"
         self._save()
 
@@ -1798,9 +1839,21 @@ class Director:
         if not storyboard_path.is_file() or not index_path.is_file() or not vocabulary_path.is_file():
             packet = self.root / "hyperframes-request.json"
             write_json(packet, {
-                "schema_version": 1,
+                "schema_version": 2,
                 "owner": "hyperframes",
                 "semantic_brief": str(self.semantic_brief_path),
+                "semantic_inheritance": {
+                    "explicit_semantic_event_id_required": True,
+                    "bind": [
+                        "treatment", "anchor", "transcript_word_ids", "source_start", "source_end",
+                        "output_start", "output_end", "viewer_takeaway", "approved_visible_copy",
+                    ],
+                    "derived_visible_copy_manifest": (
+                        "exact normalized list from approved_visible_copy; empty when none"
+                    ),
+                    "other_render_text_fields_forbidden": True,
+                    "storyboard_semantic_fallback_forbidden": True,
+                },
                 "scope": "60-90 second sample only",
                 "project": str(project),
                 "required_skills": ["hyperframes", "hyperframes-core", "hyperframes-creative",
@@ -1899,7 +1952,10 @@ class Director:
             artifacts.append(production_request)
         if (self.root / "adapter-state.json").is_file():
             artifacts.append(self.root / "adapter-state.json")
-        self._complete("audio", artifacts)
+        self._complete(
+            "audio", artifacts,
+            readiness="asset_ready" if audio_plan.is_file() else "contract_ready",
+        )
 
     def stage_cover(self) -> None:
         path = self.root / "cover-contract.json"
@@ -1928,13 +1984,13 @@ class Director:
             })
         cover_config = self.project.get("cover", {})
         if cover_config.get("production", {}).get("enabled") is not True:
-            self._complete("cover", [path])
+            self._complete("cover", [path], readiness="contract_ready")
             return
         if cover_config.get("enabled", True) is False:
             decision = self.root / "cover-decision.json"
             write_json(decision, {"schema_version": 1, "status": "disabled",
                                   "reason": "project explicitly disabled cover production"})
-            self._complete("cover", [path, decision])
+            self._complete("cover", [path, decision], readiness="not_applicable")
             return
         prepared_project = self.project
         reference_artifacts: list[Path] = []
@@ -1984,7 +2040,7 @@ class Director:
                 [{"owner": "director_with_image_generation_and_visual_review",
                   "request": str(request), "expected_artifact": str(output)}],
             )
-        self._complete("cover", [path, *reference_artifacts, *artifacts])
+        self._complete("cover", [path, *reference_artifacts, *artifacts], readiness="asset_ready")
 
     def stage_sample_qa(self) -> None:
         self._validate_current_production_contract()
@@ -2124,12 +2180,24 @@ class Director:
         if not full_brief_path.is_file() or any(not path.is_file() for path in required):
             packet = self.root / "full-hyperframes-request.json"
             write_json(packet, {
-                "schema_version": 1,
+                "schema_version": 2,
                 "owner": "hyperframes",
                 "scope": "complete output timeline; never copy the sample duration as the final duration",
                 "approved_sample_project": str(self.sample_hyperframes_project),
                 "approved_sample_semantic_brief": str(self.semantic_brief_path),
                 "full_semantic_brief": str(full_brief_path),
+                "semantic_inheritance": {
+                    "explicit_semantic_event_id_required": True,
+                    "bind": [
+                        "treatment", "anchor", "transcript_word_ids", "source_start", "source_end",
+                        "output_start", "output_end", "viewer_takeaway", "approved_visible_copy",
+                    ],
+                    "derived_visible_copy_manifest": (
+                        "exact normalized list from approved_visible_copy; empty when none"
+                    ),
+                    "other_render_text_fields_forbidden": True,
+                    "storyboard_semantic_fallback_forbidden": True,
+                },
                 "video_use_edl": str(self.video_use_dir / "edl.json"),
                 "video_use_captions": str(self.video_use_dir / "captions.json"),
                 "expected_duration_seconds": self._expected_timeline_duration(),
@@ -2167,7 +2235,7 @@ class Director:
             evidence_bundle_path=self.evidence_bundle_path,
         ), "full semantic brief evidence binding")
         storyboard = read_json(storyboard_path)
-        assert_valid(validate_storyboard(storyboard), "full HyperFrames storyboard")
+        assert_valid(validate_storyboard(storyboard, full_brief), "full HyperFrames storyboard")
         assert_valid(
             validate_visual_vocabulary_audit(read_json(vocabulary_path), storyboard, full_video=True),
             "full-video visual vocabulary audit",
@@ -3983,6 +4051,76 @@ def apply_review_correction(
     return ledger_path
 
 
+def build_next_action_summary(director: Director) -> dict[str, Any]:
+    """Return one creator-facing next action instead of the full internal state tree."""
+    if director.action_path.is_file():
+        packet = validate_action_packet(director.action_path)
+        actions = packet.get("actions") or []
+        first = actions[0] if actions else {}
+        return {
+            "status": "action_required",
+            "stage": str(packet.get("stage") or director.state.get("current_stage") or "unknown"),
+            "readiness": "action_required",
+            "reason": str(packet.get("reason") or "human or delegated work is required"),
+            "owner": str(first.get("owner") or packet.get("owner") or "user"),
+            "instruction": str(first.get("instruction") or "review the action packet"),
+            "command": first.get("command") or [],
+            "expected_outputs": [str(value) for value in (first.get("expected_outputs") or [])],
+            "additional_action_count": max(0, len(actions) - 1),
+            "action_packet": str(director.action_path.resolve()),
+            "resume_command": str(packet.get("resume_command") or ""),
+        }
+    stages = director.state.get("stages") or {}
+    next_stage = next(
+        (name for name in STAGES if stages.get(name, {}).get("status") != "complete"),
+        None,
+    )
+    if next_stage is None:
+        return {
+            "status": "complete", "stage": None, "readiness": "delivery_ready",
+            "instruction": "Workflow is complete; review the universal delivery and release evidence.",
+        }
+    row = stages.get(next_stage, {})
+    lifecycle = str(row.get("status") or "pending")
+    common = {
+        "stage": next_stage,
+        "readiness": str(row.get("readiness") or lifecycle),
+        "owner": "director",
+    }
+    if lifecycle == "failed":
+        return {
+            **common,
+            "status": "failed",
+            "reason": str(row.get("error") or f"{next_stage} failed"),
+            "instruction": "Resolve the reported failure, then reset or resume this stage.",
+            "command": [],
+        }
+    if lifecycle == "action_required":
+        return {
+            **common,
+            "status": "action_required",
+            "reason": str(row.get("error") or "the action packet is missing or unavailable"),
+            "instruction": "Restore or recreate the action packet before resuming.",
+            "command": [],
+        }
+    if lifecycle == "running":
+        return {
+            **common,
+            "status": "running",
+            "instruction": f"{next_stage} is currently running; inspect status before retrying.",
+            "command": [],
+        }
+    return {
+        **common,
+        "status": "ready_to_run",
+        "instruction": f"Run or resume the workflow at {next_stage}.",
+        "command": [
+            sys.executable, str(Path(__file__).resolve()), "run",
+            "--project", str(director.context.project_file), "--resume",
+        ],
+    }
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
@@ -4011,6 +4149,8 @@ def parser() -> argparse.ArgumentParser:
     resume.add_argument("--execute-external", action="store_true")
     status = sub.add_parser("status", help="print current resumable state")
     status.add_argument("--project", required=True)
+    next_action = sub.add_parser("next", help="print only the current creator-facing next action")
+    next_action.add_argument("--project", required=True)
     approve = sub.add_parser("approve-sample", help="approve the exact current sample evidence")
     approve.add_argument("--project", required=True)
     approve.add_argument("--approved-by", default="user")
@@ -4078,6 +4218,9 @@ def _dispatch(args: argparse.Namespace) -> int:
                         execute_external=getattr(args, "execute_external", False) or deliver)
     if args.command == "status":
         print(json.dumps(director.state, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "next":
+        print(json.dumps(build_next_action_summary(director), ensure_ascii=False, indent=2))
         return 0
     if args.command == "review":
         configured = director.project.get("review", {}).get("dashboard", {})

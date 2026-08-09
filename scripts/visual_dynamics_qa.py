@@ -8,7 +8,13 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from director_contracts import LOW_INFORMATION_ANCHORS, normalized_anchor, sha256_file
+from director_contracts import (
+    LOW_INFORMATION_ANCHORS,
+    normalized_anchor,
+    sha256_file,
+    storyboard_semantic_event_id,
+    validate_storyboard_semantic_binding,
+)
 
 
 def _stable_hash(value: Any) -> str:
@@ -35,9 +41,13 @@ def build_report(
     brief = json.loads(semantic_brief_path.read_text(encoding="utf-8"))
     events = [row for row in (storyboard.get("events") or []) if isinstance(row, dict)]
     brief_events = {
-        str(row.get("id")): row for row in (brief.get("events") or []) if isinstance(row, dict)
+        str(row.get("id") or "").strip(): row
+        for row in (brief.get("events") or []) if isinstance(row, dict)
     }
-    findings: list[dict[str, Any]] = []
+    findings = [
+        _finding("semantic_binding_mismatch", error)
+        for error in validate_storyboard_semantic_binding(storyboard, brief)
+    ]
     low_information = {normalized_anchor(value) for value in LOW_INFORMATION_ANCHORS}
     families: list[str] = []
     anchors: Counter[str] = Counter()
@@ -45,22 +55,22 @@ def build_report(
 
     for index, event in enumerate(events):
         event_id = str(event.get("id") or f"event-{index}")
-        semantic = brief_events.get(event_id, event)
+        semantic = brief_events.get(storyboard_semantic_event_id(event)) or {}
         treatment = str(event.get("treatment") or "unknown")
-        quiet = treatment == "quiet_source"
+        quiet = semantic.get("treatment") == "quiet_source"
         try:
             start = float(event.get(
-                "start", event.get("output_start", semantic.get("output_start", 0.0)),
+                "output_start", event.get("start", semantic.get("output_start", 0.0)),
             ))
             end = float(event.get(
-                "end", event.get("output_end", semantic.get("output_end", start)),
+                "output_end", event.get("end", semantic.get("output_end", start)),
             ))
         except (TypeError, ValueError):
             findings.append(_finding("invalid_event_timing", "Event timing is not numeric.", event_id=event_id))
             start, end = 0.0, 0.0
         intervals.append((start, max(start, end), quiet))
         if quiet:
-            if not (semantic.get("source_activity_evidence") or event.get("source_activity_evidence")):
+            if not semantic.get("source_activity_evidence"):
                 findings.append(_finding(
                     "unsupported_quiet_source", "Quiet source interval lacks stored source-activity evidence.",
                     event_id=event_id,
@@ -70,35 +80,31 @@ def build_report(
         visual = event.get("visual_structure") or {}
         family = str(visual.get("layout_archetype") or treatment or "unknown")
         families.append(family)
-        anchor = normalized_anchor(str(semantic.get("anchor", event.get("anchor", ""))))
+        anchor = normalized_anchor(str(semantic.get("anchor") or ""))
         if anchor:
             anchors[anchor] += 1
         if not anchor or anchor in low_information:
             findings.append(_finding(
                 "low_information_anchor",
-                f"Anchor {semantic.get('anchor', event.get('anchor', ''))!r} cannot justify a visual event.",
+                f"Anchor {semantic.get('anchor', '')!r} cannot justify a visual event.",
                 event_id=event_id,
             ))
-        takeaway = str(semantic.get("viewer_takeaway") or event.get("viewer_takeaway") or "").strip()
-        rationale = str(
-            semantic.get("relevance_rationale") or event.get("relevance_rationale") or ""
-        ).strip()
-        mechanism = str(
-            semantic.get("visual_mechanism") or event.get("visual_mechanism") or ""
-        ).strip()
+        takeaway = str(semantic.get("viewer_takeaway") or "").strip()
+        rationale = str(semantic.get("relevance_rationale") or "").strip()
+        mechanism = str(semantic.get("visual_mechanism") or "").strip()
         if not takeaway or not rationale or not mechanism:
             findings.append(_finding(
                 "missing_explanatory_value",
                 "Visual event requires a viewer takeaway, relevance rationale, and visual mechanism.",
                 event_id=event_id,
             ))
-        quote = normalized_anchor(str(semantic.get("transcript_quote") or event.get("transcript_quote") or ""))
+        quote = normalized_anchor(str(semantic.get("transcript_quote") or ""))
         if anchor and quote and anchor == quote and len(anchor) > 12:
             findings.append(_finding(
                 "subtitle_restatement", "Visual anchor repeats the full subtitle instead of explaining it.",
                 event_id=event_id,
             ))
-        motion = semantic.get("motion") or event.get("motion") or {}
+        motion = semantic.get("motion") or {}
         missing_phases = [phase for phase in ("entrance", "reveal", "hold", "exit") if not motion.get(phase)]
         if missing_phases:
             findings.append(_finding(

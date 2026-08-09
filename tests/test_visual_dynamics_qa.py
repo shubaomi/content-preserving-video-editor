@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import sys
 import tempfile
@@ -16,11 +17,19 @@ from visual_dynamics_qa import build_report, validate_report  # noqa: E402
 def event(identifier: str, anchor: str, start: float, family: str) -> dict:
     return {
         "id": identifier,
+        "semantic_event_id": identifier,
         "anchor": anchor,
         "start": start,
         "end": start + 4,
+        "source_start": start,
+        "source_end": start + 4,
+        "output_start": start,
+        "output_end": start + 4,
         "treatment": family,
         "viewer_takeaway": f"理解{anchor}",
+        "transcript_word_ids": [identifier + "-word"],
+        "approved_visible_copy": anchor,
+        "visible_copy_manifest": [anchor],
         "relevance_rationale": "把口播中的抽象关系转成可见结构",
         "visual_mechanism": "用结构关系而不是重复字幕来解释",
         "transcript_quote": f"这里解释{anchor}背后的关系",
@@ -59,6 +68,13 @@ class VisualDynamicsQaTests(unittest.TestCase):
         self.storyboard.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
         self.brief.write_text(json.dumps({"events": events}, ensure_ascii=False), encoding="utf-8")
 
+    def _write_separate(self, storyboard_events: list[dict], brief_events: list[dict]) -> None:
+        payload = {"composition": {"duration": 80}, "events": storyboard_events}
+        self.storyboard.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        self.brief.write_text(
+            json.dumps({"events": brief_events}, ensure_ascii=False), encoding="utf-8",
+        )
+
     def test_four_meaningful_distinct_events_pass(self) -> None:
         self._write([
             event("e1", "请求入口", 5, "ui-focus"),
@@ -96,6 +112,31 @@ class VisualDynamicsQaTests(unittest.TestCase):
         codes = {finding["code"] for finding in report["findings"]}
         self.assertIn("low_information_anchor", codes)
         self.assertIn("visual_family_repetition", codes)
+
+    def test_unrelated_storyboard_cannot_supply_its_own_semantics(self) -> None:
+        brief_events = [
+            event("e1", "请求入口", 5, "ui-focus"),
+            event("e2", "三步处理", 20, "process-path"),
+            event("e3", "方案对比", 40, "comparison"),
+            event("e4", "最终结果", 60, "numeric-result"),
+        ]
+        storyboard_events = deepcopy(brief_events)
+        for index, storyboard_event in enumerate(storyboard_events):
+            storyboard_event["id"] = f"unrelated-{index}"
+            storyboard_event["anchor"] = f"自述语义-{index}"
+        self._write_separate(storyboard_events, brief_events)
+
+        report = build_report(
+            storyboard_path=self.storyboard,
+            semantic_brief_path=self.brief,
+            config=self.project["qa"]["visual_dynamics"],
+            production_contract_path=self.contract,
+        )
+
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("semantic_binding_mismatch", {
+            finding["code"] for finding in report["findings"]
+        })
 
     def test_report_is_invalid_after_storyboard_hash_drift(self) -> None:
         self._write([

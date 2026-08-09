@@ -11,6 +11,30 @@ Complete a video only when applicable gates pass.
 - Review every omitted source interval of 15 seconds or longer; silence alone is not permission to delete it.
 - Pass or explicitly waive tail coverage.
 
+## Evidence coverage and semantic inheritance
+
+- Sample evidence across the complete source duration using a bounded policy;
+  record frame timestamps, coverage intervals, hashes, and whether a hard cap
+  enlarged the interval.
+- When a managed target frame has coverage metadata, require its interval to
+  overlap the semantic event's source interval and its actual capture timestamp
+  to be no more than 15 seconds from that interval. Every cited frame must pass;
+  one relevant frame cannot excuse additional unrelated frames. If a capped
+  long-video sample is farther away, block semantic approval until an
+  event-specific supplemental frame is supplied. The built-in sampler does not
+  yet perform this supplemental capture automatically.
+- Fail managed acquisition when extracted frame count or timestamps differ from
+  the request. Partial extraction cannot claim full-duration coverage.
+- Require each sample and full Storyboard event to inherit the approved semantic
+  event identity, word IDs, anchor, source/output timing, viewer takeaway, and
+  approved visible copy. Require an exact derived `visible_copy_manifest` and
+  treat all other event strings as either explicitly allowed metadata or
+  approved copy. Reject nested authority fields, arbitrary render props,
+  missing/reordered mappings, and extra copy. Continue to inspect final DOM/OCR
+  during visual review; JSON validation alone does not prove rendered pixels.
+- Never accept Storyboard-authored semantics as a fallback when an approved brief
+  exists.
+
 ## Production contract and providers
 
 - Require a current hash-bound Production Contract before creative planning and
@@ -90,6 +114,12 @@ Complete a video only when applicable gates pass.
 - For every declared connector contract, match observed relation count to the
   Storyboard and verify every path terminates on its intended node edge. A
   central line that visually reaches only one of several targets is a failure.
+- Snapshot, connector, and generated-human anatomy evidence must be a decodable
+  image of reviewable size. Placeholder bytes, corrupt images, stale hashes, or
+  a path-existence-only assertion do not pass aesthetic QA.
+- General review frames must be at least 320x180 in either orientation. Anatomy
+  evidence must use three unique role-specific views: `full_frame`, `left_hand`,
+  and `right_hand`; structured evidence records declare role and SHA-256.
 
 ## Cut boundaries
 

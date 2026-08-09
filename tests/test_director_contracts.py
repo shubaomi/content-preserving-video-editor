@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import hashlib
 import json
 import sys
@@ -17,7 +18,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from director_contracts import (  # noqa: E402
     VISUAL_VOCABULARY,
     detect_input_mode,
+    sha256_file,
     validate_semantic_brief,
+    validate_semantic_evidence_binding,
     validate_storyboard,
     validate_video_use_edl,
     validate_video_use_edit_preflight,
@@ -34,9 +37,16 @@ def event(identifier: str, anchor: str, start: float, archetype: str) -> dict:
     return {
         "id": identifier,
         "start": start,
+        "end": start + 4,
+        "source_start": start,
+        "source_end": start + 4,
+        "output_start": start,
+        "output_end": start + 4,
         "anchor": anchor,
         "transcript_quote": f"这里真正讲的是{anchor}的作用",
         "transcript_word_ids": [identifier + "-w1"],
+        "viewer_takeaway": f"理解{anchor}的作用",
+        "approved_visible_copy": f"{anchor}的作用",
         "relevance_rationale": "把抽象关系转成可见结构",
         "visual_structure": {
             "dom_structure": archetype + "-dom",
@@ -61,6 +71,26 @@ def valid_brief() -> dict:
             event("e3", "三步生成流程", 55, "step-rail"),
             event("e4", "五个核心模块", 75, "numeric-result"),
         ],
+    }
+
+
+def valid_storyboard(brief: dict | None = None) -> dict:
+    brief = brief or valid_brief()
+    events = deepcopy(brief["events"])
+    for storyboard_event in events:
+        storyboard_event["semantic_event_id"] = storyboard_event["id"]
+        approved_copy = storyboard_event.get("approved_visible_copy")
+        storyboard_event["visible_copy_manifest"] = (
+            [approved_copy] if isinstance(approved_copy, str) and approved_copy.strip() else []
+        )
+    return {
+        "renderer": "hyperframes",
+        "motion_output": "hyperframes_render",
+        "capability_skills": [
+            "hyperframes", "hyperframes-core", "hyperframes-creative",
+            "hyperframes-animation", "hyperframes-cli",
+        ],
+        "events": events,
     }
 
 
@@ -110,6 +140,310 @@ class DirectorContractTests(unittest.TestCase):
         errors = validate_storyboard(storyboard, brief)
         self.assertTrue(any("renderer must be hyperframes" in error for error in errors))
         self.assertTrue(any("motion_output must be hyperframes_render" in error for error in errors))
+
+    def test_storyboard_accepts_exact_semantic_copy_and_explicit_semantic_ids(self) -> None:
+        brief = valid_brief()
+        self.assertEqual(validate_storyboard(valid_storyboard(brief), brief), [])
+
+        storyboard = valid_storyboard(brief)
+        for index, storyboard_event in enumerate(storyboard["events"]):
+            storyboard_event["id"] = f"render-event-{index}"
+        self.assertEqual(validate_storyboard(storyboard, brief), [])
+
+        del storyboard["events"][0]["semantic_event_id"]
+        errors = validate_storyboard(storyboard, brief)
+        self.assertTrue(any("explicit semantic_event_id" in error for error in errors))
+
+    def test_storyboard_rejects_unrelated_or_reordered_semantic_event_ids(self) -> None:
+        brief = valid_brief()
+        unrelated = valid_storyboard(brief)
+        for index, storyboard_event in enumerate(unrelated["events"]):
+            storyboard_event["id"] = f"unrelated-{index}"
+            storyboard_event["semantic_event_id"] = f"unrelated-{index}"
+        errors = validate_storyboard(unrelated, brief)
+        self.assertTrue(any("semantic event set" in error for error in errors))
+
+        reordered = valid_storyboard(brief)
+        reordered["events"][0], reordered["events"][1] = (
+            reordered["events"][1], reordered["events"][0],
+        )
+        errors = validate_storyboard(reordered, brief)
+        self.assertTrue(any("semantic event order" in error for error in errors))
+
+    def test_storyboard_rejects_repeated_open_and_all_semantic_field_drift(self) -> None:
+        brief = valid_brief()
+        repeated_open = valid_storyboard(brief)
+        for storyboard_event in repeated_open["events"]:
+            storyboard_event["anchor"] = "打开"
+        errors = validate_storyboard(repeated_open, brief)
+        self.assertTrue(any("anchor" in error for error in errors))
+
+        mutations = {
+            "anchor": "另一个含义",
+            "transcript_word_ids": ["unrelated-word"],
+            "source_start": 999,
+            "source_end": 1000,
+            "output_start": 999,
+            "output_end": 1000,
+            "viewer_takeaway": "无关结论",
+            "approved_visible_copy": "未批准文案",
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                storyboard = valid_storyboard(brief)
+                storyboard["events"][0][field] = value
+                errors = validate_storyboard(storyboard, brief)
+                self.assertTrue(any(field in error for error in errors), errors)
+
+    def test_quiet_source_still_binds_identity_order_and_time_window(self) -> None:
+        brief = valid_brief()
+        quiet = {
+            "id": "quiet-tail", "treatment": "quiet_source",
+            "source_start": 90, "source_end": 100,
+            "output_start": 90, "output_end": 100,
+            "source_activity_evidence": ["screen remains active"],
+        }
+        brief["events"].append(quiet)
+        storyboard = valid_storyboard(brief)
+        self.assertEqual(validate_storyboard(storyboard, brief), [])
+
+        missing_explicit_id = valid_storyboard(brief)
+        del missing_explicit_id["events"][-1]["semantic_event_id"]
+        errors = validate_storyboard(missing_explicit_id, brief)
+        self.assertTrue(any("explicit semantic_event_id" in error for error in errors))
+
+        storyboard["events"][-1]["output_start"] = 91
+        errors = validate_storyboard(storyboard, brief)
+        self.assertTrue(any("output_start" in error for error in errors))
+
+    def test_storyboard_rejects_quiet_classification_and_render_window_drift(self) -> None:
+        brief = valid_brief()
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["treatment"] = "quiet_source"
+        errors = validate_storyboard(storyboard, brief)
+        self.assertTrue(any("quiet_source classification" in error for error in errors))
+
+        quiet = {
+            "id": "quiet-tail", "treatment": "quiet_source",
+            "source_start": 90, "source_end": 100,
+            "output_start": 90, "output_end": 100,
+            "source_activity_evidence": ["screen remains active"],
+        }
+        brief["events"].append(quiet)
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][-1]["treatment"] = "keyword_typography"
+        errors = validate_storyboard(storyboard, brief)
+        self.assertTrue(any("quiet_source classification" in error for error in errors))
+
+        for field, value in (("start", 999), ("end", 1000)):
+            with self.subTest(field=field):
+                storyboard = valid_storyboard(valid_brief())
+                storyboard["events"][0][field] = value
+                errors = validate_storyboard(storyboard, valid_brief())
+                self.assertTrue(any(field in error for error in errors), errors)
+
+        brief = valid_brief()
+        brief["events"][0]["treatment"] = "steps"
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["treatment"] = "comparison"
+        errors = validate_storyboard(storyboard, brief)
+        self.assertTrue(any("treatment" in error for error in errors))
+
+        brief = valid_brief()
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["treatment"] = "comparison"
+        errors = validate_storyboard(storyboard, brief)
+        self.assertTrue(any("unapproved treatment" in error for error in errors))
+
+    def test_storyboard_cannot_add_visible_copy_that_the_brief_did_not_approve(self) -> None:
+        brief = valid_brief()
+        del brief["events"][0]["approved_visible_copy"]
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["approved_visible_copy"] = "Storyboard 自行添加的文案"
+
+        errors = validate_storyboard(storyboard, brief)
+
+        self.assertTrue(any("unapproved visible copy" in error for error in errors))
+
+    def test_storyboard_rejects_hidden_or_nested_visible_copy_fields(self) -> None:
+        brief = valid_brief()
+        mutations = (
+            {"display_text": "打开"},
+            {"headline": "打开"},
+            {"heading": "打开"},
+            {"content": "打开"},
+            {"description": "打开"},
+            {"message": "打开"},
+            {"innerHTML": "打开"},
+            {"components": [{"type": "text", "children": "打开"}]},
+            {"components": [{"approved_visible_copy": "打开"}]},
+            {"components": [{"visible_copy_manifest": ["打开"]}]},
+            {"visible-copy-manifest": ["打开"]},
+            {"Visible_Copy_Manifest": ["打开"]},
+            {"approved-visible-copy": "打开"},
+            {"Approved_Visible_Copy": "打开"},
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                storyboard = valid_storyboard(brief)
+                storyboard["events"][0].update(mutation)
+                errors = validate_storyboard(storyboard, brief)
+                self.assertTrue(any("visible copy" in error for error in errors), errors)
+
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["visible_copy_manifest"] = ["打开"]
+        errors = validate_storyboard(storyboard, brief)
+        self.assertTrue(any("visible_copy_manifest" in error for error in errors), errors)
+
+    def test_typed_connector_relations_are_nonvisible_metadata(self) -> None:
+        brief = valid_brief()
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["geometry_contract"] = {
+            "connector_contract": {
+                "required_connector_count": 1,
+                "attachment_intent": "semantic nodes",
+                "relations": [{
+                    "from": "source-node",
+                    "to": "target-node",
+                    "attachment_edge": "right-to-left",
+                }],
+            },
+        }
+
+        self.assertEqual(validate_storyboard(storyboard, brief), [])
+
+    def test_malformed_storyboard_events_return_errors_instead_of_crashing(self) -> None:
+        brief = valid_brief()
+        for events in ({"e1": {}}, ["bad-event"]):
+            with self.subTest(events=events):
+                storyboard = valid_storyboard(brief)
+                storyboard["events"] = events
+                errors = validate_storyboard(storyboard, brief)
+                self.assertTrue(any("events" in error for error in errors), errors)
+
+    def test_semantic_target_frame_coverage_must_overlap_event_source_window(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            transcript = root / "transcript.json"
+            transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+            frame = root / "frame.png"
+            frame.write_bytes(b"png")
+            bundle_path = root / "evidence-bundle.json"
+
+            def write_bundle(coverage: dict | None) -> dict:
+                frame_record = {"path": str(frame.resolve()), "sha256": sha256_file(frame)}
+                if coverage is not None:
+                    frame_record["coverage"] = coverage
+                bundle = {
+                    "transcript": {
+                        "sha256": sha256_file(transcript),
+                        "term_evidence": [{
+                            "word_id": "w1", "text": "proof", "start": 10.0, "end": 11.0,
+                        }],
+                    },
+                    "representative_frames": [frame_record],
+                }
+                bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+                return {
+                    "schema_version": 2,
+                    "transcript_sha256": sha256_file(transcript),
+                    "evidence_bundle_sha256": sha256_file(bundle_path),
+                    "evidence_frames": [str(frame)],
+                    "events": [{
+                        "id": "event-1", "transcript_word_ids": ["w1"],
+                        "transcript_quote": "proof", "source_start": 10.0,
+                        "source_end": 11.0, "target_frame_evidence": [str(frame)],
+                    }],
+                }
+
+            brief = write_bundle({"start_seconds": 0.0, "end_seconds": 5.0})
+            errors = validate_semantic_evidence_binding(
+                brief, transcript_path=transcript, evidence_bundle_path=bundle_path,
+            )
+            self.assertTrue(any("target frame coverage" in error for error in errors))
+
+            brief = write_bundle({"start_seconds": 9.0, "end_seconds": 12.0})
+            self.assertEqual(validate_semantic_evidence_binding(
+                brief, transcript_path=transcript, evidence_bundle_path=bundle_path,
+            ), [])
+
+            malformed_coverages = (
+                {"start_seconds": 9.0},
+                {"start_seconds": 12.0, "end_seconds": 9.0},
+                {"start_seconds": float("nan"), "end_seconds": 12.0},
+                {"start_seconds": 9.0, "end_seconds": float("inf")},
+            )
+            for coverage in malformed_coverages:
+                with self.subTest(coverage=coverage):
+                    brief = write_bundle(coverage)
+                    errors = validate_semantic_evidence_binding(
+                        brief, transcript_path=transcript, evidence_bundle_path=bundle_path,
+                    )
+                    self.assertTrue(any("malformed target frame coverage" in error for error in errors))
+
+            brief = write_bundle({"status": "unknown", "reason": "legacy frame timestamp absent"})
+            self.assertEqual(validate_semantic_evidence_binding(
+                brief, transcript_path=transcript, evidence_bundle_path=bundle_path,
+            ), [])
+
+            brief = write_bundle(None)
+            self.assertEqual(validate_semantic_evidence_binding(
+                brief, transcript_path=transcript, evidence_bundle_path=bundle_path,
+            ), [])
+
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["representative_frames"][0]["timestamp_seconds"] = 80.0
+            bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+            brief["evidence_bundle_sha256"] = sha256_file(bundle_path)
+            errors = validate_semantic_evidence_binding(
+                brief, transcript_path=transcript, evidence_bundle_path=bundle_path,
+            )
+            self.assertTrue(any("target frame timestamp" in error for error in errors), errors)
+
+    def test_every_timestamped_target_frame_must_overlap_the_event(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            transcript = root / "transcript.json"
+            transcript.write_text(json.dumps({"words": []}), encoding="utf-8")
+            near = root / "near.png"
+            far = root / "far.png"
+            near.write_bytes(b"near")
+            far.write_bytes(b"far")
+            bundle_path = root / "evidence-bundle.json"
+            bundle = {
+                "transcript": {
+                    "sha256": sha256_file(transcript),
+                    "term_evidence": [{
+                        "word_id": "w1", "text": "proof", "start": 10.0, "end": 11.0,
+                    }],
+                },
+                "representative_frames": [
+                    {"path": str(near), "sha256": sha256_file(near),
+                     "timestamp_seconds": 10.5,
+                     "coverage": {"start_seconds": 9.0, "end_seconds": 12.0}},
+                    {"path": str(far), "sha256": sha256_file(far),
+                     "timestamp_seconds": 80.0,
+                     "coverage": {"start_seconds": 0.0, "end_seconds": 100.0}},
+                ],
+            }
+            bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+            brief = {
+                "schema_version": 2,
+                "transcript_sha256": sha256_file(transcript),
+                "evidence_bundle_sha256": sha256_file(bundle_path),
+                "evidence_frames": [str(near), str(far)],
+                "events": [{
+                    "id": "event-1", "transcript_word_ids": ["w1"],
+                    "transcript_quote": "proof", "source_start": 10.0, "source_end": 11.0,
+                    "target_frame_evidence": [str(near), str(far)],
+                }],
+            }
+
+            errors = validate_semantic_evidence_binding(
+                brief, transcript_path=transcript, evidence_bundle_path=bundle_path,
+            )
+
+            self.assertTrue(any("target frame timestamp" in error for error in errors), errors)
 
     def test_existing_edit_is_detected_without_changing_preservation_policy(self) -> None:
         project = {"source": {"input_mode": "existing_edit_polish"}}

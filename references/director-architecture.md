@@ -173,11 +173,32 @@ The deterministic validator rejects low-information anchors, repeated anchors,
 subtitle-length duplication, missing evidence, and duplicate visual contracts.
 It never invents the semantic plan.
 
+Evidence acquisition uses bounded, full-duration sampling and stores a timestamp
+and coverage interval for each managed frame. When this metadata exists, a
+semantic event's every target-frame reference must overlap the event's source
+interval, and the frame's actual timestamp must be within 15 seconds of that
+interval. Capped long-video sampling therefore blocks until supplemental
+event-level frames are supplied when needed; automatic supplemental capture is
+not yet a built-in path. Managed count or timestamp mismatch fails closed instead
+of expanding a remaining frame across the source. Legacy evidence without
+timestamps remains readable but cannot claim measured temporal coverage.
+
 ## HyperFrames contract
 
 Require `renderer=hyperframes`, all five HyperFrames capability Skills, and
 `motion_output=hyperframes_render`. Every event's five-field signature must be
 unique when it claims to be a distinct variant.
+
+When a semantic brief is supplied, Storyboard events must map one-to-one in
+approved order. The mapping binds semantic event ID, anchor, transcript word
+IDs, source/output timing, viewer takeaway, and any approved visible copy.
+Storyboard-authored semantic fallback is forbidden. Each event carries an exact
+derived `visible_copy_manifest`; common headline/text/label/component payloads
+outside it are rejected. Any other string must be approved copy or an explicit
+non-visible metadata path; nested authority fields fail closed. Both the sample
+and the full project are validated against their respective current briefs.
+Rendered DOM/OCR inspection remains a separate visual-review responsibility
+rather than an automatic semantic claim.
 
 Use HyperFrames Core and Creative rules before HTML. Run HyperFrames check and
 multi-phase snapshots. Studio is the editable review surface. An actual
@@ -201,6 +222,13 @@ use PIL or FFmpeg translation to impersonate the approved storyboard.
 `scripts/aesthetic_qa.py` requires every criterion to have `status=pass` and
 evidence. It also requires HyperFrames check, caption sync, overlap, overflow,
 and decode results plus four phase snapshots for every reviewed visual event.
+
+Visual snapshot, connector, and anatomy evidence must decode as an image and be
+large enough for meaningful review. General evidence is at least 320x180 in
+either orientation; anatomy review uses unique `full_frame`, `left_hand`, and
+`right_hand` images, with roles required on structured records. A path that
+exists but contains placeholder or corrupt bytes fails the gate. Evidence
+records may additionally bind SHA-256.
 
 Automated tests validate the gate implementation; they do not supply taste or
 visual evidence. A reviewer must inspect actual frames at full size.

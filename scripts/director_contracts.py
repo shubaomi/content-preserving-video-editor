@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import tempfile
 import time
+from collections import Counter
 from contextlib import contextmanager
 import re
 from dataclasses import dataclass
@@ -30,6 +32,41 @@ REQUIRED_VISUAL_FIELDS = (
     "animation_choreography",
     "use_case",
 )
+
+STORYBOARD_SEMANTIC_FIELDS = (
+    "anchor",
+    "transcript_word_ids",
+    "viewer_takeaway",
+)
+
+STORYBOARD_SEMANTIC_TIME_FIELDS = (
+    "source_start",
+    "source_end",
+    "output_start",
+    "output_end",
+)
+
+NON_VISIBLE_EVENT_STRING_PATHS = {
+    "id", "semantic_event_id", "treatment", "anchor", "transcript_quote",
+    "transcript_word_ids.[]", "viewer_takeaway", "relevance_rationale",
+    "viewer_job", "visual_mechanism", "target_frame_evidence.[]",
+    "target_frame_evidence.[].path", "target_frame_evidence.[].sha256",
+    "source_activity_evidence.[]", "form", "placement", "size", "background",
+    "asset", "visual_structure.dom_structure", "visual_structure.information_hierarchy",
+    "visual_structure.layout_archetype", "visual_structure.animation_choreography",
+    "visual_structure.use_case", "motion.entrance", "motion.reveal", "motion.hold",
+    "motion.exit", "audio_decision.type", "audio_decision.reason",
+    "audio_decision.family", "audio_decision.asset", "audio_decision.asset_path",
+    "deduplication.semantic", "deduplication.visual", "protected_zones.[].id",
+    "geometry_contract.complete_components.[]", "geometry_contract.cropping",
+    "geometry_contract.object_fit",
+    "geometry_contract.connector_contract.attachment_intent",
+    "geometry_contract.connector_contract.relations.[]",
+    "geometry_contract.connector_contract.relations.[].from",
+    "geometry_contract.connector_contract.relations.[].to",
+    "geometry_contract.connector_contract.relations.[].attachment_edge",
+}
+MAX_TARGET_FRAME_DISTANCE_SECONDS = 15.0
 
 STAGES = (
     "inspect",
@@ -388,26 +425,302 @@ def validate_semantic_evidence_binding(
         missing = [value for value in ids if value not in words]
         if missing:
             errors.append(f"{prefix} references unknown transcript word IDs: {', '.join(missing)}")
-            continue
-        selected = [words[value] for value in ids]
+        selected = [] if missing else [words[value] for value in ids]
+        try:
+            source_start = float(event["source_start"])
+            source_end = float(event["source_end"])
+            if (
+                not math.isfinite(source_start)
+                or not math.isfinite(source_end)
+                or source_start < 0
+                or source_end < source_start
+            ):
+                raise ValueError
+            source_window: tuple[float, float] | None = (source_start, source_end)
+        except (KeyError, TypeError, ValueError):
+            errors.append(f"{prefix} has invalid source timing evidence")
+            source_window = None
         if selected:
             try:
                 selected_start = min(float(row["start"]) for row in selected)
                 selected_end = max(float(row["end"]) for row in selected)
-                source_start = float(event["source_start"])
-                source_end = float(event["source_end"])
             except (KeyError, TypeError, ValueError):
-                errors.append(f"{prefix} has invalid source timing evidence")
+                errors.append(f"{prefix} has invalid transcript word timing evidence")
             else:
-                if source_start > selected_start + 0.05 or source_end < selected_end - 0.05:
+                if source_window is not None and (
+                    source_window[0] > selected_start + 0.05
+                    or source_window[1] < selected_end - 0.05
+                ):
                     errors.append(f"{prefix} source timing does not contain its referenced words")
             expected = normalized_anchor("".join(str(row.get("text") or "") for row in selected))
             quote = normalized_anchor(str(event.get("transcript_quote") or ""))
             if not quote or (expected and quote not in expected and expected not in quote):
                 errors.append(f"{prefix} transcript quote does not match its referenced words")
+        target_records: list[dict[str, Any]] = []
         for value in event.get("target_frame_evidence") or []:
-            if resolved_frame(value) not in frame_records:
+            record = frame_records.get(resolved_frame(value))
+            if record is None:
                 errors.append(f"{prefix} references undeclared target frame: {value}")
+            else:
+                target_records.append(record)
+        for record_index, record in enumerate(target_records):
+            timestamp = record.get("timestamp_seconds")
+            if timestamp is not None:
+                try:
+                    frame_time = float(timestamp)
+                except (TypeError, ValueError):
+                    errors.append(f"{prefix} has malformed target frame timestamp")
+                else:
+                    if not math.isfinite(frame_time) or frame_time < 0:
+                        errors.append(f"{prefix} has malformed target frame timestamp")
+                    elif source_window is not None:
+                        distance = (
+                            0.0 if source_window[0] <= frame_time <= source_window[1]
+                            else min(
+                                abs(frame_time - source_window[0]),
+                                abs(frame_time - source_window[1]),
+                            )
+                        )
+                        if distance > MAX_TARGET_FRAME_DISTANCE_SECONDS:
+                            errors.append(
+                                f"{prefix} target frame timestamp[{record_index}] is too far "
+                                "from its source timing"
+                            )
+            if "coverage" not in record:
+                continue
+            coverage = record["coverage"]
+            if (
+                isinstance(coverage, dict)
+                and str(coverage.get("status") or "").lower() == "unknown"
+            ):
+                continue
+            if not isinstance(coverage, dict):
+                errors.append(f"{prefix} has malformed target frame coverage")
+                continue
+            try:
+                coverage_start = float(coverage["start_seconds"])
+                coverage_end = float(coverage["end_seconds"])
+            except (KeyError, TypeError, ValueError):
+                errors.append(f"{prefix} has malformed target frame coverage")
+                continue
+            if (
+                math.isfinite(coverage_start)
+                and math.isfinite(coverage_end)
+                and 0 <= coverage_start <= coverage_end
+            ):
+                if source_window is not None and not (
+                    coverage_end >= source_window[0] and coverage_start <= source_window[1]
+                ):
+                    errors.append(
+                        f"{prefix} target frame coverage[{record_index}] does not overlap "
+                        "its source timing"
+                    )
+            else:
+                errors.append(f"{prefix} has malformed target frame coverage")
+    return errors
+
+
+def storyboard_semantic_event_id(event: dict[str, Any]) -> str:
+    """Resolve the approved semantic event referenced by a storyboard event."""
+    semantic_event_id = event.get("semantic_event_id")
+    return str(semantic_event_id or "").strip()
+
+
+def _visible_copy_strings(value: Any) -> list[str]:
+    if isinstance(value, str):
+        normalized = " ".join(value.split())
+        return [normalized] if normalized else []
+    if isinstance(value, dict):
+        result: list[str] = []
+        for key in sorted(value):
+            result.extend(_visible_copy_strings(value[key]))
+        return result
+    if isinstance(value, (list, tuple)):
+        result = []
+        for item in value:
+            result.extend(_visible_copy_strings(item))
+        return result
+    return []
+
+
+def _normalized_event_path(path: tuple[str, ...]) -> str:
+    return ".".join(
+        "[]" if value.isdigit() else value.strip().lower().replace("-", "_")
+        for value in path
+    )
+
+
+def _event_visible_text_fields(
+    value: Any,
+    path: tuple[str, ...] = (),
+    *,
+    approved_copy: tuple[str, ...] = (),
+) -> list[tuple[str, str]]:
+    """Fail closed on event strings not declared as metadata or approved copy."""
+    findings: list[tuple[str, str]] = []
+    if isinstance(value, dict):
+        for raw_key, child in value.items():
+            raw_key_text = str(raw_key)
+            key = raw_key_text.strip().lower().replace("-", "_")
+            child_path = (*path, raw_key_text)
+            if (
+                not path
+                and raw_key_text in {"approved_visible_copy", "visible_copy_manifest"}
+            ):
+                continue
+            if key in {"approved_visible_copy", "visible_copy_manifest"}:
+                nested_copy = _visible_copy_strings(child) or ["<nested authoritative field>"]
+                findings.extend((".".join(child_path), text) for text in nested_copy)
+                continue
+            findings.extend(_event_visible_text_fields(
+                child, child_path, approved_copy=approved_copy,
+            ))
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            findings.extend(_event_visible_text_fields(
+                child, (*path, str(index)), approved_copy=approved_copy,
+            ))
+    elif isinstance(value, str):
+        text = " ".join(value.split())
+        if (
+            text
+            and _normalized_event_path(path) not in NON_VISIBLE_EVENT_STRING_PATHS
+            and text not in approved_copy
+        ):
+            findings.append((".".join(path), text))
+    return findings
+
+
+def validate_storyboard_semantic_binding(
+    storyboard: dict[str, Any], brief: dict[str, Any],
+) -> list[str]:
+    """Require every storyboard event to be an exact copy of approved semantics."""
+    errors: list[str] = []
+    storyboard_rows = storyboard.get("events") or []
+    brief_rows = brief.get("events") or []
+    if not isinstance(storyboard_rows, list):
+        return ["storyboard events must be a list for semantic binding"]
+    if not isinstance(brief_rows, list):
+        return ["semantic brief events must be a list for storyboard binding"]
+
+    storyboard_events: list[dict[str, Any]] = []
+    for index, event in enumerate(storyboard_rows):
+        if not isinstance(event, dict):
+            errors.append(f"events[{index}] must be a mapping for semantic binding")
+            storyboard_events.append({})
+        else:
+            storyboard_events.append(event)
+
+    brief_events: list[dict[str, Any]] = []
+    for index, event in enumerate(brief_rows):
+        if not isinstance(event, dict):
+            errors.append(f"semantic brief events[{index}] must be a mapping")
+            brief_events.append({})
+        else:
+            brief_events.append(event)
+
+    brief_ids = [str(event.get("id") or "").strip() for event in brief_events]
+    render_ids = [str(event.get("id") or "").strip() for event in storyboard_events]
+    semantic_ids = [storyboard_semantic_event_id(event) for event in storyboard_events]
+    if any(not event_id for event_id in brief_ids):
+        errors.append("approved semantic brief events require non-empty IDs")
+    if len(set(brief_ids)) != len(brief_ids):
+        errors.append("approved semantic brief event IDs must be unique")
+    if any(not event_id for event_id in render_ids):
+        errors.append("storyboard events require non-empty IDs")
+    if len(set(render_ids)) != len(render_ids):
+        errors.append("storyboard event IDs must be unique")
+    if any(not event_id for event_id in semantic_ids):
+        errors.append("storyboard events require an explicit semantic_event_id")
+    if len(storyboard_events) != len(brief_events):
+        errors.append("storyboard event count must match the approved semantic brief")
+    if Counter(semantic_ids) != Counter(brief_ids):
+        errors.append("storyboard semantic event set must exactly match the approved semantic brief")
+    elif semantic_ids != brief_ids:
+        errors.append("storyboard semantic event order must match the approved semantic brief")
+
+    brief_by_id = {
+        event_id: event for event_id, event in zip(brief_ids, brief_events) if event_id
+    }
+    for index, (semantic_id, storyboard_event) in enumerate(
+        zip(semantic_ids, storyboard_events)
+    ):
+        semantic_event = brief_by_id.get(semantic_id)
+        if semantic_event is None:
+            errors.append(
+                f"events[{index}] references unknown semantic event ID: {semantic_id or '<missing>'}"
+            )
+            continue
+        semantic_quiet = semantic_event.get("treatment") == "quiet_source"
+        storyboard_quiet = storyboard_event.get("treatment") == "quiet_source"
+        if semantic_quiet != storyboard_quiet:
+            errors.append(
+                f"events[{index}] quiet_source classification must match "
+                f"approved semantic event {semantic_id!r}"
+            )
+        fields = STORYBOARD_SEMANTIC_TIME_FIELDS
+        if not semantic_quiet:
+            fields += STORYBOARD_SEMANTIC_FIELDS
+        if "treatment" in semantic_event:
+            fields += ("treatment",)
+        elif "treatment" in storyboard_event:
+            errors.append(
+                f"events[{index}] contains unapproved treatment for semantic event {semantic_id!r}"
+            )
+        if "approved_visible_copy" in semantic_event:
+            fields += ("approved_visible_copy",)
+        elif "approved_visible_copy" in storyboard_event:
+            errors.append(
+                f"events[{index}] contains unapproved visible copy for semantic event {semantic_id!r}"
+            )
+        approved_copy = _visible_copy_strings(semantic_event.get("approved_visible_copy"))
+        manifest_value = storyboard_event.get("visible_copy_manifest")
+        if not isinstance(manifest_value, list) or any(
+            not isinstance(value, str) or not value.strip() for value in manifest_value
+        ):
+            errors.append(
+                f"events[{index}] visible_copy_manifest must be an explicit list of non-empty strings"
+            )
+            manifest_copy: list[str] = []
+        else:
+            manifest_copy = _visible_copy_strings(manifest_value)
+        if manifest_copy != approved_copy:
+            errors.append(
+                f"events[{index}] visible_copy_manifest must exactly match approved visible copy "
+                f"for semantic event {semantic_id!r}"
+            )
+        for field_path, text in _event_visible_text_fields(
+            storyboard_event, approved_copy=tuple(manifest_copy),
+        ):
+            if text not in manifest_copy:
+                errors.append(
+                    f"events[{index}] contains unapproved visible copy at {field_path}: {text!r}"
+                )
+        for field in fields:
+            if field not in semantic_event:
+                errors.append(
+                    f"approved semantic event {semantic_id!r} requires {field} for storyboard binding"
+                )
+            elif field not in storyboard_event:
+                errors.append(
+                    f"events[{index}] must copy {field} from approved semantic event {semantic_id!r}"
+                )
+            elif storyboard_event[field] != semantic_event[field]:
+                errors.append(
+                    f"events[{index}] {field} must match approved semantic event {semantic_id!r}"
+                )
+        for storyboard_field, semantic_field in (
+            ("start", "output_start"), ("end", "output_end"),
+        ):
+            if (
+                storyboard_field in storyboard_event
+                and semantic_field in semantic_event
+                and storyboard_event[storyboard_field] != semantic_event[semantic_field]
+            ):
+                errors.append(
+                    f"events[{index}] {storyboard_field} must match approved {semantic_field} "
+                    f"for semantic event {semantic_id!r}"
+                )
     return errors
 
 
@@ -422,9 +735,21 @@ def validate_storyboard(storyboard: dict[str, Any], brief: dict[str, Any] | None
         errors.append(f"storyboard missing HyperFrames capability skills: {', '.join(missing)}")
     if storyboard.get("motion_output") != "hyperframes_render":
         errors.append("motion_output must be hyperframes_render; preview-only or FFmpeg card motion is forbidden")
-    events = storyboard.get("events") or []
-    if brief is not None and len(events) != len(brief.get("events") or []):
-        errors.append("storyboard event count must match the approved semantic brief")
+    raw_events = storyboard.get("events")
+    if raw_events is None:
+        events: list[dict[str, Any]] = []
+    elif not isinstance(raw_events, list):
+        errors.append("storyboard events must be a list")
+        events = []
+    else:
+        events = []
+        for index, event in enumerate(raw_events):
+            if not isinstance(event, dict):
+                errors.append(f"events[{index}] must be a mapping")
+            else:
+                events.append(event)
+    if brief is not None:
+        errors.extend(validate_storyboard_semantic_binding(storyboard, brief))
     signatures: set[tuple[str, ...]] = set()
     for index, event in enumerate(events):
         if event.get("treatment") == "quiet_source":

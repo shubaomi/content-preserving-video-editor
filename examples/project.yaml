@@ -1,5 +1,5 @@
-schema_version: 7
-version: 7
+schema_version: 9
+version: 9
 video_id: example-video
 title: Example Video
 profile: ..\..\profile.yaml

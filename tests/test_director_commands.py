@@ -11,7 +11,8 @@ from unittest.mock import patch
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from director import _dispatch, parser  # noqa: E402
+from action_required_contract import create_action_packet  # noqa: E402
+from director import _dispatch, build_next_action_summary, parser  # noqa: E402
 
 
 class DirectorCommandTests(unittest.TestCase):
@@ -33,10 +34,80 @@ class DirectorCommandTests(unittest.TestCase):
                              "--source", "source.mp4"],
             "doctor": ["doctor"],
             "preflight": ["preflight", "--project", "project.yaml"],
+            "next": ["next", "--project", "project.yaml"],
         }
         for expected, argv in cases.items():
             with self.subTest(command=expected):
                 self.assertEqual(command_parser.parse_args(argv).command, expected)
+
+    def test_next_action_summary_surfaces_only_the_current_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            action = root / "action-required.json"
+            create_action_packet(
+                action,
+                stage="semantic_brief",
+                owner="director_with_llm",
+                reason="semantic direction required",
+                actions=[{
+                    "id": "author-semantic-brief",
+                    "owner": "director_with_llm", "instruction": "author the brief",
+                    "command": [], "inputs": [],
+                    "expected_outputs": ["semantic-brief.json"],
+                }],
+                resume_command="director.py resume --project project.yaml",
+            )
+            director = unittest.mock.MagicMock()
+            director.action_path = action
+            director.context.project_file = root / "project.yaml"
+            director.state = {
+                "status": "action_required", "current_stage": "semantic_brief",
+                "stages": {
+                    "inspect": {"status": "complete", "readiness": "ready"},
+                    "semantic_brief": {"status": "action_required", "readiness": "action_required"},
+                },
+            }
+
+            summary = build_next_action_summary(director)
+
+            self.assertEqual(summary["stage"], "semantic_brief")
+            self.assertEqual(summary["owner"], "director_with_llm")
+            self.assertEqual(summary["expected_outputs"], ["semantic-brief.json"])
+            self.assertNotIn("stages", summary)
+
+            packet = json.loads(action.read_text(encoding="utf-8"))
+            packet["reason"] = "tampered"
+            action.write_text(json.dumps(packet), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "action packet"):
+                build_next_action_summary(director)
+
+    def test_next_action_summary_does_not_hide_failed_or_packetless_blocked_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            director = unittest.mock.MagicMock()
+            director.action_path = root / "missing-action-required.json"
+            director.context.project_file = root / "project.yaml"
+            director.state = {
+                "stages": {
+                    "inspect": {"status": "failed", "readiness": "failed",
+                                "error": "ffprobe failed"},
+                },
+            }
+
+            failed = build_next_action_summary(director)
+
+            self.assertEqual(failed["status"], "failed")
+            self.assertIn("ffprobe failed", failed["reason"])
+            self.assertNotEqual(failed.get("status"), "ready_to_run")
+
+            director.state["stages"]["inspect"] = {
+                "status": "action_required", "readiness": "action_required",
+                "error": "missing semantic brief",
+            }
+            blocked = build_next_action_summary(director)
+            self.assertEqual(blocked["status"], "action_required")
+            self.assertIn("missing semantic brief", blocked["reason"])
+            self.assertEqual(blocked["command"], [])
 
     def test_diagnostic_commands_do_not_construct_or_mutate_director(self) -> None:
         command_parser = parser()

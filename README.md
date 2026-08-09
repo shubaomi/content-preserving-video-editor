@@ -15,12 +15,20 @@ python scripts/director.py doctor --out doctor.json
 python scripts/director.py init-project --root E:\Videos --video-id demo --source E:\input.mp4 --preset auto
 python scripts/director.py preflight --project E:\Videos\demo\project.yaml --out preflight.json
 python scripts/director.py run --project E:\Videos\demo\project.yaml --until sample_qa
+python scripts/director.py next --project E:\Videos\demo\project.yaml
 ```
 
 Doctor and preflight are read-only. Paid/provider, interactive review, event
 cache, preference, feedback, audit, and release-pack paths are optional and
 disabled by default. See `SKILL.md`, `references/config-schema.md`, and
 `references/quality-gates.md` before enabling them.
+
+`run --until sample_qa` means “advance toward the sample gate”; a new project
+normally pauses first for real video-use transcript/EDL evidence, an LLM semantic
+brief, or a HyperFrames project. This is an `action_required` handoff, not a
+synthetic automatic result. Use `next` to see only the current owner, instruction,
+expected output, and resume command. A stage marked `contract_ready` has policy
+and requests but not yet a produced audio or cover asset.
 
 ## Validation
 

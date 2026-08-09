@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PIL import Image
+
 
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -16,6 +18,7 @@ from aesthetic_qa import (  # noqa: E402
     REQUIRED_PHASES,
     validate,
 )
+from director_contracts import sha256_file  # noqa: E402
 
 
 def structure(name: str) -> dict:
@@ -39,7 +42,7 @@ class AestheticQaTests(unittest.TestCase):
             snapshots[event["id"]] = {}
             for phase in REQUIRED_PHASES:
                 path = root / f"{event['id']}-{phase}.png"
-                path.write_bytes(b"png")
+                Image.new("RGB", (320, 180), "white").save(path)
                 snapshots[event["id"]][phase] = str(path)
         self.review = {
             "verdict": "pass",
@@ -67,6 +70,23 @@ class AestheticQaTests(unittest.TestCase):
         errors = validate(self.review, self.storyboard)
         self.assertTrue(any("post_exit snapshot" in error for error in errors))
 
+    def test_corrupt_or_tiny_snapshot_cannot_fake_visual_review(self) -> None:
+        corrupt = Path(self.review["snapshots"]["e0"]["midpoint"])
+        corrupt.write_bytes(b"not-an-image")
+        errors = validate(self.review, self.storyboard)
+        self.assertTrue(any("midpoint snapshot evidence is not a decodable image" in error
+                            for error in errors))
+
+        Image.new("RGB", (8, 8), "white").save(corrupt)
+        errors = validate(self.review, self.storyboard)
+        self.assertTrue(any("midpoint snapshot evidence is too small" in error
+                            for error in errors))
+
+        Image.new("RGB", (128, 128), "white").save(corrupt)
+        errors = validate(self.review, self.storyboard)
+        self.assertTrue(any("midpoint snapshot evidence is too small" in error
+                            for error in errors))
+
     def test_human_asset_requires_anatomy_evidence_and_checks(self) -> None:
         self.storyboard["events"][0]["geometry_contract"] = {
             "anatomy_contract": {"person_count": 1, "arm_count": 2, "hand_count": 2}
@@ -80,16 +100,70 @@ class AestheticQaTests(unittest.TestCase):
         }
         root = Path(self.temp.name)
         evidence = []
-        for name in ("full", "left-hand", "right-hand"):
+        for index, (name, role) in enumerate((
+            ("full", "full_frame"),
+            ("left-hand", "left_hand"),
+            ("right-hand", "right_hand"),
+        )):
             path = root / f"anatomy-{name}.png"
-            path.write_bytes(b"png")
-            evidence.append(str(path))
+            Image.new("RGB", (512, 512), (230 - index * 20, 240, 245)).save(path)
+            evidence.append({"path": str(path), "sha256": sha256_file(path), "role": role})
         self.review["criteria"][HUMAN_ANATOMY_CRITERION] = {
             "status": "pass",
             "evidence": evidence,
             "checks": {name: True for name in REQUIRED_ANATOMY_CHECKS},
         }
         self.assertEqual(validate(self.review, self.storyboard), [])
+
+    def test_human_anatomy_evidence_requires_unique_roles_and_images(self) -> None:
+        self.storyboard["events"][0]["geometry_contract"] = {
+            "anatomy_contract": {"person_count": 1, "arm_count": 2, "hand_count": 2}
+        }
+        path = Path(self.temp.name) / "one-view.png"
+        Image.new("RGB", (512, 512), "white").save(path)
+        record = {"path": str(path), "sha256": sha256_file(path), "role": "full_frame"}
+        self.review["criteria"][HUMAN_ANATOMY_CRITERION] = {
+            "status": "pass",
+            "evidence": [record, record, record],
+            "checks": {name: True for name in REQUIRED_ANATOMY_CHECKS},
+        }
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("roles" in error or "unique" in error for error in errors), errors)
+
+    def test_required_anatomy_roles_cannot_borrow_an_extra_image_for_uniqueness(self) -> None:
+        self.storyboard["events"][0]["geometry_contract"] = {
+            "anatomy_contract": {"person_count": 1, "arm_count": 2, "hand_count": 2}
+        }
+        root = Path(self.temp.name)
+        paths = []
+        for index, color in enumerate(("white", "gray", "black")):
+            path = root / f"role-{index}.png"
+            Image.new("RGB", (512, 512), color).save(path)
+            paths.append(path)
+        evidence = [
+            {"path": str(paths[0]), "sha256": sha256_file(paths[0]), "role": "full_frame"},
+            {"path": str(paths[0]), "sha256": sha256_file(paths[0]), "role": "left_hand"},
+            {"path": str(paths[1]), "sha256": sha256_file(paths[1]), "role": "right_hand"},
+            {"path": str(paths[2]), "sha256": sha256_file(paths[2]), "role": "extra"},
+        ]
+        self.review["criteria"][HUMAN_ANATOMY_CRITERION] = {
+            "status": "pass", "evidence": evidence,
+            "checks": {name: True for name in REQUIRED_ANATOMY_CHECKS},
+        }
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("unique role-specific" in error for error in errors), errors)
+
+    def test_structured_visual_evidence_requires_a_matching_sha256(self) -> None:
+        snapshot = Path(self.review["snapshots"]["e0"]["midpoint"])
+        self.review["snapshots"]["e0"]["midpoint"] = {"path": str(snapshot)}
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("requires sha256" in error for error in errors), errors)
 
     def test_declared_connector_contract_requires_per_event_geometry_evidence(self) -> None:
         self.storyboard["events"][0]["geometry_contract"] = {
@@ -109,7 +183,7 @@ class AestheticQaTests(unittest.TestCase):
             }
         }
         evidence = Path(self.temp.name) / "e0-connectors.png"
-        evidence.write_bytes(b"png")
+        Image.new("RGB", (320, 180), "white").save(evidence)
         self.review["connector_geometry"] = {
             "e0": {
                 "status": "pass",
