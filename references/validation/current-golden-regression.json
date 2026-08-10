@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite_version": "2026.08-p0p1p2",
-  "generated_at": "2026-08-10T01:56:32.084593+00:00",
+  "generated_at": "2026-08-10T04:30:48.463316+00:00",
   "status": "pass",
   "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
   "source": {
@@ -14,7 +14,7 @@
   },
   "media_manifest": {
     "path": "references/validation/six-media-acceptance.json",
-    "sha256": "54f37ccda7b799e612e4d7c99ef0c854cac4c1f244b891c519256e044da8027c",
+    "sha256": "a0ea3d3d5abd312d0c3de957c13f12eb51eb30baa1c7a5486c9b6d590ba0bc31",
     "errors": []
   },
   "bindings": {
@@ -22,7 +22,7 @@
     "project_schema_version": 9,
     "implementation_sha256": {
       "scripts/current_golden_regression.py": "845a2e76bddc41b4a8dc8fdf7b4d57d66ab90cfcda88aafdeebe23d2ae3377c9",
-      "scripts/director.py": "a38155a44ad3001c6b0a3bcbe29cc908f55186059bf7aa3e1ea5438ebad5d1e2",
+      "scripts/director.py": "45e614a9203f27b050d55f4d5addc80787ed2ecac4fa26700876006ace92b697",
       "scripts/project_config.py": "85b12ba92f1dd3e8c54d4408f42ee7a5de18f9373a6e7194e45dd337c624fc8d",
       "scripts/fixture_acceptance.py": "b4a16c49d2b1f0349979114ac88e398548ddf016e1b6ad4d3bc24022e5537236",
       "scripts/asr_router.py": "2c253511ce375d2ba7e02342d41a55f276e03f554c915eb3e9d7b3b4b94bfb83",
@@ -537,5 +537,5 @@
       }
     }
   ],
-  "report_integrity_sha256": "f8756021d2267387d488c7984f536eb926405b48e5fbea86f80c7ef322432125"
+  "report_integrity_sha256": "671422ec58564e530eab779a4b60bfdf7cba516c9f5f32e2d17b156243045cf4"
 }

@@ -285,6 +285,19 @@ def _review_evidence_files(review: dict[str, Any]) -> list[Path]:
     return result
 
 
+def _cover_delivery_gate(review: dict[str, Any]) -> tuple[list[str], bool]:
+    """Apply identity checks only when the selected cover depicts a person."""
+    identity_required = review.get("identity_applicable") is not False
+    errors: list[str] = []
+    if identity_required and int(review.get("identity_reference_count", 0)) < 2:
+        errors.append("identity-reference gate failed")
+    if review.get("topic_relevant") is not True:
+        errors.append("topic-relevance gate failed")
+    if review.get("natural_expression_and_energy") is not True:
+        errors.append("expression-or-energy gate failed")
+    return errors, identity_required
+
+
 def _ffprobe_duration(path: Path) -> float:
     command = [
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -3676,14 +3689,10 @@ class Director:
         cover_hash = sha256_file(cover_path)
         if cover_review.get("cover_sha256") != cover_hash:
             raise DirectorContractError("cover review must be bound to the exact cover hash")
-        automated_cover_requirements = (
-            int(cover_review.get("identity_reference_count", 0)) >= 2,
-            cover_review.get("topic_relevant") is True,
-            cover_review.get("natural_expression_and_energy") is True,
-        )
-        if not all(automated_cover_requirements):
-            raise DirectorContractError("cover review failed identity-reference, topic, or expression gate")
-        if cover_review.get("identity_approved_by_user") is not True:
+        cover_errors, identity_required = _cover_delivery_gate(cover_review)
+        if cover_errors:
+            raise DirectorContractError("cover review failed: " + "; ".join(cover_errors))
+        if identity_required and cover_review.get("identity_approved_by_user") is not True:
             self._action_required(
                 "delivery_qa",
                 "Cover likeness requires explicit user approval",

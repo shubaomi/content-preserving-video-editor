@@ -152,6 +152,14 @@ def run_technical_qa(
     video_streams = [row for row in streams if row.get("codec_type") == "video"]
     audio_streams = [row for row in streams if row.get("codec_type") == "audio"]
     duration = float(probe.get("format", {}).get("duration") or 0.0)
+    video_duration = (
+        _float(str(video_streams[0].get("duration"))) if video_streams else None
+    )
+    snapshot_duration = (
+        min(duration, video_duration)
+        if video_duration is not None and video_duration > 0
+        else duration
+    )
     decode = subprocess.run([
         "ffmpeg", "-v", "error", "-i", str(media), "-map", "0:v:0", "-map", "0:a?",
         "-f", "null", "-",
@@ -159,12 +167,15 @@ def run_technical_qa(
     detector_results, warnings = _detectors(media)
     measured_audio = loudness(media)
     timestamps: list[tuple[str, float]] = [
-        ("first", min(0.2, max(0.0, duration - 0.05))),
-        ("middle", max(0.0, duration / 2)),
-        ("final", max(0.0, duration - 0.1)),
+        ("first", min(0.2, max(0.0, snapshot_duration - 0.05))),
+        ("middle", max(0.0, snapshot_duration / 2)),
+        ("final", max(0.0, snapshot_duration - 0.1)),
     ]
     for index, boundary in enumerate(cut_boundaries or []):
-        timestamps.append((f"cut-{index:03d}", min(max(0.0, float(boundary)), max(0.0, duration - 0.05))))
+        timestamps.append((
+            f"cut-{index:03d}",
+            min(max(0.0, float(boundary)), max(0.0, snapshot_duration - 0.05)),
+        ))
     samples: list[dict[str, Any]] = []
     for label, timestamp in timestamps:
         frame = evidence_dir / f"{label}-{timestamp:08.3f}.png"

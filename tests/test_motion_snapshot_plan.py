@@ -110,6 +110,27 @@ class MotionSnapshotPlanTests(unittest.TestCase):
             '#target-overlay [data-hf-id="secondary-target"]', selectors,
         )
 
+    def test_quiet_source_is_not_treated_as_a_rendered_motion_beat(self) -> None:
+        plan = MODULE.build_plan({
+            "duration": 20.0,
+            "events": [
+                {"id": "motion-a", "start": 2.0, "end": 5.0, "treatment": "keyword_typography"},
+                {"id": "quiet-a", "start": 6.0, "end": 12.0, "treatment": "quiet_source"},
+                {"id": "motion-b", "start": 13.0, "end": 17.0, "treatment": "comparison"},
+            ],
+        })
+
+        self.assertEqual([beat["id"] for beat in plan["beats"]], ["motion-a", "motion-b"])
+        assertions = MODULE.build_motion_sidecar(plan)["assertions"]
+        selectors = {
+            value
+            for row in assertions
+            for value in (row.get("selector"), row.get("a"), row.get("b"))
+            if value
+        }
+        self.assertNotIn("#quiet-a", selectors)
+        self.assertIn({"kind": "before", "a": "#motion-a", "b": "#motion-b"}, assertions)
+
 
 if __name__ == "__main__":
     unittest.main()

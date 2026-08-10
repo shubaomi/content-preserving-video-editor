@@ -7,6 +7,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).parents[1]
@@ -30,6 +32,45 @@ class TechnicalQaTests(unittest.TestCase):
         self.assertEqual(parsed["black"][0]["duration"], 1.5)
         self.assertEqual(parsed["freeze"][0], {"start": 3.0, "end": 5.0, "duration": 2.0})
         self.assertEqual(parsed["silence"][0]["duration"], 1.2)
+
+    def test_final_snapshot_uses_video_stream_duration_when_container_is_longer(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            media = root / "fixture.mp4"
+            media.write_bytes(b"fixture")
+            captured: list[float] = []
+
+            def fake_snapshot(_media: Path, timestamp: float, output: Path) -> None:
+                captured.append(timestamp)
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_bytes(b"png")
+
+            probe = {
+                "streams": [
+                    {"codec_type": "video", "duration": "10.000", "avg_frame_rate": "24/1"},
+                    {"codec_type": "audio", "duration": "10.100"},
+                ],
+                "format": {"duration": "10.100"},
+            }
+            with (
+                patch("technical_qa._probe", return_value=probe),
+                patch("technical_qa._snapshot", side_effect=fake_snapshot),
+                patch("technical_qa._detectors", return_value=(
+                    {"black": [], "freeze": [], "silence": []}, [],
+                )),
+                patch("technical_qa.loudness", return_value={
+                    "measured": True, "integrated_lufs": -14.0, "true_peak_dbtp": -2.0,
+                }),
+                patch("technical_qa.subprocess.run", return_value=SimpleNamespace(
+                    returncode=0, stderr="",
+                )),
+            ):
+                report = run_technical_qa(
+                    media, output=root / "report.json", evidence_dir=root / "evidence",
+                )
+
+            self.assertEqual(report["samples"][-1]["time_seconds"], 9.9)
+            self.assertEqual(captured[-1], 9.9)
 
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg is required")
     def test_real_short_fixture_passes_decode_probe_audio_and_sampling(self) -> None:

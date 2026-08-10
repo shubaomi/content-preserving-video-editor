@@ -62,6 +62,24 @@ def _safe_int(value: Any, default: int = -1) -> int:
         return default
 
 
+def _cover_review_errors(review: dict[str, Any], cover_hash: str) -> list[str]:
+    errors = []
+    if review.get("status") != "pass":
+        errors.append("cover review status is not pass")
+    if review.get("topic_relevant") is not True:
+        errors.append("cover review topic relevance is missing")
+    if review.get("natural_expression_and_energy") is not True:
+        errors.append("cover review composition or energy is missing")
+    if review.get("cover_sha256") != cover_hash:
+        errors.append("cover review hash is stale")
+    if review.get("identity_applicable", True) is not False and (
+        review.get("identity_approved_by_user") is not True
+        or _safe_int(review.get("identity_reference_count"), 0) < 2
+    ):
+        errors.append("cover identity evidence or user approval is incomplete")
+    return errors
+
+
 def _row(status: str, finding: str, evidence: list[Path]) -> dict[str, Any]:
     return {
         "status": status,
@@ -602,15 +620,7 @@ def build(
         ))
     if cover_review_path.is_file() and cover_path.is_file():
         cover_review = read_json(cover_review_path)
-        if (
-            cover_review.get("status") != "pass"
-            or cover_review.get("identity_approved_by_user") is not True
-            or _safe_int(cover_review.get("identity_reference_count"), 0) < 2
-            or cover_review.get("topic_relevant") is not True
-            or cover_review.get("natural_expression_and_energy") is not True
-            or cover_review.get("cover_sha256") != cover_hash
-        ):
-            final_delivery_errors.append("cover review is incomplete or stale")
+        final_delivery_errors.extend(_cover_review_errors(cover_review, cover_hash))
     final_delivery_errors.extend(_technical_report_errors(media_report_path, delivery_output))
     for name, path in platform_paths.items():
         final_delivery_errors.extend(
@@ -988,7 +998,10 @@ def build(
     if not final_aesthetic_path.is_file():
         limitations.append("The full-video evidence-backed aesthetic review is incomplete.")
     cover_review = read_json(cover_review_path) if cover_review_path.is_file() else {}
-    if cover_review.get("identity_approved_by_user") is not True:
+    if (
+        cover_review.get("identity_applicable", True) is not False
+        and cover_review.get("identity_approved_by_user") is not True
+    ):
         limitations.append("The final cover still requires explicit user approval of identity likeness.")
     if not platform_same_file:
         limitations.append("The same universal output bytes have not passed both platform validations.")

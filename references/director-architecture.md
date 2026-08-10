@@ -220,6 +220,11 @@ create a different full-duration project and store its render authority in
 project as `cwd`; the 60–90 second sample can never become the final render by
 path reuse.
 
+`quiet_source` intervals remain in the Storyboard and visual-dynamics evidence,
+but the motion snapshot planner excludes them from DOM selectors, motion-sidecar
+assertions, and four-phase motion captures because they intentionally have no
+rendered overlay element.
+
 Every sample and full storyboard must include `visual-vocabulary-audit.json`.
 It must explicitly select or reject, with evidence, keyword typography, UI
 focus, process, comparison, steps, numeric/result, chapter, PiP/zoom, IP assets,
@@ -262,6 +267,10 @@ If enabled, only the revalidated human return becomes the effective universal
 output. `delivery_qa` then blocks on the final aesthetic review, speech-dominant audio plan with
 provenance, topic/identity/expression-approved cover, and Douyin plus WeChat
 Channels reports that reference the exact same file hash.
+Identity references and user likeness approval are conditional on the cover
+review's `identity_applicable` flag. A generic editorial cover sets it to `false`
+and still must pass topic relevance, composition/energy, hash, crop, and safe-zone
+checks without fabricating a human identity subject.
 The final aesthetic review binds `reviewed_output_sha256`; the cover review,
 both platform reports, and delivery contract bind the exact cover SHA-256 as
 well. Changing either file invalidates delivery evidence instead of reusing a

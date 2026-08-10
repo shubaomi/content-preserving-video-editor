@@ -375,6 +375,11 @@ canvas bounds without rewarding random density. When Golden Editorial Regression
 is enabled, sample approval creates the baseline and full QA blocks structural
 drift unless an approved correction-ledger entry explains it.
 
+Treat `quiet_source` as an editorial decision, not as a rendered motion beat.
+Keep it in semantic and cadence evidence, but exclude it from HyperFrames motion
+selectors, motion-sidecar assertions, SFX requirements, and four-phase motion
+snapshot plans.
+
 The approved Golden baseline is part of `preview-approval.json` by absolute path
 and SHA-256 and is itself a hashed preview-approval stage artifact. Validate its
 source inputs and integrity before comparing anchors. Snapshot mutable approved
@@ -452,6 +457,9 @@ multi-photo reference provenance, but it must not approve personal likeness on
 the user's behalf. Record an unconfirmed likeness as a resumable
 `action_required` delivery state, not a workflow failure. Complete cover QA only
 after the user explicitly approves the regenerated identity.
+For an authorized generic/editorial cover with no depicted identity, record
+`identity_applicable: false`; topic relevance and visual energy remain blocking,
+but do not invent identity references or request a meaningless likeness approval.
 
 Produce one universal MP4 by default and validate that same file for Douyin and
 WeChat Channels. Create multiple MP4s only when a real transform, codec, aspect,

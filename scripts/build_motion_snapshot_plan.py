@@ -36,6 +36,9 @@ def load_beats(storyboard: dict) -> list[dict]:
                 active_start, active_end = event_start, event_end
             if not event_start <= active_start < active_end <= event_end:
                 active_start, active_end = event_start, event_end
+            treatment = str(item.get("treatment") or "")
+            if treatment == "quiet_source":
+                continue
             result.append({
                 "id": str(item.get("id") or f"{key}-{len(result) + 1}"),
                 "selector": str(
@@ -52,6 +55,7 @@ def load_beats(storyboard: dict) -> list[dict]:
                 "kind": key,
                 "tier": str(item.get("tier") or "unknown"),
                 "visual_family": str(item.get("visual_family") or item.get("type") or "unknown"),
+                "treatment": treatment,
                 "intent": item.get("purpose") or item.get("intent") or item.get("title"),
                 "target_ids": [
                     str(value) for value in (target_contract.get("target_ids") or [])

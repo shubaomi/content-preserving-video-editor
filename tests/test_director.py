@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from director import (  # noqa: E402
     Director,
     ROLE_CONTRACT,
+    _cover_delivery_gate,
     _json_sha256,
     _review_evidence_files,
     approve_sample,
@@ -1673,6 +1674,18 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(director.state["stages"]["delivery_qa"]["status"], "action_required")
         packet = json.loads(director.action_path.read_text(encoding="utf-8"))
         self.assertEqual(packet["actions"][0]["owner"], "user")
+
+    def test_generic_cover_does_not_require_identity_references_or_user_likeness_approval(self) -> None:
+        errors, identity_required = _cover_delivery_gate({
+            "status": "pass",
+            "identity_applicable": False,
+            "identity_reference_count": 0,
+            "identity_approved_by_user": False,
+            "topic_relevant": True,
+            "natural_expression_and_energy": True,
+        })
+        self.assertEqual(errors, [])
+        self.assertFalse(identity_required)
 
     def test_optional_portable_audit_bundle_is_director_integrated_and_relocatable(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))

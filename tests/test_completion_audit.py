@@ -14,7 +14,7 @@ from PIL import Image
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from completion_audit import build  # noqa: E402
+from completion_audit import _cover_review_errors, build  # noqa: E402
 from capability_registry import build_capability_inventory, build_toolchain_report  # noqa: E402
 from brand_motion_playbook import compile_playbook  # noqa: E402
 from aesthetic_qa import REQUIRED_CRITERIA  # noqa: E402
@@ -35,6 +35,20 @@ from validate_platform_export import (  # noqa: E402
 
 
 class CompletionAuditTests(unittest.TestCase):
+    def test_generic_cover_review_does_not_require_personal_identity_evidence(self) -> None:
+        generic = {
+            "status": "pass",
+            "identity_applicable": False,
+            "topic_relevant": True,
+            "natural_expression_and_energy": True,
+            "cover_sha256": "cover-hash",
+        }
+        self.assertEqual(_cover_review_errors(generic, "cover-hash"), [])
+
+        personal = {**generic, "identity_applicable": True}
+        errors = _cover_review_errors(personal, "cover-hash")
+        self.assertTrue(any("identity" in error for error in errors))
+
     def test_complete_hash_bound_fixture_passes_all_completion_criteria(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
