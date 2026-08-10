@@ -65,8 +65,23 @@ NON_VISIBLE_EVENT_STRING_PATHS = {
     "geometry_contract.connector_contract.relations.[].from",
     "geometry_contract.connector_contract.relations.[].to",
     "geometry_contract.connector_contract.relations.[].attachment_edge",
+    "geometry_contract.target_region_contract.tracking_mode",
+    "geometry_contract.target_region_contract.active_selector",
+    "geometry_contract.target_region_contract.target_ids.[]",
+    "geometry_contract.target_region_contract.source_state_evidence.[].phase",
+    "geometry_contract.target_region_contract.source_state_evidence.[].path",
+    "geometry_contract.target_region_contract.source_state_evidence.[].sha256",
 }
 MAX_TARGET_FRAME_DISTANCE_SECONDS = 15.0
+
+RELATION_VISUAL_MARKERS = {
+    "arrow", "brace", "branch", "connector", "dependency", "flow", "route",
+}
+TARGET_BOUND_VISUAL_MARKERS = {
+    "brace", "callout", "cursor", "focus", "highlight", "overlay", "target",
+}
+TARGET_TRACKING_MODES = {"static", "scene_bounded", "keyframed"}
+TARGET_EVIDENCE_PHASES = ("entrance", "midpoint", "pre_exit")
 
 STAGES = (
     "inspect",
@@ -550,6 +565,166 @@ def _normalized_event_path(path: tuple[str, ...]) -> str:
     )
 
 
+def _event_visual_tokens(event: dict[str, Any]) -> set[str]:
+    visual = event.get("visual_structure") or {}
+    values = [event.get("form"), event.get("treatment")]
+    if isinstance(visual, dict):
+        values.extend(visual.get(field) for field in REQUIRED_VISUAL_FIELDS)
+    return {
+        token
+        for value in values
+        if isinstance(value, str)
+        for token in re.findall(r"[a-z0-9]+", value.lower())
+    }
+
+
+def event_requires_connector_contract(event: dict[str, Any]) -> bool:
+    """Return whether the declared visual grammar makes a spatial relation claim."""
+    return bool(_event_visual_tokens(event) & RELATION_VISUAL_MARKERS)
+
+
+def event_requires_target_region_contract(event: dict[str, Any]) -> bool:
+    """Return whether an effect claims alignment to content in the source frame."""
+    return bool(_event_visual_tokens(event) & TARGET_BOUND_VISUAL_MARKERS)
+
+
+def _finite_number(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _validate_connector_contract(event: dict[str, Any], prefix: str) -> list[str]:
+    errors: list[str] = []
+    contract = (event.get("geometry_contract") or {}).get("connector_contract")
+    if not isinstance(contract, dict):
+        return [f"{prefix} relation visual requires a connector contract"]
+    required_count = contract.get("required_connector_count")
+    if isinstance(required_count, bool) or not isinstance(required_count, int) or required_count < 1:
+        errors.append(f"{prefix} connector contract requires a positive connector count")
+        required_count = 0
+    relations = contract.get("relations")
+    if not isinstance(relations, list) or len(relations) != required_count:
+        errors.append(f"{prefix} connector contract relations must match the required count")
+        relations = []
+    for relation_index, relation in enumerate(relations):
+        if not isinstance(relation, dict):
+            errors.append(f"{prefix} connector relation[{relation_index}] must be typed metadata")
+            continue
+        for field in ("from", "to", "attachment_edge"):
+            if not isinstance(relation.get(field), str) or not relation[field].strip():
+                errors.append(
+                    f"{prefix} connector relation[{relation_index}] requires {field}"
+                )
+    intent = contract.get("attachment_intent")
+    if not isinstance(intent, str) or not intent.strip():
+        errors.append(f"{prefix} connector contract requires attachment_intent")
+    return errors
+
+
+def _validate_target_region_contract(event: dict[str, Any], prefix: str) -> list[str]:
+    errors: list[str] = []
+    contract = (event.get("geometry_contract") or {}).get("target_region_contract")
+    if not isinstance(contract, dict):
+        return [f"{prefix} source-bound visual requires a target region contract"]
+    tracking_mode = contract.get("tracking_mode")
+    if tracking_mode not in TARGET_TRACKING_MODES:
+        errors.append(f"{prefix} target region contract has an invalid tracking_mode")
+    active_selector = contract.get("active_selector")
+    if (
+        not isinstance(active_selector, str)
+        or not active_selector.strip()
+        or not active_selector.lstrip().startswith(("#", "."))
+    ):
+        errors.append(f"{prefix} target region contract requires active_selector")
+    required_count = contract.get("required_target_count")
+    if isinstance(required_count, bool) or not isinstance(required_count, int) or required_count < 1:
+        errors.append(f"{prefix} target region contract requires a positive target count")
+        required_count = 0
+    target_ids = contract.get("target_ids")
+    if (
+        not isinstance(target_ids, list)
+        or len(target_ids) != required_count
+        or any(not isinstance(value, str) or not value.strip() for value in target_ids)
+        or len(set(target_ids)) != len(target_ids)
+    ):
+        errors.append(f"{prefix} target_ids must uniquely match the required target count")
+    useful_ratio = _finite_number(contract.get("minimum_useful_content_ratio"))
+    if useful_ratio is None or not 0.1 <= useful_ratio <= 1.0:
+        errors.append(f"{prefix} minimum_useful_content_ratio must be between 0.1 and 1.0")
+    state_delta = _finite_number(contract.get("maximum_static_state_delta", 0.12))
+    if state_delta is None or not 0.01 <= state_delta <= 0.3:
+        errors.append(f"{prefix} maximum_static_state_delta must be between 0.01 and 0.3")
+
+    output_start = _finite_number(event.get("output_start", event.get("start")))
+    output_end = _finite_number(event.get("output_end", event.get("end")))
+    source_start = _finite_number(event.get("source_start"))
+    source_end = _finite_number(event.get("source_end"))
+    active_output_start = _finite_number(contract.get("active_output_start"))
+    active_output_end = _finite_number(contract.get("active_output_end"))
+    active_source_start = _finite_number(contract.get("active_source_start"))
+    active_source_end = _finite_number(contract.get("active_source_end"))
+    for label, start, end, outer_start, outer_end in (
+        ("output", active_output_start, active_output_end, output_start, output_end),
+        ("source", active_source_start, active_source_end, source_start, source_end),
+    ):
+        if (
+            start is None or end is None or outer_start is None or outer_end is None
+            or not outer_start <= start < end <= outer_end
+        ):
+            errors.append(
+                f"{prefix} target region active {label} window must be inside the event window"
+            )
+
+    evidence = contract.get("source_state_evidence")
+    if not isinstance(evidence, list):
+        errors.append(f"{prefix} target region contract requires source_state_evidence")
+        evidence = []
+    by_phase: dict[str, dict[str, Any]] = {}
+    for evidence_index, record in enumerate(evidence):
+        if not isinstance(record, dict):
+            errors.append(f"{prefix} source_state_evidence[{evidence_index}] must be a mapping")
+            continue
+        phase = str(record.get("phase") or "")
+        if phase in by_phase:
+            errors.append(f"{prefix} source state phase must be unique: {phase}")
+        by_phase[phase] = record
+        if phase not in TARGET_EVIDENCE_PHASES:
+            errors.append(f"{prefix} source_state_evidence[{evidence_index}] has invalid phase")
+        timestamp = _finite_number(record.get("timestamp_seconds"))
+        if (
+            timestamp is None or active_source_start is None or active_source_end is None
+            or not active_source_start <= timestamp <= active_source_end
+        ):
+            errors.append(
+                f"{prefix} source_state_evidence[{evidence_index}] is outside the active source window"
+            )
+        if not isinstance(record.get("path"), str) or not record["path"].strip():
+            errors.append(f"{prefix} source_state_evidence[{evidence_index}] requires path")
+        if not re.fullmatch(r"[0-9a-f]{64}", str(record.get("sha256") or "")):
+            errors.append(f"{prefix} source_state_evidence[{evidence_index}] requires sha256")
+    if set(by_phase) != set(TARGET_EVIDENCE_PHASES):
+        errors.append(
+            f"{prefix} source_state_evidence requires entrance, midpoint, and pre_exit phases"
+        )
+    if active_source_start is not None and active_source_end is not None and active_source_end > active_source_start:
+        duration = active_source_end - active_source_start
+        expected_ranges = {
+            "entrance": (active_source_start, active_source_start + duration * 0.35),
+            "midpoint": (active_source_start + duration * 0.25, active_source_start + duration * 0.75),
+            "pre_exit": (active_source_start + duration * 0.65, active_source_end),
+        }
+        for phase, (low, high) in expected_ranges.items():
+            timestamp = _finite_number((by_phase.get(phase) or {}).get("timestamp_seconds"))
+            if timestamp is not None and not low <= timestamp <= high:
+                errors.append(f"{prefix} source state {phase} evidence is not in its phase window")
+    return errors
+
+
 def _event_visible_text_fields(
     value: Any,
     path: tuple[str, ...] = (),
@@ -760,6 +935,10 @@ def validate_storyboard(storyboard: dict[str, Any], brief: dict[str, Any] | None
         elif signature in signatures:
             errors.append(f"events[{index}] repeats an existing DOM/layout/choreography contract")
         signatures.add(signature)
+        if event_requires_connector_contract(event):
+            errors.extend(_validate_connector_contract(event, f"events[{index}]"))
+        if event_requires_target_region_contract(event):
+            errors.extend(_validate_target_region_contract(event, f"events[{index}]"))
     return errors
 
 

@@ -91,6 +91,33 @@ semantic `relations`, and attachment intent. The matching aesthetic review must
 store observed count, endpoint attachment, optical alignment, clipping status,
 and a real snapshot path.
 
+For source-bound focus/highlight/callout/overlay visuals, add
+`geometry_contract.target_region_contract`:
+
+```yaml
+tracking_mode: scene_bounded       # static | scene_bounded | keyframed
+active_selector: "#sample-trends .chart-target"
+required_target_count: 2
+target_ids: [primary-chart, secondary-chart]
+minimum_useful_content_ratio: 0.35
+maximum_static_state_delta: 0.12
+active_output_start: 64.8
+active_output_end: 70.8
+active_source_start: 85.7
+active_source_end: 91.7
+source_state_evidence:
+  - {phase: entrance, timestamp_seconds: 85.8, path: "C:/.../entrance.png", sha256: "..."}
+  - {phase: midpoint, timestamp_seconds: 88.7, path: "C:/.../midpoint.png", sha256: "..."}
+  - {phase: pre_exit, timestamp_seconds: 91.6, path: "C:/.../pre-exit.png", sha256: "..."}
+```
+
+The active window may be narrower than the semantic event, but must remain
+inside it. All three evidence phases are required and hash-bound. Static and
+scene-bounded targets must remain visually stable within the configured delta;
+keyframed targets require review evidence that their keyframes cover each state
+change. Each `target_ids` value is also a real `data-hf-id` in the composition;
+the generated motion sidecar checks every declared target individually.
+
 ## Analysis backends
 
 Keep backend choice separate from editing policy:

@@ -200,6 +200,18 @@ and the full project are validated against their respective current briefs.
 Rendered DOM/OCR inspection remains a separate visual-review responsibility
 rather than an automatic semantic claim.
 
+Relation-bearing visual structures (`connector`, `brace`, `route`, `arrow`,
+`flow`, `branch`, or `dependency`) require typed connector metadata with a
+declared count, from/to nodes, attachment edges, and attachment intent.
+Source-bound visual structures (`focus`, `highlight`, `overlay`, `callout`,
+`cursor`, or `target`) require a target-region contract. That contract separates
+the semantic event window from the narrower geometry-active window and binds
+three source-state frames to it. Storyboard validation checks the schema and
+time ownership; aesthetic QA verifies image hashes, useful-content occupancy,
+target count, empty/orphan geometry, and source-state stability. Motion snapshot
+planning uses the geometry-active output window so an otherwise correct event
+cannot be reviewed only before or after its actual target exists.
+
 Use HyperFrames Core and Creative rules before HTML. Run HyperFrames check and
 multi-phase snapshots. Studio is the editable review surface. An actual
 sample command set remains stored in `hyperframes-commands.json`. After approval,

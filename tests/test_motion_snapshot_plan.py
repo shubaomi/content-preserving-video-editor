@@ -65,6 +65,51 @@ class MotionSnapshotPlanTests(unittest.TestCase):
         self.assertEqual(plan["beats"][0]["selector"], "#motion-001 .event-host")
         self.assertEqual(plan["beats"][0]["safe_zone"], "top_right")
 
+    def test_target_bound_event_snapshots_use_its_active_geometry_window(self) -> None:
+        plan = MODULE.build_plan({
+            "duration": 20.0,
+            "events": [{
+                "id": "target-overlay", "start": 2.0, "end": 18.0,
+                "geometry_contract": {"target_region_contract": {
+                    "active_selector": "#target-overlay .target",
+                    "active_output_start": 10.0,
+                    "active_output_end": 14.0,
+                }},
+            }],
+        })
+
+        beat = plan["beats"][0]
+        self.assertEqual(beat["event_start"], 2.0)
+        self.assertEqual(beat["event_end"], 18.0)
+        self.assertEqual(beat["start"], 10.0)
+        self.assertEqual(beat["end"], 14.0)
+        self.assertEqual(beat["selector"], "#target-overlay .target")
+        self.assertGreaterEqual(beat["snapshots"]["entrance"], 10.0)
+        self.assertLessEqual(beat["snapshots"]["pre_exit"], 14.0)
+
+    def test_target_region_sidecar_checks_each_declared_target(self) -> None:
+        plan = MODULE.build_plan({
+            "duration": 12.0,
+            "events": [{
+                "id": "target-overlay", "start": 2.0, "end": 10.0,
+                "geometry_contract": {"target_region_contract": {
+                    "active_selector": "#target-overlay .primary-target",
+                    "active_output_start": 4.0,
+                    "active_output_end": 8.0,
+                    "target_ids": ["primary-target", "secondary-target"],
+                }},
+            }],
+        })
+
+        assertions = MODULE.build_motion_sidecar(plan)["assertions"]
+        selectors = {row["selector"] for row in assertions if "selector" in row}
+        self.assertIn(
+            '#target-overlay [data-hf-id="primary-target"]', selectors,
+        )
+        self.assertIn(
+            '#target-overlay [data-hf-id="secondary-target"]', selectors,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

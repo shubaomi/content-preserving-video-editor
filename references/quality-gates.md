@@ -114,6 +114,13 @@ Complete a video only when applicable gates pass.
 - For every declared connector contract, match observed relation count to the
   Storyboard and verify every path terminates on its intended node edge. A
   central line that visually reaches only one of several targets is a failure.
+- For every source-bound focus/highlight/callout/overlay, require a target-region
+  contract and per-event review. Match observed target count, reject empty or
+  orphan regions, require the declared useful-content ratio, and verify that
+  the effect's active window coincides with the visible source state.
+- Compare hash-bound entrance, midpoint, and pre-exit source-state evidence.
+  Static or scene-bounded geometry that spans a page/modal/layout transition is
+  blocking; shorten the window or use reviewed keyframed tracking.
 - Snapshot, connector, and generated-human anatomy evidence must be a decodable
   image of reviewable size. Placeholder bytes, corrupt images, stale hashes, or
   a path-existence-only assertion do not pass aesthetic QA.

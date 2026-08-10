@@ -292,6 +292,17 @@ the observed count, attached endpoints, optical alignment, and absence of
 clipped paths. A single line that reaches only one of several declared targets
 is incomplete even when HyperFrames reports zero overflow.
 
+Any effect that claims to focus, highlight, call out, or overlay a region of the
+source picture must also declare a `target_region_contract`. Bind target IDs,
+the active render selector, active source/output window, minimum useful-content occupancy, tracking
+mode, and hash-bound entrance/midpoint/pre-exit source-state frames. Do not let
+an event's broad spoken interval force its geometry to appear before the target
+UI state exists; motion snapshots use the narrower active geometry window.
+Static or scene-bounded geometry that crosses a visible source-state change,
+an empty highlight region, an orphan line, or a target with too little useful
+content is blocking. Use a shorter scene-bounded window or explicit keyframed
+tracking instead of leaving a stale box on screen.
+
 Keep sample and full projects separate. The approved 60–90 second sample lives
 at the configured sample project; the final composition must be authored in a
 different full-duration project, cover at least 95% of the video-use EDL output

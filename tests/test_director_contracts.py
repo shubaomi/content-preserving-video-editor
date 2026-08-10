@@ -312,6 +312,106 @@ class DirectorContractTests(unittest.TestCase):
 
         self.assertEqual(validate_storyboard(storyboard, brief), [])
 
+    def test_relation_visual_requires_a_typed_connector_contract(self) -> None:
+        brief = valid_brief()
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["visual_structure"]["layout_archetype"] = (
+            "paired-highlight-brace"
+        )
+        brief["events"][0]["visual_structure"]["layout_archetype"] = (
+            "paired-highlight-brace"
+        )
+
+        errors = validate_storyboard(storyboard, brief)
+
+        self.assertTrue(any("connector contract" in error for error in errors), errors)
+
+    def test_target_bound_visual_requires_source_state_evidence(self) -> None:
+        brief = valid_brief()
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["visual_structure"]["layout_archetype"] = (
+            "source-ui-highlight-overlay"
+        )
+        brief["events"][0]["visual_structure"]["layout_archetype"] = (
+            "source-ui-highlight-overlay"
+        )
+
+        errors = validate_storyboard(storyboard, brief)
+
+        self.assertTrue(any("target region contract" in error for error in errors), errors)
+
+    def test_complete_target_region_contract_is_accepted(self) -> None:
+        brief = valid_brief()
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["visual_structure"]["layout_archetype"] = (
+            "source-ui-highlight-overlay"
+        )
+        brief["events"][0]["visual_structure"]["layout_archetype"] = (
+            "source-ui-highlight-overlay"
+        )
+        storyboard["events"][0]["geometry_contract"] = {
+            "target_region_contract": {
+                "tracking_mode": "scene_bounded",
+                "active_selector": "#e1 .source-target",
+                "required_target_count": 1,
+                "target_ids": ["primary-chart"],
+                "minimum_useful_content_ratio": 0.35,
+                "maximum_static_state_delta": 0.12,
+                "active_output_start": 10.5,
+                "active_output_end": 13.5,
+                "active_source_start": 10.5,
+                "active_source_end": 13.5,
+                "source_state_evidence": [
+                    {
+                        "phase": phase,
+                        "timestamp_seconds": timestamp,
+                        "path": f"C:/evidence/{phase}.png",
+                        "sha256": character * 64,
+                    }
+                    for phase, timestamp, character in (
+                        ("entrance", 10.6, "a"),
+                        ("midpoint", 12.0, "b"),
+                        ("pre_exit", 13.4, "c"),
+                    )
+                ],
+            }
+        }
+
+        self.assertEqual(validate_storyboard(storyboard, brief), [])
+
+    def test_target_region_contract_requires_an_active_render_selector(self) -> None:
+        brief = valid_brief()
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0]["visual_structure"]["layout_archetype"] = (
+            "source-ui-highlight-overlay"
+        )
+        brief["events"][0]["visual_structure"]["layout_archetype"] = (
+            "source-ui-highlight-overlay"
+        )
+        storyboard["events"][0]["geometry_contract"] = {
+            "target_region_contract": {
+                "tracking_mode": "scene_bounded",
+                "required_target_count": 1,
+                "target_ids": ["primary-chart"],
+                "minimum_useful_content_ratio": 0.35,
+                "active_output_start": 10.5,
+                "active_output_end": 13.5,
+                "active_source_start": 10.5,
+                "active_source_end": 13.5,
+                "source_state_evidence": [
+                    {"phase": phase, "timestamp_seconds": timestamp,
+                     "path": f"C:/evidence/{phase}.png", "sha256": "a" * 64}
+                    for phase, timestamp in (
+                        ("entrance", 10.6), ("midpoint", 12.0), ("pre_exit", 13.4)
+                    )
+                ],
+            }
+        }
+
+        errors = validate_storyboard(storyboard, brief)
+
+        self.assertTrue(any("active_selector" in error for error in errors), errors)
+
     def test_malformed_storyboard_events_return_errors_instead_of_crashing(self) -> None:
         brief = valid_brief()
         for events in ({"e1": {}}, ["bad-event"]):

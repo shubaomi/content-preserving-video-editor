@@ -197,6 +197,113 @@ class AestheticQaTests(unittest.TestCase):
         }
         self.assertEqual(validate(self.review, self.storyboard), [])
 
+    def _add_target_region_contract(self, colors: tuple[str, str, str]) -> None:
+        root = Path(self.temp.name)
+        source_state_evidence = []
+        for phase, timestamp, color in zip(
+            ("entrance", "midpoint", "pre_exit"), (1.2, 2.0, 2.8), colors,
+        ):
+            path = root / f"e0-source-{phase}.png"
+            Image.new("RGB", (640, 360), color).save(path)
+            source_state_evidence.append({
+                "phase": phase,
+                "timestamp_seconds": timestamp,
+                "path": str(path),
+                "sha256": sha256_file(path),
+            })
+        self.storyboard["events"][0]["visual_structure"]["layout_archetype"] = (
+            "source-ui-highlight-overlay"
+        )
+        self.storyboard["events"][0]["geometry_contract"] = {
+            "target_region_contract": {
+                "tracking_mode": "scene_bounded",
+                "active_selector": "#e0 .source-target",
+                "required_target_count": 1,
+                "target_ids": ["primary-chart"],
+                "minimum_useful_content_ratio": 0.35,
+                "maximum_static_state_delta": 0.12,
+                "active_output_start": 1.0,
+                "active_output_end": 3.0,
+                "active_source_start": 1.0,
+                "active_source_end": 3.0,
+                "source_state_evidence": source_state_evidence,
+            }
+        }
+
+    def test_target_bound_visual_requires_per_event_region_review(self) -> None:
+        self._add_target_region_contract(("white", "white", "white"))
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("target region review" in error for error in errors), errors)
+
+    def test_static_geometry_cannot_span_a_source_state_change(self) -> None:
+        self._add_target_region_contract(("white", "black", "white"))
+        evidence = Path(self.temp.name) / "e0-target-review.png"
+        Image.new("RGB", (640, 360), "white").save(evidence)
+        self.review["target_region_geometry"] = {
+            "e0": {
+                "status": "pass",
+                "tracking_mode": "scene_bounded",
+                "required_target_count": 1,
+                "observed_target_count": 1,
+                "all_targets_contain_source_content": True,
+                "no_empty_highlight_regions": True,
+                "no_orphan_geometry": True,
+                "event_window_matches_visible_source_state": True,
+                "minimum_observed_useful_content_ratio": 0.6,
+                "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+            }
+        }
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("source-state change" in error for error in errors), errors)
+
+    def test_complete_stable_target_region_review_passes(self) -> None:
+        self._add_target_region_contract(("white", "white", "white"))
+        evidence = Path(self.temp.name) / "e0-target-review.png"
+        Image.new("RGB", (640, 360), "white").save(evidence)
+        self.review["target_region_geometry"] = {
+            "e0": {
+                "status": "pass",
+                "tracking_mode": "scene_bounded",
+                "required_target_count": 1,
+                "observed_target_count": 1,
+                "all_targets_contain_source_content": True,
+                "no_empty_highlight_regions": True,
+                "no_orphan_geometry": True,
+                "event_window_matches_visible_source_state": True,
+                "minimum_observed_useful_content_ratio": 0.6,
+                "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+            }
+        }
+
+        self.assertEqual(validate(self.review, self.storyboard), [])
+
+    def test_malformed_target_region_counts_return_errors_instead_of_crashing(self) -> None:
+        self._add_target_region_contract(("white", "white", "white"))
+        evidence = Path(self.temp.name) / "e0-target-review.png"
+        Image.new("RGB", (640, 360), "white").save(evidence)
+        self.review["target_region_geometry"] = {
+            "e0": {
+                "status": "pass",
+                "tracking_mode": "scene_bounded",
+                "required_target_count": "not-a-number",
+                "observed_target_count": None,
+                "all_targets_contain_source_content": True,
+                "no_empty_highlight_regions": True,
+                "no_orphan_geometry": True,
+                "event_window_matches_visible_source_state": True,
+                "minimum_observed_useful_content_ratio": 0.6,
+                "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+            }
+        }
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("target count" in error for error in errors), errors)
+
 
 if __name__ == "__main__":
     unittest.main()

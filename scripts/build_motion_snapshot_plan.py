@@ -22,16 +22,41 @@ def load_beats(storyboard: dict) -> list[dict]:
             end = item.get("endSec", item.get("end"))
             if start is None or end is None or float(end) <= float(start):
                 continue
+            event_start = float(start)
+            event_end = float(end)
+            target_contract = (
+                (item.get("geometry_contract") or {}).get("target_region_contract") or {}
+            )
+            active_start = target_contract.get("active_output_start", event_start)
+            active_end = target_contract.get("active_output_end", event_end)
+            try:
+                active_start = float(active_start)
+                active_end = float(active_end)
+            except (TypeError, ValueError):
+                active_start, active_end = event_start, event_end
+            if not event_start <= active_start < active_end <= event_end:
+                active_start, active_end = event_start, event_end
             result.append({
                 "id": str(item.get("id") or f"{key}-{len(result) + 1}"),
-                "selector": str(item.get("editableLayer") or item.get("layout_selector") or f"#{item.get('id') or key}"),
-                "start": float(start),
-                "end": float(end),
+                "selector": str(
+                    target_contract.get("active_selector")
+                    or item.get("editableLayer")
+                    or item.get("layout_selector")
+                    or f"#{item.get('id') or key}"
+                ),
+                "event_start": event_start,
+                "event_end": event_end,
+                "start": active_start,
+                "end": active_end,
                 "safe_zone": str(item.get("safeZone") or item.get("safe_zone") or item.get("side") or item.get("zone") or "full"),
                 "kind": key,
                 "tier": str(item.get("tier") or "unknown"),
                 "visual_family": str(item.get("visual_family") or item.get("type") or "unknown"),
                 "intent": item.get("purpose") or item.get("intent") or item.get("title"),
+                "target_ids": [
+                    str(value) for value in (target_contract.get("target_ids") or [])
+                    if str(value).strip()
+                ],
             })
     return sorted(result, key=lambda item: item["start"])
 
@@ -89,13 +114,17 @@ def build_motion_sidecar(plan: dict) -> dict:
     assertions = []
     prior = None
     for beat in plan["beats"]:
-        selector = beat["selector"]
+        selectors = [
+            f'#{beat["id"]} [data-hf-id="{target_id}"]'
+            for target_id in beat.get("target_ids") or []
+        ] or [beat["selector"]]
         by_sec = min(beat["start"] + 1.5, beat["start"] + (beat["end"] - beat["start"]) / 2)
-        assertions.append({"kind": "appearsBy", "selector": selector, "bySec": round(by_sec, 3)})
-        assertions.append({"kind": "staysInFrame", "selector": selector})
+        for selector in selectors:
+            assertions.append({"kind": "appearsBy", "selector": selector, "bySec": round(by_sec, 3)})
+            assertions.append({"kind": "staysInFrame", "selector": selector})
         if prior:
-            assertions.append({"kind": "before", "a": prior, "b": selector})
-        prior = selector
+            assertions.append({"kind": "before", "a": prior, "b": selectors[0]})
+        prior = selectors[0]
     return {"duration": plan["composition"].get("duration"), "assertions": assertions}
 
 

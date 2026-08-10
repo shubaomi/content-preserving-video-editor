@@ -8,9 +8,15 @@ import re
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageChops, ImageStat, UnidentifiedImageError
 
-from director_contracts import REQUIRED_VISUAL_FIELDS, sha256_file, visual_signature, write_json
+from director_contracts import (
+    REQUIRED_VISUAL_FIELDS,
+    event_requires_target_region_contract,
+    sha256_file,
+    visual_signature,
+    write_json,
+)
 
 
 REQUIRED_CRITERIA = (
@@ -81,6 +87,14 @@ def _requires_human_anatomy_qa(storyboard: dict[str, Any]) -> bool:
         isinstance((event.get("geometry_contract") or {}).get("anatomy_contract"), dict)
         for event in (storyboard.get("events") or [])
     )
+
+
+def _source_state_delta(left: Path, right: Path) -> float:
+    with Image.open(left) as left_image, Image.open(right) as right_image:
+        left_rgb = left_image.convert("RGB").resize((320, 180), Image.Resampling.BILINEAR)
+        right_rgb = right_image.convert("RGB").resize((320, 180), Image.Resampling.BILINEAR)
+        difference = ImageChops.difference(left_rgb, right_rgb)
+        return sum(ImageStat.Stat(difference).mean) / (3 * 255)
 
 
 def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
@@ -164,6 +178,7 @@ def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
             errors.append("storyboard contains an incomplete visual structure signature")
     snapshots = review.get("snapshots") or {}
     connector_geometry = review.get("connector_geometry") or {}
+    target_region_geometry = review.get("target_region_geometry") or {}
     reviewed_event_ids = set(review.get("reviewed_event_ids") or [])
     for event in events:
         event_id = str(event.get("id", ""))
@@ -201,6 +216,91 @@ def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
                 errors.extend(_image_evidence_errors(
                     evidence, f"event {event_id} connector geometry evidence",
                 ))
+        if event_requires_target_region_contract(event):
+            target_contract = (event.get("geometry_contract") or {}).get(
+                "target_region_contract"
+            )
+            if not isinstance(target_contract, dict):
+                errors.append(f"event {event_id} is missing target region contract")
+                continue
+            row = target_region_geometry.get(event_id)
+            if not isinstance(row, dict):
+                errors.append(f"event {event_id} is missing target region review")
+                continue
+            if row.get("status") != "pass":
+                errors.append(f"event {event_id} target region review is not pass")
+            tracking_mode = target_contract.get("tracking_mode")
+            if row.get("tracking_mode") != tracking_mode:
+                errors.append(f"event {event_id} target tracking mode does not match storyboard")
+            required_count = target_contract.get("required_target_count")
+            if (
+                isinstance(required_count, bool)
+                or not isinstance(required_count, int)
+                or required_count < 1
+            ):
+                errors.append(f"event {event_id} target count contract is invalid")
+                required_count = None
+            declared_count = row.get("required_target_count")
+            if (
+                required_count is None
+                or isinstance(declared_count, bool)
+                or not isinstance(declared_count, int)
+                or declared_count != required_count
+            ):
+                errors.append(f"event {event_id} target required-count evidence does not match storyboard")
+            observed_count = row.get("observed_target_count")
+            if (
+                required_count is None
+                or isinstance(observed_count, bool)
+                or not isinstance(observed_count, int)
+                or observed_count != required_count
+            ):
+                errors.append(f"event {event_id} target count does not match the declared contract")
+            for check in (
+                "all_targets_contain_source_content",
+                "no_empty_highlight_regions",
+                "no_orphan_geometry",
+                "event_window_matches_visible_source_state",
+            ):
+                if row.get(check) is not True:
+                    errors.append(f"event {event_id} target region check is not pass: {check}")
+            try:
+                observed_ratio = float(row.get("minimum_observed_useful_content_ratio"))
+                required_ratio = float(target_contract.get("minimum_useful_content_ratio"))
+            except (TypeError, ValueError):
+                observed_ratio = -1.0
+                required_ratio = 1.0
+            if observed_ratio < required_ratio:
+                errors.append(f"event {event_id} target region useful-content ratio is too low")
+            evidence = row.get("evidence")
+            if not evidence:
+                errors.append(f"event {event_id} target region evidence is missing")
+            else:
+                errors.extend(_image_evidence_errors(
+                    evidence, f"event {event_id} target region evidence",
+                ))
+
+            source_records = target_contract.get("source_state_evidence") or []
+            source_paths: list[Path] = []
+            for index, source_record in enumerate(source_records):
+                label = f"event {event_id} source state evidence[{index}]"
+                record_errors = _image_evidence_errors(source_record, label)
+                errors.extend(record_errors)
+                if not record_errors:
+                    source_paths.append(Path(str(source_record["path"])))
+            if tracking_mode in {"static", "scene_bounded"} and len(source_paths) >= 2:
+                maximum_delta = float(target_contract.get("maximum_static_state_delta", 0.12))
+                observed_delta = max(
+                    _source_state_delta(source_paths[index - 1], source_paths[index])
+                    for index in range(1, len(source_paths))
+                )
+                if observed_delta > maximum_delta:
+                    errors.append(
+                        f"event {event_id} static target geometry spans a source-state change; "
+                        "shorten the active window or use keyframed tracking"
+                    )
+            if tracking_mode == "keyframed" and row.get("keyframes_cover_state_changes") is not True:
+                errors.append(f"event {event_id} keyframed target review is incomplete")
     if review.get("verdict") != "pass":
         errors.append("review verdict is not pass")
     return errors
