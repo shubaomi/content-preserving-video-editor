@@ -305,6 +305,20 @@ class AdaptiveMotionTests(unittest.TestCase):
         self.assertGreaterEqual(chain.count("between(t"), 4)
         self.assertNotEqual(chain, other_chain)
 
+    def test_unknown_but_semantic_layout_names_do_not_all_fall_back_to_soft_motif(self):
+        families = {
+            SFX.event_profile({"treatment": treatment}, index)[0]
+            for index, treatment in enumerate((
+                "source-ui-highlight-overlay",
+                "metric-comparison-lens",
+                "request-route-connector",
+                "product-step-list",
+            ), 1)
+        }
+
+        self.assertNotIn("soft_motif", families)
+        self.assertGreaterEqual(len(families), 3)
+
     def test_hyperframes_sfx_markup_uses_planned_landing_duration_and_volume(self):
         event = {
             "start": 10.0,

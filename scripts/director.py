@@ -258,9 +258,15 @@ def _review_evidence_files(review: dict[str, Any]) -> list[Path]:
     for row in (review.get("criteria") or {}).values():
         if isinstance(row, dict):
             values.extend(row.get("evidence") or [])
-    for row in (review.get("connector_geometry") or {}).values():
+    for row in [
+        *(review.get("connector_geometry") or {}).values(),
+        *(review.get("target_region_geometry") or {}).values(),
+    ]:
         if isinstance(row, dict):
             values.append(row.get("evidence"))
+    for row in (review.get("composite_contrast") or {}).values():
+        if isinstance(row, dict):
+            values.extend((row.get("composite_evidence"), row.get("source_evidence")))
     result: list[Path] = []
     seen: set[Path] = set()
     for value in values:
@@ -800,7 +806,11 @@ class Director:
         signals: list[str] = []
         if subtitle_streams:
             signals.append("embedded_subtitle_stream")
-        if burned.get("detected") is True and float(burned.get("confidence", 0)) >= 0.52:
+        if (
+            burned.get("detected") is True
+            and burned.get("verification_status") == "verified"
+            and float(burned.get("confidence", 0)) >= 0.52
+        ):
             signals.append("high_confidence_burned_captions")
         selected = "polish_existing" if signals else "preserve"
         stat = self.context.source_video.stat()
@@ -2073,6 +2083,7 @@ class Director:
                     "caption sync", "overlap", "overflow", "content relevance", "actual keyword focus",
                     "visual structure diversity", "motion rhythm", "UI/face/cursor safety",
                     "connector endpoints", "SFX event decisions", "SFX audibility", "BGM presence or provenance",
+                    "replayable connector/target measurements", "composited overlay contrast over source footage",
                 ],
                 "missing_artifacts": [str(path) for path in (review_path, audio_plan_path) if not path.is_file()],
                 "output": str(review_path),
@@ -2436,6 +2447,7 @@ class Director:
         required_checks = {
             "content_relevance", "visual_variety", "overlap", "overflow",
             "caption_face_cursor_ui_safety", "motion_rhythm",
+            "connector_target_geometry_measurement", "composite_readability",
         }
         review_checks = review.get("checks") or {}
         failed = sorted(name for name in required_checks if review_checks.get(name) != "pass")
@@ -2815,6 +2827,56 @@ class Director:
         normalize_enabled = normalization.get("enabled") is True
         compose_output = self.root / "final-compose-pre-normalized.mp4" if normalize_enabled else output
         bgm_config = self.project.get("audio", {}).get("bgm", {})
+        caption_delivery: dict[str, Any]
+        caption_asset = self.video_use_dir / "master.srt"
+        analysis_path = self.root / "input-mode-analysis.json"
+        caption_analysis = {}
+        if analysis_path.is_file():
+            caption_analysis = read_json(analysis_path).get("captions") or {}
+        verified_burned = caption_analysis.get("burned_in") or {}
+        existing_caption_verified = bool(caption_analysis.get("subtitle_streams")) or (
+            verified_burned.get("detected") is True
+            and verified_burned.get("verification_status") == "verified"
+        )
+        caption_disabled = self.project.get("editing", {}).get("caption_delivery") == "none"
+        burn_captions = (
+            not caption_disabled
+            and not existing_caption_verified
+            and self.context.input_mode != "polish_existing"
+        )
+        if burn_captions:
+            if not caption_asset.is_file():
+                self._action_required(
+                    "final_compose",
+                    "Output-timeline video-use captions are required before final composition",
+                    [{"owner": "video-use", "expected_artifact": str(caption_asset)}],
+                )
+            caption_filter_path = caption_asset.resolve().as_posix().replace(":", "\\:")
+            caption_filter_path = caption_filter_path.replace("'", "\\'")
+            caption_filter = f"subtitles=filename='{caption_filter_path}':charenc=UTF-8"
+            caption_delivery = {
+                "mode": "burned_in_last",
+                "source": str(caption_asset.resolve()),
+                "source_sha256": sha256_file(caption_asset),
+                "owner": "video-use",
+                "reason": "no verified existing caption layer; output-timeline captions are applied last",
+            }
+        elif caption_disabled:
+            caption_filter = None
+            caption_delivery = {
+                "mode": "disabled_by_project",
+                "reason": "editing.caption_delivery is explicitly none",
+            }
+        else:
+            caption_filter = None
+            caption_delivery = {
+                "mode": "preserve_verified_existing",
+                "reason": (
+                    "verified existing subtitle stream or burned captions"
+                    if existing_caption_verified else
+                    "explicit polish_existing mode preserves the established caption layer"
+                ),
+            }
         bgm_value = bgm_config.get("asset")
         bgm_asset = Path(str(bgm_value)) if bgm_value else None
         bgm_source = "project_config" if bgm_asset else None
@@ -2891,6 +2953,8 @@ class Director:
                 "-crf", "18", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
                 "-movflags", "+faststart", str(compose_output),
             ]
+            if caption_filter:
+                command[command.index("-map"):command.index("-map")] = ["-vf", caption_filter]
             audio_mix = {
                 "bgm_enabled": True,
                 "bgm_asset": str(bgm_asset),
@@ -2907,6 +2971,8 @@ class Director:
                 "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264", "-preset", "medium",
                 "-crf", "18", "-pix_fmt", "yuv420p",
             ]
+            if caption_filter:
+                command[command.index("-map"):command.index("-map")] = ["-vf", caption_filter]
             if not normalize_enabled:
                 command.extend(["-af", "loudnorm=I=-14:TP=-1.5:LRA=11"])
             command.extend(["-c:a", "aac", "-b:a", "192k",
@@ -2921,6 +2987,7 @@ class Director:
                 sha256_file(full_audio_plan_path) if full_audio_plan_path.is_file() else None
             ),
             "bgm_sha256": sha256_file(bgm_asset) if bgm_enabled and bgm_asset else None,
+            "caption_delivery": caption_delivery,
             "normalization": {
                 "enabled": normalize_enabled,
                 "target_lufs": float(normalization.get("target_lufs", -14.0)),
@@ -2941,6 +3008,7 @@ class Director:
             "compose_output": str(compose_output),
             "single_universal_output": True,
             "audio_mix": audio_mix,
+            "caption_delivery": caption_delivery,
             "two_pass_normalization": {
                 "enabled": normalize_enabled,
                 "target_lufs": float(normalization.get("target_lufs", -14.0)),

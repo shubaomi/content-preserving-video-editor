@@ -14,7 +14,11 @@ from PIL import Image
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from completion_audit import _cover_review_errors, build  # noqa: E402
+from completion_audit import (  # noqa: E402
+    _cover_review_errors,
+    _final_caption_delivery_errors,
+    build,
+)
 from capability_registry import build_capability_inventory, build_toolchain_report  # noqa: E402
 from brand_motion_playbook import compile_playbook  # noqa: E402
 from aesthetic_qa import REQUIRED_CRITERIA  # noqa: E402
@@ -35,6 +39,21 @@ from validate_platform_export import (  # noqa: E402
 
 
 class CompletionAuditTests(unittest.TestCase):
+    def test_source_first_caption_delivery_requires_bound_srt_and_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            captions = root / "master.srt"
+            captions.write_text("1\n00:00:00,000 --> 00:00:01,000\n字幕\n", encoding="utf-8")
+            plan = root / "final-compose-command.json"
+            plan.write_text(json.dumps({"caption_delivery": {"mode": "burned_in_last"},
+                                        "argv": ["ffmpeg", "out.mp4"]}), encoding="utf-8")
+
+            errors = _final_caption_delivery_errors(plan, captions, input_mode="preserve")
+
+            self.assertTrue(any("source path" in error for error in errors), errors)
+            self.assertTrue(any("source hash" in error for error in errors), errors)
+            self.assertTrue(any("subtitles filter" in error for error in errors), errors)
+
     def test_generic_cover_review_does_not_require_personal_identity_evidence(self) -> None:
         generic = {
             "status": "pass",
@@ -173,6 +192,7 @@ class CompletionAuditTests(unittest.TestCase):
                 "checks": {name: "pass" for name in (
                     "content_relevance", "visual_variety", "overlap", "overflow",
                     "caption_face_cursor_ui_safety", "motion_rhythm",
+                    "connector_target_geometry_measurement", "composite_readability",
                 )},
             }), encoding="utf-8")
             studio = full_qa / "studio.png"
@@ -223,6 +243,18 @@ class CompletionAuditTests(unittest.TestCase):
                     phase: str(studio) for phase in (
                         "entrance", "midpoint", "pre_exit", "post_exit",
                     )} for event in events},
+                "composite_contrast": {event["id"]: {
+                    "status": "pass", "method": "source_frame_alpha_composite_v1",
+                    "composite_evidence": {
+                        "path": str(studio), "sha256": sha256_file(studio),
+                    },
+                    "source_evidence": {
+                        "path": str(studio), "sha256": sha256_file(studio),
+                    },
+                    "overlay_bbox": [10, 10, 200, 100],
+                    "foreground_rgb": [15, 30, 25],
+                    "panel_rgb": [250, 252, 248], "panel_alpha": 0.94,
+                } for event in events},
             }), encoding="utf-8")
             sample_gate_path = director_root / "sample-qa" / "gate-report.json"
             sample_gate_path.write_text(json.dumps({
@@ -410,6 +442,11 @@ class CompletionAuditTests(unittest.TestCase):
                 "edit-correctness-preflight.json": {}, "caption-sync-report.json": {"passed": True},
             }.items():
                 (video_use / name).write_text(json.dumps(payload), encoding="utf-8")
+            master_srt = video_use / "master.srt"
+            master_srt.write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\nCaption fixture\n",
+                encoding="utf-8",
+            )
             views = []
             for name in ("first", "middle", "final"):
                 view = video_use / f"{name}.png"
@@ -446,6 +483,18 @@ class CompletionAuditTests(unittest.TestCase):
                 )},
                 "reviewed_event_ids": [event["id"] for event in events],
                 "snapshots": final_snapshots,
+                "composite_contrast": {event["id"]: {
+                    "status": "pass", "method": "source_frame_alpha_composite_v1",
+                    "composite_evidence": {
+                        "path": str(studio), "sha256": sha256_file(studio),
+                    },
+                    "source_evidence": {
+                        "path": str(studio), "sha256": sha256_file(studio),
+                    },
+                    "overlay_bbox": [10, 10, 200, 100],
+                    "foreground_rgb": [15, 30, 25],
+                    "panel_rgb": [250, 252, 248], "panel_alpha": 0.94,
+                } for event in events},
             }), encoding="utf-8")
             cover = root / "exports" / "cover-portrait.png"
             Image.new("RGB", (1080, 1920), "#173d31").save(cover)
@@ -458,6 +507,21 @@ class CompletionAuditTests(unittest.TestCase):
                 output, output=director_root / "final-media-report.json",
                 evidence_dir=final_qa / "technical-evidence", true_peak_ceiling=1.0,
             )
+            final_compose_plan = director_root / "final-compose-command.json"
+            final_compose_plan.write_text(json.dumps({
+                "schema_version": 1,
+                "caption_delivery": {
+                    "mode": "burned_in_last",
+                    "source": str(master_srt.resolve()),
+                    "source_sha256": sha256_file(master_srt),
+                    "owner": "video-use",
+                },
+                "argv": [
+                    "ffmpeg", "-vf",
+                    f"subtitles=filename='{master_srt.resolve()}':charenc=UTF-8",
+                    str(output.resolve()),
+                ],
+            }), encoding="utf-8")
             presets = json.loads((ROOT / "references" / "platform-presets.json")
                                  .read_text(encoding="utf-8"))
             for platform in ("douyin", "wechat_channels"):
@@ -522,6 +586,9 @@ class CompletionAuditTests(unittest.TestCase):
             stages["final_render"] = stage_row([
                 render, authorization_path, director_root / "final-render-receipt.json",
                 render_stdout, render_stderr,
+            ])
+            stages["final_compose"] = stage_row([
+                output, final_compose_plan, director_root / "final-media-report.json",
             ])
             stages["delivery_qa"] = stage_row([
                 output, cover, director_root / "delivery-contract.json",

@@ -52,6 +52,13 @@ class AestheticQaTests(unittest.TestCase):
             "technical_qa": {name: {"status": "pass"}
                              for name in ("hyperframes_check", "caption_sync", "overlap", "overflow", "decode")},
             "snapshots": snapshots,
+            "composite_contrast": {
+                event["id"]: self._composite_contrast_record(
+                    Path(snapshots[event["id"]]["midpoint"]),
+                    Path(snapshots[event["id"]]["post_exit"]),
+                )
+                for event in events
+            },
         }
 
     def tearDown(self) -> None:
@@ -64,6 +71,30 @@ class AestheticQaTests(unittest.TestCase):
         del self.review["criteria"][REQUIRED_CRITERIA[0]]
         errors = validate(self.review, self.storyboard)
         self.assertTrue(any("missing aesthetic criterion" in error for error in errors))
+
+    @staticmethod
+    def _composite_contrast_record(composite: Path, source: Path) -> dict:
+        return {
+            "status": "pass",
+            "method": "source_frame_alpha_composite_v1",
+            "composite_evidence": {
+                "path": str(composite), "sha256": sha256_file(composite),
+            },
+            "source_evidence": {
+                "path": str(source), "sha256": sha256_file(source),
+            },
+            "overlay_bbox": [20, 20, 240, 100],
+            "foreground_rgb": [20, 35, 45],
+            "panel_rgb": [250, 252, 248],
+            "panel_alpha": 0.94,
+        }
+
+    def test_composited_low_contrast_overlay_fails_even_when_internal_check_claims_pass(self) -> None:
+        self.review["composite_contrast"]["e0"]["foreground_rgb"] = [245, 245, 245]
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("composited contrast" in error for error in errors), errors)
 
     def test_missing_motion_phase_is_blocking(self) -> None:
         del self.review["snapshots"]["e0"]["post_exit"]
@@ -192,10 +223,79 @@ class AestheticQaTests(unittest.TestCase):
                 "all_endpoints_attached": True,
                 "optically_aligned": True,
                 "no_clipped_paths": True,
-                "evidence": str(evidence),
+                "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+                "measurement_receipt": {
+                    "method": "browser_dom_geometry_v1",
+                    "snapshot_sha256": sha256_file(evidence),
+                    "canvas": {"width": 320, "height": 180},
+                    "maximum_endpoint_distance_px": 6,
+                    "relations": [
+                        {
+                            "relation": f"source->{target}",
+                            "attachment_edge": "right-to-left",
+                            "from_bbox": [20, 40 + index * 35, 40, 20],
+                            "to_bbox": [200, 40 + index * 35, 50, 20],
+                            "path_start": [60, 50 + index * 35],
+                            "path_end": [200, 50 + index * 35],
+                            "clipped": False,
+                        }
+                        for index, target in enumerate(("a", "b", "c"))
+                    ],
+                },
             }
         }
         self.assertEqual(validate(self.review, self.storyboard), [])
+
+    def test_connector_boolean_claims_without_replayable_measurements_fail(self) -> None:
+        self.storyboard["events"][0]["geometry_contract"] = {
+            "connector_contract": {
+                "required_connector_count": 1,
+                "relations": ["source->target"],
+            }
+        }
+        evidence = Path(self.temp.name) / "e0-connectors.png"
+        Image.new("RGB", (320, 180), "white").save(evidence)
+        self.review["connector_geometry"] = {"e0": {
+            "status": "pass", "required_connector_count": 1,
+            "observed_connector_count": 1, "all_endpoints_attached": True,
+            "optically_aligned": True, "no_clipped_paths": True,
+            "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+        }}
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("measurement receipt" in error for error in errors), errors)
+
+    def test_connector_measurement_rejects_non_finite_canvas(self) -> None:
+        self.storyboard["events"][0]["geometry_contract"] = {
+            "connector_contract": {
+                "required_connector_count": 1,
+                "relations": ["source->target"],
+            }
+        }
+        evidence = Path(self.temp.name) / "e0-connectors-nan.png"
+        Image.new("RGB", (320, 180), "white").save(evidence)
+        self.review["connector_geometry"] = {"e0": {
+            "status": "pass", "required_connector_count": 1,
+            "observed_connector_count": 1, "all_endpoints_attached": True,
+            "optically_aligned": True, "no_clipped_paths": True,
+            "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+            "measurement_receipt": {
+                "method": "browser_dom_geometry_v1",
+                "snapshot_sha256": sha256_file(evidence),
+                "canvas": {"width": float("nan"), "height": 180},
+                "maximum_endpoint_distance_px": 6,
+                "relations": [{
+                    "relation": "source->target", "attachment_edge": "right-to-left",
+                    "from_bbox": [20, 40, 40, 20], "to_bbox": [200, 40, 50, 20],
+                    "path_start": [60, 50], "path_end": [200, 50], "clipped": False,
+                }],
+            },
+        }}
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("canvas or tolerance is invalid" in error for error in errors), errors)
 
     def _add_target_region_contract(self, colors: tuple[str, str, str]) -> None:
         root = Path(self.temp.name)
@@ -253,6 +353,7 @@ class AestheticQaTests(unittest.TestCase):
                 "event_window_matches_visible_source_state": True,
                 "minimum_observed_useful_content_ratio": 0.6,
                 "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+                "measurement_receipt": self._target_measurement(evidence),
             }
         }
 
@@ -276,6 +377,7 @@ class AestheticQaTests(unittest.TestCase):
                 "event_window_matches_visible_source_state": True,
                 "minimum_observed_useful_content_ratio": 0.6,
                 "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+                "measurement_receipt": self._target_measurement(evidence),
             }
         }
 
@@ -297,12 +399,70 @@ class AestheticQaTests(unittest.TestCase):
                 "event_window_matches_visible_source_state": True,
                 "minimum_observed_useful_content_ratio": 0.6,
                 "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+                "measurement_receipt": self._target_measurement(evidence),
             }
         }
 
         errors = validate(self.review, self.storyboard)
 
         self.assertTrue(any("target count" in error for error in errors), errors)
+
+    @staticmethod
+    def _target_measurement(evidence: Path) -> dict:
+        return {
+            "method": "browser_dom_geometry_v1",
+            "snapshot_sha256": sha256_file(evidence),
+            "canvas": {"width": 640, "height": 360},
+            "active_selector": "#e0 .source-target",
+            "measured_at_phase": "midpoint",
+            "targets": [{
+                "target_id": "primary-chart",
+                "overlay_bbox": [80, 60, 300, 180],
+                "useful_content_bbox": [80, 60, 300, 108],
+            }],
+        }
+
+    def test_target_region_self_report_cannot_hide_an_empty_measured_box(self) -> None:
+        self._add_target_region_contract(("white", "white", "white"))
+        evidence = Path(self.temp.name) / "e0-empty-target.png"
+        Image.new("RGB", (640, 360), "white").save(evidence)
+        measurement = self._target_measurement(evidence)
+        measurement["targets"][0]["useful_content_bbox"] = [500, 300, 20, 20]
+        self.review["target_region_geometry"] = {"e0": {
+            "status": "pass", "tracking_mode": "scene_bounded",
+            "required_target_count": 1, "observed_target_count": 1,
+            "all_targets_contain_source_content": True,
+            "no_empty_highlight_regions": True, "no_orphan_geometry": True,
+            "event_window_matches_visible_source_state": True,
+            "minimum_observed_useful_content_ratio": 0.99,
+            "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+            "measurement_receipt": measurement,
+        }}
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("measured useful-content ratio" in error for error in errors), errors)
+
+    def test_target_region_measurement_rejects_non_finite_canvas(self) -> None:
+        self._add_target_region_contract(("white", "white", "white"))
+        evidence = Path(self.temp.name) / "e0-target-nan.png"
+        Image.new("RGB", (640, 360), "white").save(evidence)
+        measurement = self._target_measurement(evidence)
+        measurement["canvas"]["width"] = float("nan")
+        self.review["target_region_geometry"] = {"e0": {
+            "status": "pass", "tracking_mode": "scene_bounded",
+            "required_target_count": 1, "observed_target_count": 1,
+            "all_targets_contain_source_content": True,
+            "no_empty_highlight_regions": True, "no_orphan_geometry": True,
+            "event_window_matches_visible_source_state": True,
+            "minimum_observed_useful_content_ratio": 0.6,
+            "evidence": {"path": str(evidence), "sha256": sha256_file(evidence)},
+            "measurement_receipt": measurement,
+        }}
+
+        errors = validate(self.review, self.storyboard)
+
+        self.assertTrue(any("canvas is invalid" in error for error in errors), errors)
 
 
 if __name__ == "__main__":

@@ -35,6 +35,19 @@ EVENT_PATTERNS = {
     "semantic_icon": ("semantic_pluck", (0, 5, 9), 1.14),
 }
 
+SEMANTIC_PATTERN_TOKENS = (
+    (("chapter", "transition", "section"), "chapter_transition"),
+    (("compare", "comparison", "contrast", "versus"), "comparison_panel"),
+    (("step", "list", "rail"), "steps"),
+    (("process", "route", "flow", "connector", "dependency"), "process_nodes"),
+    (("metric", "numeric", "number", "result", "trend"), "numeric_result"),
+    (("focus", "highlight", "callout", "overlay", "cursor", "ui"), "ui_focus_cursor"),
+    (("zoom", "pip", "camera"), "pip_local_zoom"),
+    (("keyword", "text", "title", "label"), "keyword_typography"),
+    (("icon", "symbol"), "semantic_icon"),
+    (("ip", "identity", "character"), "ip_asset"),
+)
+
 
 def filter_for(family: str, frequency: int) -> str:
     finish = "silenceremove=start_periods=1:start_threshold=-60dB:stop_periods=-1:stop_threshold=-60dB,loudnorm=I=-24:TP=-3:LRA=7,alimiter=limit=0.7079"
@@ -51,7 +64,18 @@ def _event_id(value: object) -> str:
 
 
 def event_profile(event: dict, index: int) -> tuple[str, tuple[int, ...], float, int]:
-    key = str(event.get("treatment") or event.get("visual_family") or "")
+    key = str(event.get("treatment") or event.get("visual_family") or "").lower()
+    if key not in EVENT_PATTERNS:
+        visual = event.get("visual_structure") or {}
+        searchable = " ".join((
+            key,
+            str(visual.get("layout_archetype") or ""),
+            str(visual.get("use_case") or ""),
+        )).lower()
+        key = next((
+            mapped for tokens, mapped in SEMANTIC_PATTERN_TOKENS
+            if any(token in searchable for token in tokens)
+        ), "semantic_icon")
     family, intervals, duration = EVENT_PATTERNS.get(key, ("soft_motif", (0, 5, 9), 1.16))
     # A small deterministic transposition keeps neighboring cues related but not identical.
     root = round(300 * (2 ** (((index * 5) % 12) / 12)))

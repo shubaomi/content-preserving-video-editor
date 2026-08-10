@@ -74,6 +74,10 @@ Complete a video only when applicable gates pass.
 - Check technical terms.
 - Avoid faces and critical UI.
 - Apply captions after the output edit is final and verify output-timeline remapping.
+- For source-first/preserve work without a verified existing caption layer,
+  require `final-compose-command.json.caption_delivery.mode=burned_in_last`, the
+  current video-use `master.srt` hash, and an FFmpeg subtitles filter. A sidecar
+  SRT alone is not delivered caption evidence.
 - Validate names, product terms, URLs, commands, and technical vocabulary against the project glossary and visible UI.
 
 ## Visuals
@@ -114,6 +118,10 @@ Complete a video only when applicable gates pass.
 - For every declared connector contract, match observed relation count to the
   Storyboard and verify every path terminates on its intended node edge. A
   central line that visually reaches only one of several targets is a failure.
+- Reject connector or target reviews that provide only pass booleans. Recompute
+  connector endpoint distances from path points and node boxes with no more than
+  8 px tolerance; recompute target useful-content occupancy from measured
+  overlay/content box intersection.
 - For every source-bound focus/highlight/callout/overlay, require a target-region
   contract and per-event review. Match observed target count, reject empty or
   orphan regions, require the declared useful-content ratio, and verify that
@@ -127,6 +135,9 @@ Complete a video only when applicable gates pass.
 - General review frames must be at least 320x180 in either orientation. Anatomy
   evidence must use three unique role-specific views: `full_frame`, `left_hand`,
   and `right_hand`; structured evidence records declare role and SHA-256.
+- For every non-quiet overlay, bind midpoint and post-exit/source evidence and
+  recompute source-composited foreground/panel contrast. Require at least 4.5:1;
+  internal component contrast does not replace this check.
 
 ## Cut boundaries
 
@@ -193,6 +204,9 @@ Complete a video only when applicable gates pass.
 - Require a `cue` or evidenced `intentionally_silent` decision for every
   non-quiet event. Enforce the configured coverage and unique-asset ratios,
   same-file cooldown, cue duration, and post-gain audibility range.
+- When at least two cues are selected, enforce `maximum_family_ratio` (default
+  0.5) so unique filenames and simple pitch changes cannot make one repeated
+  sonic motif look diverse.
 - Do not infer embedded BGM from the presence of an audio stream or a project
   declaration. Require measured presence evidence; otherwise use an authorized
   asset when enabled by default, with speech-driven sidechain ducking.

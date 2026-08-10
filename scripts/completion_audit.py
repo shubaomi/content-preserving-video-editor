@@ -153,17 +153,63 @@ def _review_evidence_files(review: dict[str, Any]) -> list[Path]:
     for row in (review.get("criteria") or {}).values():
         if isinstance(row, dict):
             values.extend(row.get("evidence") or [])
-    for row in (review.get("connector_geometry") or {}).values():
+    for row in [
+        *(review.get("connector_geometry") or {}).values(),
+        *(review.get("target_region_geometry") or {}).values(),
+    ]:
         if isinstance(row, dict):
             values.append(row.get("evidence"))
-    return sorted({Path(str(value)).resolve() for value in values
-                   if value and Path(str(value)).is_file()})
+    for row in (review.get("composite_contrast") or {}).values():
+        if isinstance(row, dict):
+            values.extend((row.get("composite_evidence"), row.get("source_evidence")))
+    paths: set[Path] = set()
+    for value in values:
+        if not value:
+            continue
+        record = value if isinstance(value, dict) else {"path": value}
+        if record.get("path"):
+            path = Path(str(record["path"])).resolve()
+            if path.is_file():
+                paths.add(path)
+    return sorted(paths)
 
 
 def _technical_report_errors(report_path: Path, output: Path) -> list[str]:
     if not report_path.is_file():
         return ["technical media report is missing"]
     return validate_technical_report(read_json(report_path), output)
+
+
+def _final_caption_delivery_errors(
+    plan_path: Path, captions_path: Path, *, input_mode: str,
+    caption_disabled: bool = False,
+) -> list[str]:
+    if not plan_path.is_file():
+        return ["final compose caption delivery plan is missing"]
+    plan = read_json(plan_path)
+    delivery = plan.get("caption_delivery") or {}
+    if caption_disabled:
+        return [] if delivery.get("mode") == "disabled_by_project" else [
+            "final compose caption delivery does not match the explicit disabled policy"
+        ]
+    if input_mode == "preserve":
+        errors: list[str] = []
+        if not captions_path.is_file():
+            errors.append("video-use master.srt is missing from final caption delivery")
+            return errors
+        if delivery.get("mode") != "burned_in_last":
+            errors.append("source-first final compose did not burn captions last")
+        if delivery.get("source") != str(captions_path.resolve()):
+            errors.append("final caption delivery source path is stale")
+        if delivery.get("source_sha256") != sha256_file(captions_path):
+            errors.append("final caption delivery source hash is stale")
+        argv = [str(value) for value in (plan.get("argv") or [])]
+        if not any("subtitles=" in value for value in argv):
+            errors.append("final compose command lacks the video-use subtitles filter")
+        return errors
+    if delivery.get("mode") not in {"preserve_verified_existing", "burned_in_last"}:
+        return ["polish-existing final compose lacks an explicit caption delivery decision"]
+    return []
 
 
 def _platform_report_errors(report_path: Path, output: Path, cover: Path) -> list[str]:
@@ -409,6 +455,7 @@ def build(
     sync_path = context.edit_dir / "video-use" / "caption-sync-report.json"
     edl_path = context.edit_dir / "video-use" / "edl.json"
     captions_path = context.edit_dir / "video-use" / "captions.json"
+    master_srt_path = context.edit_dir / "video-use" / "master.srt"
     media_analysis_path = context.edit_dir / "video-use" / "media-analysis.json"
     edit_preflight_path = context.edit_dir / "video-use" / "edit-correctness-preflight.json"
     sync = read_json(sync_path) if sync_path.is_file() else {}
@@ -469,6 +516,12 @@ def build(
     render_receipt_errors = _render_receipt_errors(
         root, full_project, full_commands_path, render_output,
     )
+    caption_delivery_plan = root / "final-compose-command.json"
+    caption_delivery_errors = _final_caption_delivery_errors(
+        caption_delivery_plan, master_srt_path,
+        input_mode=context.input_mode,
+        caption_disabled=project.get("editing", {}).get("caption_delivery") == "none",
+    ) if stages.get("final_compose", {}).get("status") == "complete" else []
 
     criteria: dict[str, dict[str, Any]] = {}
     criteria["1_tests_and_architecture_tests"] = _row(
@@ -526,12 +579,17 @@ def build(
         final_correctness_pass = not validate_video_use_final_correctness(
             read_json(final_correctness_path), output_path=delivery_output, edl=read_json(edl_path),
         )
-    video_use_pass = video_use_chain_pass and (not rendered or final_correctness_pass)
+    video_use_pass = (
+        video_use_chain_pass
+        and (not rendered or final_correctness_pass)
+        and not caption_delivery_errors
+    )
     criteria["5_video_use_word_timeline_chain"] = _row(
         "pass" if video_use_pass else "pending",
         "video-use media analysis, EDL preflight, output-timeline captions, sampled sync, and final rendered-output correctness are present." if video_use_pass
         else "video-use execution evidence is incomplete, or the final render is not yet bound to a final correctness report.",
-        [media_analysis_path, edl_path, edit_preflight_path, captions_path, sync_path, final_correctness_path],
+        [media_analysis_path, edl_path, edit_preflight_path, captions_path, master_srt_path,
+         sync_path, final_correctness_path, caption_delivery_plan],
     )
     criteria["6_sample_has_distinct_structures"] = _row(
         "pass" if len(visual_events) >= 4 and len(signatures) >= 4 else "pending",

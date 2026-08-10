@@ -94,6 +94,27 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         self.assertFalse(migrated["feedback"]["learning_loop"]["enabled"])
         self.assertFalse(migrated["delivery"]["audit_bundle"]["enabled"])
         self.assertFalse(migrated["delivery"]["release_pack"]["enabled"])
+        self.assertEqual(migrated["audio"]["sfx"]["maximum_family_ratio"], 0.5)
+        self.assertEqual(migrated["editing"]["caption_delivery"], "auto")
+
+    def test_invalid_caption_delivery_policy_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "editing.caption_delivery"):
+            migrate_project_config({
+                "schema_version": 9,
+                "version": 9,
+                "editing": {"caption_delivery": "sometimes"},
+            })
+
+    def test_invalid_sfx_family_dominance_limit_is_rejected(self) -> None:
+        for value in (True, 0, 1.1, float("nan")):
+            with self.subTest(value=value), self.assertRaisesRegex(
+                ValueError, "audio.sfx.maximum_family_ratio"
+            ):
+                migrate_project_config({
+                    "schema_version": 9,
+                    "version": 9,
+                    "audio": {"sfx": {"maximum_family_ratio": value}},
+                })
 
     def test_legacy_project_context_runs_with_migrated_defaults_without_yaml_mutation(self) -> None:
         fixture = ROOT / "tests" / "fixtures" / "project-v1.yaml"

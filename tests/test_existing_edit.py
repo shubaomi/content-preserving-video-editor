@@ -27,6 +27,29 @@ class ExistingEditTests(unittest.TestCase):
         self.assertLess(MODULE.caption_score(plain), 0.05)
         self.assertGreater(MODULE.caption_score(captioned), 0.22)
 
+    def test_dense_dashboard_text_is_only_an_unverified_caption_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            samples = []
+            for index in range(8):
+                path = root / f"dashboard-{index}.png"
+                image = Image.new("RGB", (480, 270), "white")
+                draw = ImageDraw.Draw(image)
+                for row in range(6):
+                    y = 170 + row * 13
+                    draw.line((30, y, 450, y), fill=(75, 85, 95), width=2)
+                    for column in range(8):
+                        x = 35 + column * 50
+                        draw.rectangle((x, y - 8, x + 24, y - 4), fill=(110, 120, 130))
+                image.save(path)
+                samples.append((float(index * 5 + 2), path))
+
+            result = MODULE.analyze_visuals(samples, root / "evidence")["burned_caption"]
+
+        self.assertEqual(result["verification_status"], "heuristic_unverified")
+        self.assertFalse(result["detected"])
+        self.assertEqual(result["decision"], "review_required_before_suppressing_captions")
+
     def test_declared_existing_bgm_blocks_second_bed(self) -> None:
         probe = {"streams": [{"codec_type": "audio", "codec_name": "aac", "channels": 2, "sample_rate": "44100"}]}
         original = MODULE.detect_silence

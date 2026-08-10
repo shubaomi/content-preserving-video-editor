@@ -39,6 +39,13 @@ def build_report(
     semantic_brief_path = semantic_brief_path.resolve()
     storyboard = json.loads(storyboard_path.read_text(encoding="utf-8"))
     brief = json.loads(semantic_brief_path.read_text(encoding="utf-8"))
+    production_contract = (
+        json.loads(production_contract_path.resolve().read_text(encoding="utf-8"))
+        if production_contract_path is not None else {}
+    )
+    promise_type = str(
+        (production_contract.get("delivery_promise") or {}).get("type") or "unknown"
+    )
     events = [row for row in (storyboard.get("events") or []) if isinstance(row, dict)]
     brief_events = {
         str(row.get("id") or "").strip(): row
@@ -157,7 +164,14 @@ def build_report(
             ))
 
     duration = float((storyboard.get("composition") or {}).get("duration") or 0.0)
-    max_gap = float(config.get("maximum_unexplained_gap_seconds", 30.0))
+    configured_max_gap = float(config.get("maximum_unexplained_gap_seconds", 30.0))
+    promise_gap_ceiling = {
+        "screen_demo": 18.0,
+        "hybrid": 20.0,
+        "teacher_explainer": 22.0,
+        "talking_head": 24.0,
+    }.get(promise_type, configured_max_gap)
+    max_gap = min(configured_max_gap, promise_gap_ceiling)
     ordered = sorted(intervals)
     cursor = 0.0
     for start, end, quiet in ordered:
@@ -198,6 +212,8 @@ def build_report(
             "nonquiet_event_count": len(families),
             "distinct_visual_families": len(set(families)),
             "event_count_is_not_a_quality_score": True,
+            "delivery_promise_type": promise_type,
+            "effective_maximum_unexplained_gap_seconds": max_gap,
         },
         "delegated_existing_gates": [
             "geometry", "overflow", "caption_occlusion", "face_cursor_ui_safety",

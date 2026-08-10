@@ -2,6 +2,7 @@
 """Blocking audio-plan QA for event SFX coverage, audibility, and BGM provenance."""
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -107,6 +108,18 @@ def validate(
             errors.append(
                 f"motion SFX unique-asset ratio {unique_ratio:.3f} is below target {minimum_unique:.3f}"
             )
+        families = [str(row.get("family") or "").strip() for row in cue_rows]
+        if any(not family for family in families):
+            errors.append("every motion SFX cue must declare a semantic family")
+        elif len(families) > 1:
+            family, count = Counter(families).most_common(1)[0]
+            maximum_family_ratio = _number(sfx_config.get("maximum_family_ratio"), 0.5)
+            family_ratio = count / len(families)
+            if family_ratio > maximum_family_ratio + 1e-9:
+                errors.append(
+                    f"motion SFX family {family!r} dominates {count}/{len(families)} cues; "
+                    f"maximum family ratio is {maximum_family_ratio:.3f}"
+                )
         cooldown = _number(sfx_config.get("same_file_cooldown_seconds"), 20.0)
         ordered = sorted(cue_rows, key=lambda row: _number(row.get("start"), 0.0))
         last_start: dict[str, float] = {}

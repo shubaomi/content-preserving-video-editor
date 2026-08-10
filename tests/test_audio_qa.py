@@ -17,7 +17,7 @@ class AudioQaTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         (self.root / "sfx").mkdir()
-        for name in ("a.wav", "b.wav", "c.wav"):
+        for name in ("a.wav", "b.wav", "c.wav", "d.wav"):
             (self.root / "sfx" / name).write_bytes(b"audio")
         (self.root / "bgm.wav").write_bytes(b"music")
         (self.root / "mix-audibility.json").write_text("{}", encoding="utf-8")
@@ -34,6 +34,7 @@ class AudioQaTests(unittest.TestCase):
                 "sfx": {
                     "target_event_coverage": 1.0,
                     "minimum_unique_asset_ratio": 1.0,
+                    "maximum_family_ratio": 0.67,
                     "same_file_cooldown_seconds": 20,
                     "minimum_post_gain_mean_dbfs": -34,
                     "maximum_post_gain_mean_dbfs": -18,
@@ -56,9 +57,9 @@ class AudioQaTests(unittest.TestCase):
             },
             "motion_sfx": {
                 "event_decisions": [
-                    self._cue("e1", "sfx/a.wav", 1.2),
-                    self._cue("e2", "sfx/b.wav", 22.2),
-                    self._cue("e3", "sfx/c.wav", 45.2),
+                    self._cue("e1", "sfx/a.wav", 1.2, "ui_confirm"),
+                    self._cue("e2", "sfx/b.wav", 22.2, "compare_exchange"),
+                    self._cue("e3", "sfx/c.wav", 45.2, "chapter_chime"),
                 ],
                 "mix_audibility_check": {
                     "status": "pass",
@@ -72,12 +73,12 @@ class AudioQaTests(unittest.TestCase):
         self.temp.cleanup()
 
     @staticmethod
-    def _cue(event_id: str, asset: str, start: float) -> dict:
+    def _cue(event_id: str, asset: str, start: float, family: str) -> dict:
         return {
             "event_id": event_id,
             "decision": "cue",
             "asset": asset,
-            "family": "semantic_motif",
+            "family": family,
             "start": start,
             "duration_seconds": 1.2,
             "volume": 0.28,
@@ -117,6 +118,27 @@ class AudioQaTests(unittest.TestCase):
         }
         errors = validate(self.plan, self.storyboard, self.project, base_dir=self.root)
         self.assertTrue(any("authorized BGM" in error and "disabled" in error for error in errors))
+
+    def test_different_files_do_not_hide_one_dominant_sfx_family(self) -> None:
+        self.plan["motion_sfx"]["event_decisions"] = [
+            self._cue("e1", "sfx/a.wav", 1.2, "soft_motif"),
+            self._cue("e2", "sfx/b.wav", 22.2, "soft_motif"),
+            self._cue("e3", "sfx/c.wav", 45.2, "soft_motif"),
+        ]
+
+        errors = validate(self.plan, self.storyboard, self.project, base_dir=self.root)
+
+        self.assertTrue(any("SFX family" in error and "dominates" in error for error in errors), errors)
+
+    def test_single_selected_cue_does_not_trigger_an_impossible_family_variety_gate(self) -> None:
+        self.storyboard["events"] = self.storyboard["events"][:1]
+        self.plan["motion_sfx"]["event_decisions"] = [
+            self._cue("e1", "sfx/a.wav", 1.2, "soft_motif"),
+        ]
+
+        errors = validate(self.plan, self.storyboard, self.project, base_dir=self.root)
+
+        self.assertFalse(any("SFX family" in error and "dominates" in error for error in errors), errors)
 
 
 if __name__ == "__main__":

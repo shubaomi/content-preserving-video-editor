@@ -139,6 +139,12 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("project configuration must be a mapping")
     _source_version(project)
     migrated = deepcopy(project)
+    editing = migrated.setdefault("editing", {})
+    if not isinstance(editing, dict):
+        raise ValueError("editing must be a mapping")
+    caption_delivery = editing.setdefault("caption_delivery", "auto")
+    if caption_delivery not in {"auto", "none"}:
+        raise ValueError("editing.caption_delivery must be auto or none")
     delivery = migrated.setdefault("delivery", {})
     if not isinstance(delivery, dict):
         raise ValueError("delivery must be a mapping")
@@ -357,6 +363,18 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     providers = bgm.setdefault("provider_chain", [])
     if not isinstance(providers, list):
         raise ValueError("audio.bgm.provider_chain must be a list")
+    sfx = audio.setdefault("sfx", {})
+    if not isinstance(sfx, dict):
+        raise ValueError("audio.sfx must be a mapping")
+    maximum_family_ratio = sfx.setdefault("maximum_family_ratio", 0.5)
+    if (
+        isinstance(maximum_family_ratio, bool)
+        or not isinstance(maximum_family_ratio, (int, float))
+        or not math.isfinite(float(maximum_family_ratio))
+        or not 0 < float(maximum_family_ratio) <= 1
+    ):
+        raise ValueError("audio.sfx.maximum_family_ratio must be in (0, 1]")
+    sfx["maximum_family_ratio"] = float(maximum_family_ratio)
     cover = migrated.setdefault("cover", {})
     if not isinstance(cover, dict):
         raise ValueError("cover must be a mapping")

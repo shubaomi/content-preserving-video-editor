@@ -216,6 +216,7 @@ class DirectorTests(unittest.TestCase):
             "checks": {name: "pass" for name in (
                 "content_relevance", "visual_variety", "overlap", "overflow",
                 "caption_face_cursor_ui_safety", "motion_rhythm",
+                "connector_target_geometry_measurement", "composite_readability",
             )},
         }
         (qa / "snapshot-review.json").write_text(json.dumps(review), encoding="utf-8")
@@ -669,7 +670,11 @@ class DirectorTests(unittest.TestCase):
             output.write_text(json.dumps({
                 "captions": {
                     "subtitle_streams": [],
-                    "burned_in": {"detected": True, "confidence": 0.91},
+                    "burned_in": {
+                        "detected": True,
+                        "verification_status": "verified",
+                        "confidence": 0.91,
+                    },
                 }
             }), encoding="utf-8")
 
@@ -682,6 +687,41 @@ class DirectorTests(unittest.TestCase):
         self.assertIn("high_confidence_burned_captions", evidence["signals"])
         resumed = Director(project)
         self.assertEqual(resumed.context.input_mode, "polish_existing")
+
+    def test_unverified_burned_caption_heuristic_cannot_switch_to_polish_mode(self) -> None:
+        recording = self.root / "source" / "recording.mp4"
+        recording.write_bytes(b"source-media")
+        project = self.root / "auto-project.yaml"
+        project.write_text(yaml.safe_dump({
+            "version": 1,
+            "video_id": "auto",
+            "paths": {"root": str(self.root), "work": "auto-work", "edit": "edit", "exports": "exports"},
+            "source": {"primary_video": "source/recording.mp4"},
+        }), encoding="utf-8")
+        director = Director(project)
+
+        def fake_analysis(command, **_kwargs):
+            output = Path(command[command.index("--out") + 1])
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps({
+                "captions": {
+                    "subtitle_streams": [],
+                    "burned_in": {
+                        "detected": False,
+                        "candidate_detected": True,
+                        "verification_status": "heuristic_unverified",
+                        "confidence": 1.0,
+                    },
+                }
+            }), encoding="utf-8")
+
+        director._start("inspect")
+        with patch("director.subprocess.run", side_effect=fake_analysis):
+            director.stage_inspect()
+
+        self.assertEqual(director.context.input_mode, "preserve")
+        evidence = json.loads((director.root / "input-mode-evidence.json").read_text(encoding="utf-8"))
+        self.assertNotIn("high_confidence_burned_captions", evidence["signals"])
 
     def test_missing_word_transcript_stops_at_exact_stage_with_action_packet(self) -> None:
         director = Director(self.project)
@@ -1170,6 +1210,30 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(Path(plan["output"]), director.delivery_output)
         self.assertIn("loudnorm=I=-14:TP=-1.5:LRA=11", plan["argv"])
         self.assertEqual(plan["argv"][-1], str(director.delivery_output))
+
+    def test_final_compose_burns_video_use_captions_last_for_source_first_video(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["source"]["input_mode"] = "raw"
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        motion = director.root / "render" / "full-hyperframes.mp4"
+        motion.parent.mkdir(parents=True)
+        motion.write_bytes(b"hyperframes-render")
+        (director.root / "full-hyperframes-commands.json").write_text(json.dumps({
+            "final_motion_render": {"expected_artifact": str(motion)}
+        }), encoding="utf-8")
+        director.video_use_dir.mkdir(parents=True, exist_ok=True)
+        captions = director.video_use_dir / "master.srt"
+        captions.write_text("1\n00:00:00,000 --> 00:00:01,000\n字幕\n", encoding="utf-8")
+
+        with self.assertRaisesRegex(DirectorContractError, "not present"):
+            director.stage_final_compose()
+
+        plan = json.loads((director.root / "final-compose-command.json").read_text(encoding="utf-8"))
+        self.assertEqual(plan["caption_delivery"]["mode"], "burned_in_last")
+        self.assertEqual(plan["caption_delivery"]["source_sha256"], sha256_file(captions))
+        self.assertIn("-vf", plan["argv"])
+        self.assertIn("subtitles=", plan["argv"][plan["argv"].index("-vf") + 1])
 
     def test_audio_stage_executes_real_asset_production_when_external_execution_is_enabled(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))

@@ -142,6 +142,7 @@ def init_project(args: argparse.Namespace) -> int:
         "source": {"primary_video": f"source/{source_name}"},
         "editing": {
             "mode": args.mode,
+            "caption_delivery": "auto",
             "require_cut_report": True,
             "require_tail_coverage_check": True,
             "allow_long_semantic_deletion_without_confirmation": False,
@@ -154,6 +155,7 @@ def init_project(args: argparse.Namespace) -> int:
             "sfx": {"enabled": True, "volume": 0.28, "max_cues_per_minute": 6,
                     "max_event_ratio": 1.0, "same_file_cooldown_seconds": 45,
                     "target_event_coverage": 1.0, "minimum_unique_asset_ratio": 0.8,
+                    "maximum_family_ratio": 0.5,
                     "minimum_cue_duration_seconds": 0.8,
                     "minimum_post_gain_mean_dbfs": -34,
                     "maximum_post_gain_mean_dbfs": -18},

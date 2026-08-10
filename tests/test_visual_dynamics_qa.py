@@ -186,6 +186,31 @@ class VisualDynamicsQaTests(unittest.TestCase):
         self.assertTrue(any("production_contract hash" in error for error in errors))
         self.assertTrue(any("integrity" in error for error in errors))
 
+    def test_screen_demo_uses_a_tighter_content_aware_stagnation_ceiling(self) -> None:
+        self.contract.write_text(json.dumps({
+            "schema_version": 1,
+            "delivery_promise": {"type": "screen_demo"},
+        }), encoding="utf-8")
+        self._write([
+            event("e1", "请求入口", 2, "ui-focus"),
+            event("e2", "三步处理", 26, "process-path"),
+            event("e3", "方案对比", 50, "comparison"),
+            event("e4", "最终结果", 74, "numeric-result"),
+        ])
+
+        report = build_report(
+            storyboard_path=self.storyboard,
+            semantic_brief_path=self.brief,
+            config=self.project["qa"]["visual_dynamics"],
+            production_contract_path=self.contract,
+        )
+
+        self.assertEqual(report["metrics"]["delivery_promise_type"], "screen_demo")
+        self.assertLessEqual(report["metrics"]["effective_maximum_unexplained_gap_seconds"], 18.0)
+        self.assertIn("unexplained_visual_stagnation", {
+            finding["code"] for finding in report["findings"]
+        })
+
 
 if __name__ == "__main__":
     unittest.main()

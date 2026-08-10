@@ -116,8 +116,11 @@ An explicit source declaration wins. Without one, do not silently default to
 `preserve`: run the conservative existing-edit analyzer, cache
 `input-mode-evidence.json` against source size, mtime, and SHA-256, and select
 `polish_existing` only from strong evidence such as an embedded subtitle stream
-or high-confidence burned captions. Select `preserve` when no strong marker is
-found. A changed source invalidates the cached decision.
+or independently verified burned captions. Pixel-density heuristics may create a
+review candidate, but must never suppress captions or select polish mode by
+themselves because document, dashboard, and diagram text can look identical.
+Select `preserve` when no verified marker is found. A changed source invalidates
+the cached decision.
 
 - `preserve`: remove only setup footage, true silence, and exact repetition by
   default. Require confirmation for semantic deletion longer than 5 seconds or
@@ -164,7 +167,11 @@ or `none` only when the project explicitly asks for it.
 
 Require `caption-sync-report.json` to pass sampled lead/tail timing and overlap
 checks. Use 30–100 ms cut context and about 30 ms fades at new audio boundaries.
-Keep transcripts cached and subtitles last in the edit stack.
+Keep transcripts cached and subtitles last in the edit stack. For source-first
+or preservation work without a verified existing caption layer, `final_compose`
+must burn the current video-use `master.srt` after the HyperFrames picture. Its
+path and SHA-256 are part of the compose signature. A generated SRT sitting on
+disk is not proof that captions reached the Universal MP4.
 
 ## Author meaning before motion
 
@@ -289,8 +296,11 @@ declare a connector contract in the Storyboard: required relation count,
 from/to semantic nodes, and the intended attachment edge. Require one held
 full-frame snapshot per such event plus a per-event geometry review confirming
 the observed count, attached endpoints, optical alignment, and absence of
-clipped paths. A single line that reaches only one of several declared targets
-is incomplete even when HyperFrames reports zero overflow.
+clipped paths. Boolean pass claims are insufficient: require a hash-bound
+`browser_dom_geometry_v1` receipt with node boxes, path endpoints, attachment
+edges, canvas dimensions, and a maximum eight-pixel endpoint tolerance that the
+Director recomputes. A single line that reaches only one of several declared
+targets is incomplete even when HyperFrames reports zero overflow.
 
 Any effect that claims to focus, highlight, call out, or overlay a region of the
 source picture must also declare a `target_region_contract`. Bind target IDs,
@@ -302,6 +312,15 @@ Static or scene-bounded geometry that crosses a visible source-state change,
 an empty highlight region, an orphan line, or a target with too little useful
 content is blocking. Use a shorter scene-bounded window or explicit keyframed
 tracking instead of leaving a stale box on screen.
+The same geometry receipt must record each target's overlay box and useful
+content box; the Director recomputes intersection occupancy instead of trusting
+`minimum_observed_useful_content_ratio` or pass booleans.
+
+For every non-quiet overlay, compare the held midpoint with the same source
+state after the overlay exits. Store foreground color, panel color/alpha, and
+overlay box in `composite_contrast`; recompute the worst representative
+source-composited contrast and require at least 4.5:1. HyperFrames' internal DOM
+contrast check does not prove readability over the underlying video.
 
 Keep sample and full projects separate. The approved 60–90 second sample lives
 at the configured sample project; the final composition must be authored in a
@@ -408,7 +427,9 @@ adaptive coverage target; a richer personal profile may request 100% coverage
 without making that the global default. For every cue record the event id,
 asset, family, landing time, duration, volume, and measured post-gain level.
 Apply a same-file cooldown and a minimum unique-asset ratio, then verify a real
-mixed preview. Do not accept a nominal volume value as proof that a cue survives
+mixed preview. When at least two cues are selected, cap one SFX family's share
+(default 0.5) so transposed copies of the same motif cannot masquerade as
+variety. Do not accept a nominal volume value as proof that a cue survives
 continuous speech.
 
 Do not treat `has_existing_bgm: true` or an audio stream as proof of audible

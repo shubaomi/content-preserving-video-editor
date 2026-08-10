@@ -55,7 +55,8 @@ project evidence or a cached `input-mode-evidence.json`. When neither exists,
 run the conservative existing-edit analyzer. Bind the decision to source size,
 mtime, and SHA-256 so a replaced source cannot inherit an old mode. Strong
 existing-edit markers select `polish_existing`; absent strong evidence selects
-`preserve`.
+`preserve`. Pixel-density caption heuristics remain review candidates and never
+become strong evidence without independent verification.
 
 The canonical entry is `scripts/director.py`. It owns these ordered stages:
 
@@ -211,6 +212,10 @@ time ownership; aesthetic QA verifies image hashes, useful-content occupancy,
 target count, empty/orphan geometry, and source-state stability. Motion snapshot
 planning uses the geometry-active output window so an otherwise correct event
 cannot be reviewed only before or after its actual target exists.
+The aesthetic validator rejects boolean-only geometry reports. It recomputes
+connector attachment distances and target useful-content occupancy from
+hash-bound browser/DOM measurement receipts, and recomputes panel/text contrast
+over the actual source crop from midpoint/post-exit evidence.
 
 Use HyperFrames Core and Creative rules before HTML. Run HyperFrames check and
 multi-phase snapshots. Studio is the editable review surface. An actual
@@ -263,6 +268,10 @@ Director version changes, the compose signature changes and the intermediate is
 rebuilt. Two-pass normalization validates target parameters, first-pass data,
 post-normalization loudness/true peak/LRA, and exact source/output hashes. If
 manual finishing is disabled, that master proceeds directly to `delivery_qa`.
+For source-first/preserve projects with no verified existing caption layer, the
+current video-use `master.srt` is hash-bound into the compose signature and
+burned as the final picture filter. Explicit polish mode or independently
+verified existing captions preserve the established caption layer.
 If enabled, only the revalidated human return becomes the effective universal
 output. `delivery_qa` then blocks on the final aesthetic review, speech-dominant audio plan with
 provenance, topic/identity/expression-approved cover, and Douyin plus WeChat

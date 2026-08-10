@@ -37,6 +37,12 @@ exclamation marks remain when they carry spoken tone. `none` is an explicit
 project choice and removes all displayed punctuation without changing word
 timings or sentence segmentation.
 
+Allow `editing.caption_delivery: auto` or `none`; migration defaults to `auto`.
+`auto` requires output-timeline `video-use/master.srt` for source-first work
+without a verified existing caption layer and burns that exact hash-bound file
+during `final_compose`. `none` is the only valid opt-out and must be recorded as
+`disabled_by_project` in the composition plan.
+
 ## Audio
 
 Allow project-level `audio.sfx` and `audio.bgm` settings. Recommended defaults:
@@ -47,6 +53,7 @@ Allow project-level `audio.sfx` and `audio.bgm` settings. Recommended defaults:
 - `sfx.target_event_coverage: 1.0`; require a cue decision for every non-quiet
   event, with `intentionally_silent` reserved for evidenced exceptions;
 - `sfx.minimum_unique_asset_ratio: 0.8`,
+  `maximum_family_ratio: 0.5`,
   `minimum_cue_duration_seconds: 0.8`,
   `minimum_post_gain_mean_dbfs: -34`, and
   `maximum_post_gain_mean_dbfs: -18`;
@@ -83,7 +90,7 @@ selected non-quiet event is blocking unless that event has an evidenced
 
 Declare or document separate selectors for `layout_host`, `motion_wrapper`, and `editable_surface`. Studio edits belong to the layout host or editable surface. Animation timelines may transform only the motion wrapper.
 
-Set `editable_motion.profile` to `calm`, `balanced`, or `adaptive_dynamic`. The adaptive profile records advisory ranges (`screen_tutorial: [4,10]`, `polish_existing: [3,7]`) whose upper values are blocking ceilings, plus `maximum_visual_quiet_gap_seconds: 12`, `anchor_repeat_cooldown_seconds: 40`, and distinct semantic/layout/SFX checks. Audio SFX accepts `max_cues_per_minute`, `max_event_ratio`, `target_event_coverage`, `minimum_unique_asset_ratio`, `minimum_cue_duration_seconds`, and `same_file_cooldown_seconds`. Default cue coverage to every selected non-quiet event; reduce event count at the semantic planner instead of leaving approved motion silent. BGM remains independently optional.
+Set `editable_motion.profile` to `calm`, `balanced`, or `adaptive_dynamic`. The adaptive profile records advisory ranges (`screen_tutorial: [4,10]`, `polish_existing: [3,7]`) whose upper values are blocking ceilings, plus `maximum_visual_quiet_gap_seconds: 12`, `anchor_repeat_cooldown_seconds: 40`, and distinct semantic/layout/SFX checks. Audio SFX accepts `max_cues_per_minute`, `max_event_ratio`, `target_event_coverage`, `minimum_unique_asset_ratio`, `minimum_cue_duration_seconds`, `maximum_family_ratio`, and `same_file_cooldown_seconds`. Different filenames or pitch transpositions do not excuse a family that exceeds the configured share. Default cue coverage to every selected non-quiet event; reduce event count at the semantic planner instead of leaving approved motion silent. BGM remains independently optional.
 
 For route-, branch-, dependency-, and flow-based visuals, add
 `geometry_contract.connector_contract` with `required_connector_count`,
@@ -117,6 +124,18 @@ scene-bounded targets must remain visually stable within the configured delta;
 keyframed targets require review evidence that their keyframes cover each state
 change. Each `target_ids` value is also a real `data-hf-id` in the composition;
 the generated motion sidecar checks every declared target individually.
+
+The matching aesthetic review uses `browser_dom_geometry_v1` measurement
+receipts. Connector rows store canvas dimensions, node bounding boxes, path
+start/end points, declared attachment edges, clipping state, and endpoint
+tolerance (maximum 8 px). Target rows store the active selector, midpoint phase,
+target IDs, overlay boxes, and useful-content boxes. The Director recomputes
+attachment distances and useful-content intersection ratios.
+
+Each non-quiet event also supplies `composite_contrast` with hash-bound midpoint
+and post-exit/source evidence, overlay box, foreground RGB, panel RGB, and panel
+alpha. The Director simulates the panel over the real source crop and requires
+at least 4.5:1 representative contrast.
 
 ## Analysis backends
 

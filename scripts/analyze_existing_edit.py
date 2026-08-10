@@ -108,6 +108,7 @@ def analyze_visuals(samples: list[tuple[float, Path]], evidence_dir: Path) -> di
     positive = [row for row in caption_rows if row["score"] >= 0.22]
     positive_ratio = len(positive) / max(len(caption_rows), 1)
     hard_caption_confidence = float(np.clip(positive_ratio * 1.25, 0.0, 1.0))
+    caption_candidate = hard_caption_confidence >= 0.52
     top_caption = sorted(caption_rows, key=lambda item: item["score"], reverse=True)[:3]
     evidence_dir.mkdir(parents=True, exist_ok=True)
     for rank, row in enumerate(top_caption, 1):
@@ -130,10 +131,15 @@ def analyze_visuals(samples: list[tuple[float, Path]], evidence_dir: Path) -> di
             chapters.append({"timestamp": round(timestamp, 3), "delta": round(delta, 5)})
     return {
         "burned_caption": {
-            "detected": hard_caption_confidence >= 0.52,
+            # Pixel heuristics can find a candidate, but cannot distinguish
+            # dashboard/document text from burned subtitles reliably enough to
+            # suppress the required output-timeline caption layer.
+            "detected": False,
+            "candidate_detected": caption_candidate,
+            "verification_status": "heuristic_unverified",
             "confidence": round(hard_caption_confidence, 4),
             "positive_sample_ratio": round(positive_ratio, 4),
-            "decision": "do_not_add_caption_layer" if hard_caption_confidence >= 0.52 else "review_before_adding_captions",
+            "decision": "review_required_before_suppressing_captions",
             "evidence": top_caption,
         },
         "frame_change": {
@@ -265,7 +271,11 @@ def build_report(media: Path, probe: dict, visual: dict, audio: dict) -> dict:
     duration = float(probe.get("format", {}).get("duration") or 0)
     subtitles = subtitle_streams(probe)
     burned = visual["burned_caption"]
-    add_captions = not subtitles and not burned["detected"]
+    verified_burned = (
+        burned.get("detected") is True
+        and burned.get("verification_status") == "verified"
+    )
+    add_captions = not subtitles and not verified_burned
     budget = enhancement_budget(duration, visual)
     return {
         "schema_version": SCHEMA_VERSION,
@@ -274,7 +284,11 @@ def build_report(media: Path, probe: dict, visual: dict, audio: dict) -> dict:
             "subtitle_streams": subtitles,
             "burned_in": burned,
             "add_caption_layer": add_captions,
-            "decision_reason": "existing subtitle stream or burned captions detected" if not add_captions else "no existing caption signal detected; review evidence before generation",
+            "decision_reason": (
+                "verified subtitle stream or burned captions detected"
+                if not add_captions else
+                "no verified existing caption layer; output-timeline captions remain required"
+            ),
         },
         "audio": audio,
         "visual_analysis": visual["frame_change"],
