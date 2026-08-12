@@ -113,6 +113,39 @@ class VisualDynamicsQaTests(unittest.TestCase):
         self.assertIn("low_information_anchor", codes)
         self.assertIn("visual_family_repetition", codes)
 
+    def test_decision_complete_model_does_not_use_family_ratio_or_fixed_gap_as_quality(self) -> None:
+        brief_events = []
+        storyboard_events = []
+        for index, start in enumerate((4.0, 24.0, 44.0, 64.0)):
+            semantic_event = event(f"e{index}", f"证据关系{index}", start, "evidence-focus")
+            semantic_event.update({
+                "decision": "render",
+                "decision_rationale": "The source evidence benefits from the same proven mechanism.",
+            })
+            brief_events.append(semantic_event)
+            storyboard_events.append(deepcopy(semantic_event))
+        brief_payload = {
+            "schema_version": 3,
+            "opportunity_model": "decision_complete_v1",
+            "events": brief_events,
+        }
+        self.storyboard.write_text(json.dumps({
+            "composition": {"duration": 80}, "events": storyboard_events,
+        }, ensure_ascii=False), encoding="utf-8")
+        self.brief.write_text(json.dumps(brief_payload, ensure_ascii=False), encoding="utf-8")
+
+        report = build_report(
+            storyboard_path=self.storyboard,
+            semantic_brief_path=self.brief,
+            config=self.project["qa"]["visual_dynamics"],
+            production_contract_path=self.contract,
+        )
+
+        codes = {finding["code"] for finding in report["findings"]}
+        self.assertNotIn("visual_family_repetition", codes)
+        self.assertNotIn("unexplained_visual_stagnation", codes)
+        self.assertTrue(report["metrics"]["decision_complete_opportunity_model"])
+
     def test_unrelated_storyboard_cannot_supply_its_own_semantics(self) -> None:
         brief_events = [
             event("e1", "请求入口", 5, "ui-focus"),
@@ -185,6 +218,48 @@ class VisualDynamicsQaTests(unittest.TestCase):
         self.assertTrue(any("configuration" in error for error in errors))
         self.assertTrue(any("production_contract hash" in error for error in errors))
         self.assertTrue(any("integrity" in error for error in errors))
+
+    def test_mqe_report_binds_renderer_export_and_keyframe_receipts(self) -> None:
+        events = [
+            event("e1", "请求入口", 5, "ui-focus"),
+            event("e2", "三步处理", 20, "process-path"),
+            event("e3", "方案对比", 40, "comparison"),
+            event("e4", "最终结果", 60, "numeric-result"),
+        ]
+        self._write(events)
+        renderer_export = self.root / "renderer-export.json"
+        renderer_export.write_text(json.dumps({"events": [{"event_id": row["id"]} for row in events]}), encoding="utf-8")
+        receipts = {}
+        for row in events:
+            path = self.root / f"{row['id']}-receipt.json"
+            path.write_text(json.dumps({"event_id": row["id"]}), encoding="utf-8")
+            receipts[row["id"]] = path
+
+        report = build_report(
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            config=self.project["qa"]["visual_dynamics"],
+            production_contract_path=self.contract,
+            renderer_export_path=renderer_export,
+            keyframe_receipt_paths=receipts,
+        )
+
+        self.assertEqual(report["metrics"]["renderer_observed_event_count"], 4)
+        self.assertEqual(validate_report(
+            report, self.storyboard, self.brief,
+            config=self.project["qa"]["visual_dynamics"],
+            production_contract_path=self.contract,
+            renderer_export_path=renderer_export,
+            keyframe_receipt_paths=receipts,
+        ), [])
+        receipts["e1"].write_text(json.dumps({"event_id": "changed"}), encoding="utf-8")
+        errors = validate_report(
+            report, self.storyboard, self.brief,
+            config=self.project["qa"]["visual_dynamics"],
+            production_contract_path=self.contract,
+            renderer_export_path=renderer_export,
+            keyframe_receipt_paths=receipts,
+        )
+        self.assertTrue(any("keyframe receipt" in error and "stale" in error for error in errors), errors)
 
     def test_screen_demo_uses_a_tighter_content_aware_stagnation_ceiling(self) -> None:
         self.contract.write_text(json.dumps({

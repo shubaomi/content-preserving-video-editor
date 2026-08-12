@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import json
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,12 +14,19 @@ import yaml
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from otio_adapter import edl_to_otio, otio_to_internal, validate_roundtrip  # noqa: E402
+from otio_adapter import (  # noqa: E402
+    build_handoff_package, edl_to_otio, otio_to_internal, validate_roundtrip,
+)
 from director import Director  # noqa: E402
-from director_contracts import DirectorContractError  # noqa: E402
+from director_contracts import DirectorContractError, sha256_file  # noqa: E402
 
 
 class OtioAdapterTests(unittest.TestCase):
+    def test_non_finite_rate_is_rejected(self) -> None:
+        for rate in (math.nan, math.inf, -math.inf):
+            with self.subTest(rate=rate), self.assertRaisesRegex(ValueError, "rate"):
+                edl_to_otio({"ranges": []}, rate=rate)
+
     def test_roundtrip_preserves_sources_clips_gap_transition_and_metadata(self) -> None:
         edl = {
             "owner": "video-use",
@@ -60,6 +68,40 @@ class OtioAdapterTests(unittest.TestCase):
         clip["source_range"]["duration"]["value"] = 60.0
         restored = otio_to_internal(timeline)
         self.assertIn("ranges changed", validate_roundtrip(original, restored))
+
+    def test_typed_handoff_reports_unsupported_effects_and_requires_human_action(self) -> None:
+        original = {"sources": {"cam": "a.mp4"}, "ranges": [
+            {"id": "c1", "source": "cam", "start": 0.0, "end": 1.0,
+             "timeline_start": 0.0, "effects": [{"type": "hyperframes_webgl_depth"}]},
+        ], "gaps": [], "transitions": [], "metadata": {}}
+
+        package = build_handoff_package(
+            original, backend="other_nle", authorized_capabilities={"clips", "gaps", "transitions"},
+        )
+
+        self.assertEqual(package["status"], "action_required")
+        self.assertEqual(package["authority"], "video-use-edl")
+        self.assertFalse(package["headless_render_claimed"])
+        self.assertIn("hyperframes_webgl_depth", package["loss_report"]["unsupported_effects"])
+        self.assertTrue(package["returned_master_requires_full_revalidation"])
+
+    def test_typed_handoff_hash_binds_authoritative_edl_and_otio_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            edl_path = root / "edl.json"
+            edl = {"sources": {"cam": "a.mp4"}, "ranges": [
+                {"id": "c1", "source": "cam", "start": 0.0, "end": 1.0,
+                 "timeline_start": 0.0}
+            ], "gaps": [], "transitions": [], "metadata": {}}
+            edl_path.write_text(json.dumps(edl), encoding="utf-8")
+
+            package = build_handoff_package(
+                edl, backend="opencut", authoritative_edl_path=edl_path,
+            )
+
+            self.assertEqual(package["authoritative_edl"]["sha256"], sha256_file(edl_path))
+            self.assertEqual(len(package["timeline_sha256"]), 64)
+            self.assertEqual(package["status"], "action_required")
 
     def test_director_projects_valid_edl_before_later_video_use_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

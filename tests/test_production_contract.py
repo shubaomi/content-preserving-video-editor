@@ -105,6 +105,26 @@ class ProductionContractTests(unittest.TestCase):
 
         self.assertTrue(any("deterministic" in error or "integrity" in error for error in errors))
 
+    def test_contract_binds_explicit_third_party_identity_policy(self) -> None:
+        self.project["identity"] = {"mode": "third_party"}
+
+        contract = build_contract(
+            project=self.project, source_path=self.source, transcript_path=self.transcript,
+            edl_path=self.edl, semantic_brief_path=self.brief, input_mode="preserve",
+        )
+
+        self.assertEqual(contract["identity"], {
+            "mode": "third_party",
+            "hongrun_assets_allowed": False,
+            "personal_intro_outro_allowed": False,
+            "first_person_brand_expression_allowed": False,
+        })
+        self.assertEqual(validate_contract(
+            contract, project=self.project, source_path=self.source,
+            transcript_path=self.transcript, edl_path=self.edl,
+            semantic_brief_path=self.brief, input_mode="preserve",
+        ), [])
+
 
 if __name__ == "__main__":
     unittest.main()

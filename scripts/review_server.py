@@ -40,6 +40,7 @@ class ReviewServerConfig:
     auth_token: str
     csrf_token: str
     max_body_bytes: int = 64 * 1024
+    allow_file_origin: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "root", self.root.resolve())
@@ -79,7 +80,11 @@ def _host_name(host_header: str) -> str:
     return parsed.netloc.lower()
 
 
-def _origin_name(origin: str) -> str:
+def _origin_name(origin: str, *, allow_file_origin: bool = False) -> str:
+    if origin == "null":
+        if allow_file_origin:
+            return "null"
+        raise RequestRejected("Origin null requires explicit file-origin opt in", status=403)
     parsed = urlsplit(origin)
     if parsed.scheme != "http" or not parsed.hostname or not _loopback_name(parsed.hostname):
         raise RequestRejected("Origin must be an http localhost/loopback origin", status=403)
@@ -98,14 +103,34 @@ def validate_request(
     decoded_path = unquote(parsed_path.path)
     if parsed_path.query or parsed_path.fragment or "\\" in decoded_path or "\x00" in decoded_path:
         raise RequestRejected("request path is not allowlisted", status=404)
-    allowed = READ_PATHS if method == "GET" else WRITE_PATHS if method == "POST" else set()
+    allowed = (
+        READ_PATHS if method == "GET" else
+        WRITE_PATHS if method in {"POST", "OPTIONS"} else set()
+    )
     if decoded_path not in allowed:
         raise RequestRejected("request path is not allowlisted", status=404)
     normalized = _headers(headers)
     host = _host_name(normalized.get("host", ""))
-    origin = _origin_name(normalized.get("origin", ""))
-    if origin != host:
+    origin = _origin_name(
+        normalized.get("origin", ""), allow_file_origin=config.allow_file_origin,
+    )
+    if origin != "null" and origin != host:
         raise RequestRejected("Origin and Host must match", status=403)
+    if method == "OPTIONS":
+        if origin != "null":
+            raise RequestRejected("cross-origin preflight is not enabled", status=403)
+        if normalized.get("access-control-request-method", "").upper() != "POST":
+            raise RequestRejected("preflight may request POST only", status=403)
+        requested = {
+            value.strip().lower()
+            for value in normalized.get("access-control-request-headers", "").split(",")
+            if value.strip()
+        }
+        if not requested.issubset({"authorization", "x-csrf-token", "content-type"}):
+            raise RequestRejected("preflight requests unsupported headers", status=403)
+        if body:
+            raise RequestRejected("OPTIONS request body is not accepted")
+        return
     expected_auth = f"Bearer {config.auth_token}"
     if not hmac.compare_digest(normalized.get("authorization", ""), expected_auth):
         raise RequestRejected("review server token is invalid", status=401)
@@ -274,13 +299,23 @@ def propose_pending_change(
     return result
 
 
-def _json_response(handler: BaseHTTPRequestHandler, status: int, value: Any) -> None:
+def _cors_headers(handler: BaseHTTPRequestHandler, config: ReviewServerConfig) -> None:
+    if config.allow_file_origin and handler.headers.get("Origin") == "null":
+        handler.send_header("Access-Control-Allow-Origin", "null")
+        handler.send_header("Vary", "Origin")
+
+
+def _json_response(
+    handler: BaseHTTPRequestHandler, status: int, value: Any,
+    config: ReviewServerConfig,
+) -> None:
     body = json.dumps(value, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("X-Content-Type-Options", "nosniff")
+    _cors_headers(handler, config)
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -308,7 +343,18 @@ def create_review_server(
                     config, method=self.command, path=self.path,
                     headers=self.headers, body=body,
                 )
-                if self.command == "POST":
+                if self.command == "OPTIONS":
+                    self.send_response(204)
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+                    self.send_header(
+                        "Access-Control-Allow-Headers",
+                        "Authorization, X-CSRF-Token, Content-Type",
+                    )
+                    self.send_header("Access-Control-Max-Age", "300")
+                    _cors_headers(self, config)
+                    self.end_headers()
+                elif self.command == "POST":
                     try:
                         payload = json.loads(body.decode("utf-8"))
                     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -318,19 +364,22 @@ def create_review_server(
                         if isinstance(payload, dict) and "action" in payload
                         else propose_pending_change(config, payload)
                     )
-                    _json_response(self, 201, result)
+                    _json_response(self, 201, result, config)
                 else:
                     artifacts = [
                         {"path": str(path.relative_to(config.root)), "sha256": sha256_file(path)}
                         for path in sorted(config.root.rglob("*.json"))
                         if path.is_file() and not path.is_relative_to(config.proposal_dir)
                     ]
-                    _json_response(self, 200, {"schema_version": 1, "artifacts": artifacts})
+                    _json_response(
+                        self, 200, {"schema_version": 1, "artifacts": artifacts}, config,
+                    )
             except RequestRejected as error:
-                _json_response(self, error.status, {"error": str(error)})
+                _json_response(self, error.status, {"error": str(error)}, config)
 
         do_GET = _run
         do_POST = _run
+        do_OPTIONS = _run
 
         def log_message(self, format: str, *args: Any) -> None:
             return

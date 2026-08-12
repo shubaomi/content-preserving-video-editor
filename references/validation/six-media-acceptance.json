@@ -14,7 +14,7 @@
   "implementation_dependencies": {
     "scripts/six_media_acceptance.py": "d7aeeb555e18ec9ef5f6999eeb15c931d4e4934482d1ca4f5842617115ca3a12",
     "scripts/technical_qa.py": "1c6f048ac83ae9e9750bf92e66a78139d18a19cebe58da6d0a0917291eb9bc5b",
-    "scripts/validate_platform_export.py": "3067e6c6fa4e71aa36abd8767ab7ba8acfa693cb43a52fe6480b91439111b85c"
+    "scripts/validate_platform_export.py": "3ea07b0fb4bacf92121bd0b0f6932af2d68a291954b7e0484b3d12f32c7aa73d"
   },
   "scenarios": [
     {

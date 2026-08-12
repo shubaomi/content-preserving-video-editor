@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite_version": "2026.08-p0p1p2",
-  "generated_at": "2026-08-10T05:43:23.021763+00:00",
+  "generated_at": "2026-08-12T07:02:46.831002+00:00",
   "status": "pass",
   "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
   "source": {
@@ -14,34 +14,46 @@
   },
   "media_manifest": {
     "path": "references/validation/six-media-acceptance.json",
-    "sha256": "a0ea3d3d5abd312d0c3de957c13f12eb51eb30baa1c7a5486c9b6d590ba0bc31",
+    "sha256": "0429f1b48cd6dfac0b3a51df600719454cef0347fb416902d53397a377ca84f5",
     "errors": []
   },
   "bindings": {
-    "director_version": "2.3.0",
-    "project_schema_version": 9,
+    "director_version": "2.6.0",
+    "project_schema_version": 10,
     "implementation_sha256": {
-      "scripts/current_golden_regression.py": "845a2e76bddc41b4a8dc8fdf7b4d57d66ab90cfcda88aafdeebe23d2ae3377c9",
-      "scripts/director.py": "c9183e22fd52b12b6b61408eb3bb696857e6d39e626c423b7e065addb9b38a90",
-      "scripts/project_config.py": "d7b005a5e84330015128eb58316c1602cc8094fd0e88bc1612aa92e6c55dd968",
-      "scripts/fixture_acceptance.py": "b4a16c49d2b1f0349979114ac88e398548ddf016e1b6ad4d3bc24022e5537236",
-      "scripts/asr_router.py": "2c253511ce375d2ba7e02342d41a55f276e03f554c915eb3e9d7b3b4b94bfb83",
+      "scripts/current_golden_regression.py": "f4792699876268449c49e820040fb4e108df26fa0492b69630737f501fb67405",
+      "scripts/director.py": "4b06c6ab449410dc232f6ea2e04793e0e0d598460592e31e330b18892597d31c",
+      "scripts/project_config.py": "a64d5d066b8688afed78febd304ab3d97998106e43af641b685e92eb195de9f8",
+      "scripts/delivery_readiness.py": "4a409e9deb1abe2663dfb9e6145fc3334649197266bf072cd7c395349ab7d4ac",
+      "scripts/capability_registry.py": "4c680542c2bde88cf033cfc680df8b5f3cfc51e58f55affa2c1f921fffc377a1",
+      "scripts/production_contract.py": "7ec71315a6a9e87bc2f74cfa015de4e3394a3143a072995efd7f23433b422195",
+      "scripts/completion_audit.py": "ae8a29eb6e738d6f2c616b2869eb087155e44ed2c5e389025e409b862550127b",
+      "scripts/fixture_acceptance.py": "de36fdd4b468d739c7ef0be06d945f8ca1ca69de71075aca73d49e2ecbe532f5",
+      "scripts/asr_router.py": "f3cb91f23ca83f6c6cf92f1adbcfb07410ebd4da46701a1a16cb8e850d367917",
       "scripts/semantic_confidence.py": "12f0126b6fa44e9821e930a1aa46f5c7644c5d36ec5a8761daa14657a1b49027",
-      "scripts/preview_render_parity.py": "c7927eee89e0adb289bd07a116059d8f41b8815bab967f3bdd76e89296ca78f2",
-      "scripts/audio_qa.py": "1ef32fda6fdb745b2936c09929e3dc5f479a5d40e2046ac8c147df77e9a6b0fd",
+      "scripts/preview_render_parity.py": "c4d3ee482f7d6de84f3d19a28398aea76eebc1b0341987d66c9fd4d873cf9cd2",
+      "scripts/audio_qa.py": "9d962504c3abde0afb687ce9d541b1e7e8823edfea441cff8c5ce615320c29c3",
       "scripts/ip_production.py": "2591753b2ab6fabf511639a2f570b501810bf1ad25c6dcd97038805f70f86e54",
       "scripts/cover_quality.py": "d2e411dacd7fb13659a3d5e01d43ff3aaffff53a2a0ad48d0cec6a3b7e36dd7b",
       "scripts/event_cache.py": "9d8d7dc7d77d2e8d89692f3b288182bc8553496055a6360552852d1b0e31528f",
-      "scripts/event_render_pipeline.py": "95f5c168286192595387762788257ee7d7064d0ec1670ad837618bcace0f6b0a",
-      "scripts/review_server.py": "4d9013e708ada6e25c9d5b619238de9552f817fa1c78b2718203fbb3a2f92d2b",
+      "scripts/event_render_pipeline.py": "19924c32ec46b04eb423b6a5f8f2380be423a0ffd8c50ab5b111e1674fc3746d",
+      "scripts/review_server.py": "ecff2dc0625ad775e6c8e44d17eb997bf988737d27beca534f9148e00cb6ea4d",
+      "scripts/review_dashboard.py": "aa0dc387416e8347832c083e89d20e325e470b2cc08f2c5a73f5a93b56dd4323",
+      "scripts/creative_review.py": "54100477d5cbf786b6cde04fe79349c3610b155140c0b68b38d25da5abcfe0dd",
       "scripts/cover_reference_pack.py": "113d239fca4ce1408e4c6bb55d67d35f2358f178fb271455507d6d91a92a4dde",
       "scripts/preference_learning.py": "41d37cd11346f8963e0af04ed251e3318cee1ce7a4a6bcc801e3abb66255f8e6",
       "scripts/portable_audit_bundle.py": "b8be8ba2e4d550369273b056d5e149ffb0d67b80fc10a333a48f93b9be845435",
       "scripts/release_delivery_pack.py": "dfb558275cbfe50415faba93e1a9260f3ce617161ebec42da54e5f8767844fa6",
       "scripts/feedback_loop.py": "f91f19b815f414ce9d01e8e4bc924c8ed2284b4368def180bf82e47834c5a6db",
-      "scripts/representative_short_media.py": "b88769ed4aa32cb435b112b0b1771a4cab45fd9c28c6461532ab2517ab911309"
+      "scripts/representative_short_media.py": "b88769ed4aa32cb435b112b0b1771a4cab45fd9c28c6461532ab2517ab911309",
+      "scripts/motion_contracts.py": "c7440a490651365c1ae0f56d807bfc71620acd2b516e007b3179b029737d43dd",
+      "scripts/motion_quality_engine.py": "b74d70d0c2afe9bb7cd3d6b4ca53cf472a27d6c0ee8bb9d8538ae558346b4631",
+      "scripts/keyframe_receipt.py": "b01547467d6cb178867f8f918b5d4d8b740fada29cd9fdec9e63b798aad6c87f",
+      "scripts/renderer_project_manifest.py": "6b69c8905f9a0309a4fd6ef77fc2d35161de2de4da4f6c92195f42d365b8ea7d",
+      "scripts/build_motion_snapshot_plan.py": "14c7b3e627b98e8d99ac64d7af17c3c20323f45bceba8061112b3247d8fe9e3a",
+      "references/motion-recipes-v1.json": "e0cc533c44db17824aca3c889154659e91d8729126b6470815b3fde381e45b44"
     },
-    "fixture_suite_sha256": "1581d0875a052cde4cbca29270f79589353c3137aa5a9844c09ff113059051c7"
+    "fixture_suite_sha256": "1eacb01975e6f38646dd496855cb09f668f8f4a0b0727e8fa7661257499ada6e"
   },
   "cases": [
     {
@@ -537,5 +549,5 @@
       }
     }
   ],
-  "report_integrity_sha256": "f47dd2f265e1bae398e234c8f0ab4a8a892d12ec625f05d4ea14702173c88474"
+  "report_integrity_sha256": "799a2fe18d9ba1dcef1d9771e0562c4325258fc24b5899e27619b59c5ab42ba1"
 }

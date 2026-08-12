@@ -40,6 +40,17 @@ class DirectorCommandTests(unittest.TestCase):
             with self.subTest(command=expected):
                 self.assertEqual(command_parser.parse_args(argv).command, expected)
 
+    def test_motion_quality_approval_flags_are_explicit(self) -> None:
+        args = parser().parse_args([
+            "approve-sample", "--project", "project.yaml", "--approved-by", "HongRun",
+            "--publish-willingness", "yes", "--preference", "candidate",
+            "--review-reason", "The candidate clarifies the source without distraction",
+        ])
+        self.assertEqual(args.approved_by, "HongRun")
+        self.assertEqual(args.publish_willingness, "yes")
+        self.assertEqual(args.preference, "candidate")
+        self.assertIn("clarifies", args.review_reason)
+
     def test_next_action_summary_surfaces_only_the_current_handoff(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

@@ -31,6 +31,12 @@ class CurrentGoldenRegressionTests(unittest.TestCase):
             self.assertTrue(report["bindings"]["director_version"])
             self.assertGreaterEqual(report["bindings"]["project_schema_version"], 8)
             self.assertTrue(report["bindings"]["implementation_sha256"])
+            self.assertTrue({
+                "scripts/delivery_readiness.py",
+                "scripts/capability_registry.py",
+                "scripts/production_contract.py",
+                "scripts/completion_audit.py",
+            } <= set(report["bindings"]["implementation_sha256"]))
 
     def test_tamper_missing_and_expired_reports_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

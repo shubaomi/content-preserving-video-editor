@@ -6,11 +6,13 @@ import hashlib
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from director_contracts import (
     LOW_INFORMATION_ANCHORS,
+    is_decision_complete_brief,
     normalized_anchor,
+    semantic_opportunity_decision,
     sha256_file,
     storyboard_semantic_event_id,
     validate_storyboard_semantic_binding,
@@ -34,6 +36,8 @@ def _finding(code: str, message: str, *, event_id: str | None = None) -> dict[st
 def build_report(
     *, storyboard_path: Path, semantic_brief_path: Path, config: dict[str, Any],
     production_contract_path: Path | None = None,
+    renderer_export_path: Path | None = None,
+    keyframe_receipt_paths: Mapping[str, Path] | None = None,
 ) -> dict[str, Any]:
     storyboard_path = storyboard_path.resolve()
     semantic_brief_path = semantic_brief_path.resolve()
@@ -47,14 +51,48 @@ def build_report(
         (production_contract.get("delivery_promise") or {}).get("type") or "unknown"
     )
     events = [row for row in (storyboard.get("events") or []) if isinstance(row, dict)]
+    renderer_observed_event_count = 0
     brief_events = {
         str(row.get("id") or "").strip(): row
         for row in (brief.get("events") or []) if isinstance(row, dict)
     }
+    decision_complete = is_decision_complete_brief(brief)
     findings = [
         _finding("semantic_binding_mismatch", error)
         for error in validate_storyboard_semantic_binding(storyboard, brief)
     ]
+    if renderer_export_path is not None:
+        renderer_export_path = renderer_export_path.resolve()
+        if not renderer_export_path.is_file():
+            findings.append(_finding(
+                "missing_renderer_export", "Renderer-produced DOM/visible-text export is missing.",
+            ))
+        else:
+            renderer_export = json.loads(renderer_export_path.read_text(encoding="utf-8"))
+            renderer_ids = [
+                str(row.get("event_id") or "") for row in renderer_export.get("events") or []
+                if isinstance(row, dict)
+            ]
+            expected_ids = [
+                str(row.get("semantic_event_id") or row.get("id") or "") for row in events
+                if str(row.get("treatment") or "") != "quiet_source"
+            ]
+            renderer_observed_event_count = len(renderer_ids)
+            if renderer_ids != expected_ids:
+                findings.append(_finding(
+                    "renderer_event_set_mismatch",
+                    "Renderer-observed event order differs from the Storyboard render events.",
+                ))
+    if keyframe_receipt_paths is not None:
+        expected_ids = {
+            str(row.get("semantic_event_id") or row.get("id") or "") for row in events
+            if str(row.get("treatment") or "") != "quiet_source"
+        }
+        if set(keyframe_receipt_paths) != expected_ids:
+            findings.append(_finding(
+                "keyframe_receipt_set_mismatch",
+                "Keyframe receipt event set differs from the Storyboard render events.",
+            ))
     low_information = {normalized_anchor(value) for value in LOW_INFORMATION_ANCHORS}
     families: list[str] = []
     anchors: Counter[str] = Counter()
@@ -64,7 +102,9 @@ def build_report(
         event_id = str(event.get("id") or f"event-{index}")
         semantic = brief_events.get(storyboard_semantic_event_id(event)) or {}
         treatment = str(event.get("treatment") or "unknown")
-        quiet = semantic.get("treatment") == "quiet_source"
+        quiet = semantic_opportunity_decision(
+            semantic, decision_complete=decision_complete,
+        ) != "render"
         try:
             start = float(event.get(
                 "output_start", event.get("start", semantic.get("output_start", 0.0)),
@@ -149,7 +189,7 @@ def build_report(
                     event_id=event_id,
                 ))
 
-    if len(families) >= 4:
+    if not decision_complete and len(families) >= 4:
         family, count = Counter(families).most_common(1)[0]
         ratio = count / len(families)
         if ratio > float(config.get("maximum_family_ratio", 0.65)):
@@ -172,20 +212,21 @@ def build_report(
         "talking_head": 24.0,
     }.get(promise_type, configured_max_gap)
     max_gap = min(configured_max_gap, promise_gap_ceiling)
-    ordered = sorted(intervals)
-    cursor = 0.0
-    for start, end, quiet in ordered:
-        if start - cursor > max_gap:
+    if not decision_complete:
+        ordered = sorted(intervals)
+        cursor = 0.0
+        for start, end, quiet in ordered:
+            if start - cursor > max_gap:
+                findings.append(_finding(
+                    "unexplained_visual_stagnation",
+                    f"No event or evidenced quiet-source interval explains {start - cursor:.2f}s of the timeline.",
+                ))
+            cursor = max(cursor, end)
+        if duration > 0 and duration - cursor > max_gap:
             findings.append(_finding(
                 "unexplained_visual_stagnation",
-                f"No event or evidenced quiet-source interval explains {start - cursor:.2f}s of the timeline.",
+                f"The final {duration - cursor:.2f}s lacks an event or evidenced quiet-source interval.",
             ))
-        cursor = max(cursor, end)
-    if duration > 0 and duration - cursor > max_gap:
-        findings.append(_finding(
-            "unexplained_visual_stagnation",
-            f"The final {duration - cursor:.2f}s lacks an event or evidenced quiet-source interval.",
-        ))
 
     implementation = Path(__file__).resolve()
     inputs = {
@@ -200,6 +241,19 @@ def build_report(
             "path": str(production_contract_path),
             "sha256": sha256_file(production_contract_path),
         }
+    if renderer_export_path is not None:
+        inputs["renderer_export"] = {
+            "path": str(renderer_export_path),
+            "sha256": sha256_file(renderer_export_path) if renderer_export_path.is_file() else None,
+        }
+    if keyframe_receipt_paths is not None:
+        inputs["keyframe_receipts"] = {
+            event_id: {
+                "path": str(Path(path).resolve()),
+                "sha256": sha256_file(Path(path).resolve()) if Path(path).is_file() else None,
+            }
+            for event_id, path in sorted(keyframe_receipt_paths.items())
+        }
     report = {
         "schema_version": 1,
         "status": "failed" if findings else "pass",
@@ -212,8 +266,11 @@ def build_report(
             "nonquiet_event_count": len(families),
             "distinct_visual_families": len(set(families)),
             "event_count_is_not_a_quality_score": True,
+            "decision_complete_opportunity_model": decision_complete,
+            "fixed_cadence_or_family_quota_gate": not decision_complete,
             "delivery_promise_type": promise_type,
             "effective_maximum_unexplained_gap_seconds": max_gap,
+            "renderer_observed_event_count": renderer_observed_event_count,
         },
         "delegated_existing_gates": [
             "geometry", "overflow", "caption_occlusion", "face_cursor_ui_safety",
@@ -229,6 +286,8 @@ def validate_report(
     report: dict[str, Any], storyboard_path: Path, semantic_brief_path: Path,
     *, config: dict[str, Any] | None = None,
     production_contract_path: Path | None = None,
+    renderer_export_path: Path | None = None,
+    keyframe_receipt_paths: Mapping[str, Path] | None = None,
 ) -> list[str]:
     errors: list[str] = []
     if report.get("schema_version") != 1:
@@ -253,6 +312,28 @@ def validate_report(
             sha256_file(path) if path.is_file() else None
         ):
             errors.append("visual dynamics production_contract hash is stale")
+    if renderer_export_path is not None:
+        path = renderer_export_path.resolve()
+        row = (report.get("inputs") or {}).get("renderer_export") or {}
+        if row.get("path") != str(path):
+            errors.append("visual dynamics renderer export path is stale")
+        if not path.is_file() or row.get("sha256") != (
+            sha256_file(path) if path.is_file() else None
+        ):
+            errors.append("visual dynamics renderer export hash is stale")
+    if keyframe_receipt_paths is not None:
+        recorded = (report.get("inputs") or {}).get("keyframe_receipts") or {}
+        if set(recorded) != set(keyframe_receipt_paths):
+            errors.append("visual dynamics keyframe receipt set is stale")
+        for event_id, path_value in keyframe_receipt_paths.items():
+            path = Path(path_value).resolve()
+            row = recorded.get(event_id) or {}
+            if row.get("path") != str(path):
+                errors.append(f"visual dynamics keyframe receipt path is stale: {event_id}")
+            if not path.is_file() or row.get("sha256") != (
+                sha256_file(path) if path.is_file() else None
+            ):
+                errors.append(f"visual dynamics keyframe receipt hash is stale: {event_id}")
     if config is not None and (
         report.get("config") != config or report.get("config_sha256") != _stable_hash(config)
     ):

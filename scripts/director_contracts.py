@@ -39,6 +39,16 @@ STORYBOARD_SEMANTIC_FIELDS = (
     "viewer_takeaway",
 )
 
+DECISION_COMPLETE_OPPORTUNITY_MODEL = "decision_complete_v1"
+SEMANTIC_OPPORTUNITY_DECISIONS = (
+    "render",
+    "annotation",
+    "caption_only",
+    "reuse_source",
+    "quiet_source",
+    "action_required",
+)
+
 STORYBOARD_SEMANTIC_TIME_FIELDS = (
     "source_start",
     "source_end",
@@ -48,10 +58,12 @@ STORYBOARD_SEMANTIC_TIME_FIELDS = (
 
 NON_VISIBLE_EVENT_STRING_PATHS = {
     "id", "semantic_event_id", "treatment", "anchor", "transcript_quote",
+    "decision", "decision_rationale",
     "transcript_word_ids.[]", "viewer_takeaway", "relevance_rationale",
     "viewer_job", "visual_mechanism", "target_frame_evidence.[]",
     "target_frame_evidence.[].path", "target_frame_evidence.[].sha256",
     "source_activity_evidence.[]", "form", "placement", "size", "background",
+    "motion_design_contract_id", "recipe_id", "choreography_fingerprint_sha256",
     "asset", "visual_structure.dom_structure", "visual_structure.information_hierarchy",
     "visual_structure.layout_archetype", "visual_structure.animation_choreography",
     "visual_structure.use_case", "motion.entrance", "motion.reveal", "motion.hold",
@@ -71,6 +83,7 @@ NON_VISIBLE_EVENT_STRING_PATHS = {
     "geometry_contract.target_region_contract.source_state_evidence.[].phase",
     "geometry_contract.target_region_contract.source_state_evidence.[].path",
     "geometry_contract.target_region_contract.source_state_evidence.[].sha256",
+    "target_binding_ids.[]",
 }
 MAX_TARGET_FRAME_DISTANCE_SECONDS = 15.0
 
@@ -291,6 +304,37 @@ def visual_signature(event: dict[str, Any]) -> tuple[str, ...]:
     return tuple(str(visual.get(field, "")).strip() for field in REQUIRED_VISUAL_FIELDS)
 
 
+def is_decision_complete_brief(brief: dict[str, Any]) -> bool:
+    try:
+        schema_version = int(brief.get("schema_version", 0))
+    except (TypeError, ValueError):
+        return False
+    return (
+        schema_version >= 3
+        and brief.get("opportunity_model") == DECISION_COMPLETE_OPPORTUNITY_MODEL
+    )
+
+
+def semantic_opportunity_decision(
+    event: dict[str, Any], *, decision_complete: bool,
+) -> str:
+    if decision_complete:
+        return str(event.get("decision") or "").strip()
+    return "quiet_source" if event.get("treatment") == "quiet_source" else "render"
+
+
+def selected_semantic_event_ids(brief: dict[str, Any]) -> list[str]:
+    decision_complete = is_decision_complete_brief(brief)
+    return [
+        str(event.get("id") or "").strip()
+        for event in (brief.get("events") or [])
+        if isinstance(event, dict)
+        and semantic_opportunity_decision(
+            event, decision_complete=decision_complete,
+        ) == "render"
+    ]
+
+
 def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bool = False) -> list[str]:
     errors: list[str] = []
     try:
@@ -299,6 +343,13 @@ def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bo
         schema_version = 0
     if schema_version < 1:
         errors.append("semantic brief requires schema_version >= 1")
+    decision_complete = schema_version >= 3
+    if decision_complete and (
+        brief.get("opportunity_model") != DECISION_COMPLETE_OPPORTUNITY_MODEL
+    ):
+        errors.append(
+            "schema 3 semantic brief requires opportunity_model=decision_complete_v1"
+        )
     generated_by = str(brief.get("generated_by", "")).lower()
     if "llm" not in generated_by:
         errors.append("semantic brief must be authored by an LLM reading the raw transcript and evidence frames")
@@ -316,15 +367,80 @@ def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bo
             opening_hook = {}
         if opening_hook.get("status") not in {"selected", "not_selected"} or not opening_hook.get("evidence"):
             errors.append("schema 2 semantic brief requires an evidence-backed opening_hook decision")
-    events = brief.get("events") or []
-    if not events:
+    events_value = brief.get("events") or []
+    if not isinstance(events_value, list) or not events_value:
         errors.append("semantic brief requires events")
         return errors
+    events = events_value
     anchors: dict[str, float] = {}
     signatures: set[tuple[str, ...]] = set()
     visual_events = 0
+    opportunity_ids: list[str] = []
+    previous_source_start: float | None = None
+    previous_output_start: float | None = None
     for index, event in enumerate(events):
         prefix = f"events[{index}]"
+        if not isinstance(event, dict):
+            errors.append(f"{prefix} must be a mapping")
+            continue
+        opportunity_id = str(event.get("id") or "").strip()
+        opportunity_ids.append(opportunity_id)
+        if decision_complete:
+            if not opportunity_id:
+                errors.append(f"{prefix} requires a non-empty opportunity id")
+            decision = semantic_opportunity_decision(event, decision_complete=True)
+            if decision not in SEMANTIC_OPPORTUNITY_DECISIONS:
+                errors.append(f"{prefix} decision must be one approved opportunity decision")
+            if not str(event.get("decision_rationale") or "").strip():
+                errors.append(f"{prefix} requires decision_rationale")
+            for start_field, end_field in (
+                ("source_start", "source_end"), ("output_start", "output_end"),
+            ):
+                start = _finite_number(event.get(start_field))
+                end = _finite_number(event.get(end_field))
+                if start is None or end is None or start < 0 or end <= start:
+                    errors.append(
+                        f"{prefix} requires a valid {start_field}/{end_field} opportunity window"
+                    )
+            source_start = _finite_number(event.get("source_start"))
+            output_start = _finite_number(event.get("output_start"))
+            if (
+                source_start is not None and previous_source_start is not None
+                and source_start < previous_source_start
+            ) or (
+                output_start is not None and previous_output_start is not None
+                and output_start < previous_output_start
+            ):
+                errors.append(f"{prefix} violates approved semantic opportunity order")
+            if source_start is not None:
+                previous_source_start = source_start
+            if output_start is not None:
+                previous_output_start = output_start
+            if not event.get("transcript_word_ids"):
+                errors.append(f"{prefix} requires transcript_word_ids")
+            if not str(event.get("viewer_takeaway") or "").strip():
+                errors.append(f"{prefix} requires viewer_takeaway")
+            if not event.get("target_frame_evidence"):
+                errors.append(f"{prefix} requires target_frame_evidence")
+            if decision == "quiet_source":
+                if event.get("treatment") != "quiet_source":
+                    errors.append(f"{prefix} quiet_source decision requires matching treatment")
+                if not event.get("source_activity_evidence"):
+                    errors.append(f"{prefix} quiet_source requires source_activity_evidence")
+            elif event.get("treatment") == "quiet_source":
+                errors.append(f"{prefix} quiet_source treatment requires a quiet_source decision")
+            if decision != "render":
+                continue
+            approved_copy = event.get("approved_visible_copy")
+            if (
+                not isinstance(approved_copy, list)
+                or not approved_copy
+                or any(not isinstance(value, str) or not value.strip() for value in approved_copy)
+                or len(set(_visible_copy_strings(approved_copy))) != len(approved_copy)
+            ):
+                errors.append(
+                    f"{prefix} render decision requires approved_visible_copy as a unique string list"
+                )
         if event.get("treatment") == "quiet_source":
             evidence = event.get("source_activity_evidence") or []
             if not evidence:
@@ -373,10 +489,15 @@ def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bo
         signature = visual_signature(event)
         if any(not value for value in signature):
             errors.append(f"{prefix} visual_structure requires all five distinctness fields")
-        elif signature in signatures:
+        elif not decision_complete and signature in signatures:
             errors.append(f"{prefix} duplicates a previous visual structure contract")
         signatures.add(signature)
-    if require_sample_variety and (visual_events < 4 or len(signatures) < 4):
+    if decision_complete:
+        if any(not value for value in opportunity_ids):
+            pass
+        elif len(set(opportunity_ids)) != len(opportunity_ids):
+            errors.append("semantic opportunity IDs must be unique and preserve source ordering")
+    elif require_sample_variety and (visual_events < 4 or len(signatures) < 4):
         errors.append("sample requires at least four genuinely different visual structures")
     return errors
 
@@ -769,7 +890,7 @@ def _event_visible_text_fields(
 def validate_storyboard_semantic_binding(
     storyboard: dict[str, Any], brief: dict[str, Any],
 ) -> list[str]:
-    """Require every storyboard event to be an exact copy of approved semantics."""
+    """Require each render event to be an ordered subset of approved opportunities."""
     errors: list[str] = []
     storyboard_rows = storyboard.get("events") or []
     brief_rows = brief.get("events") or []
@@ -797,6 +918,8 @@ def validate_storyboard_semantic_binding(
     brief_ids = [str(event.get("id") or "").strip() for event in brief_events]
     render_ids = [str(event.get("id") or "").strip() for event in storyboard_events]
     semantic_ids = [storyboard_semantic_event_id(event) for event in storyboard_events]
+    decision_complete = is_decision_complete_brief(brief)
+    selected_ids = selected_semantic_event_ids(brief)
     if any(not event_id for event_id in brief_ids):
         errors.append("approved semantic brief events require non-empty IDs")
     if len(set(brief_ids)) != len(brief_ids):
@@ -807,12 +930,22 @@ def validate_storyboard_semantic_binding(
         errors.append("storyboard event IDs must be unique")
     if any(not event_id for event_id in semantic_ids):
         errors.append("storyboard events require an explicit semantic_event_id")
-    if len(storyboard_events) != len(brief_events):
-        errors.append("storyboard event count must match the approved semantic brief")
-    if Counter(semantic_ids) != Counter(brief_ids):
-        errors.append("storyboard semantic event set must exactly match the approved semantic brief")
-    elif semantic_ids != brief_ids:
-        errors.append("storyboard semantic event order must match the approved semantic brief")
+    if decision_complete:
+        if Counter(semantic_ids) != Counter(selected_ids):
+            errors.append(
+                "storyboard semantic event set must exactly match approved render decisions"
+            )
+        elif semantic_ids != selected_ids:
+            errors.append(
+                "storyboard semantic event order must preserve approved opportunity order"
+            )
+    else:
+        if len(storyboard_events) != len(brief_events):
+            errors.append("storyboard event count must match the approved semantic brief")
+        if Counter(semantic_ids) != Counter(brief_ids):
+            errors.append("storyboard semantic event set must exactly match the approved semantic brief")
+        elif semantic_ids != brief_ids:
+            errors.append("storyboard semantic event order must match the approved semantic brief")
 
     brief_by_id = {
         event_id: event for event_id, event in zip(brief_ids, brief_events) if event_id
@@ -826,7 +959,15 @@ def validate_storyboard_semantic_binding(
                 f"events[{index}] references unknown semantic event ID: {semantic_id or '<missing>'}"
             )
             continue
-        semantic_quiet = semantic_event.get("treatment") == "quiet_source"
+        semantic_decision = semantic_opportunity_decision(
+            semantic_event, decision_complete=decision_complete,
+        )
+        if decision_complete and semantic_decision != "render":
+            errors.append(
+                f"events[{index}] references semantic event {semantic_id!r} without a render decision"
+            )
+            continue
+        semantic_quiet = semantic_decision == "quiet_source"
         storyboard_quiet = storyboard_event.get("treatment") == "quiet_source"
         if semantic_quiet != storyboard_quiet:
             errors.append(
@@ -836,6 +977,12 @@ def validate_storyboard_semantic_binding(
         fields = STORYBOARD_SEMANTIC_TIME_FIELDS
         if not semantic_quiet:
             fields += STORYBOARD_SEMANTIC_FIELDS
+        if decision_complete:
+            fields += (
+                "target_frame_evidence",
+                "relevance_rationale",
+                "visual_mechanism",
+            )
         if "treatment" in semantic_event:
             fields += ("treatment",)
         elif "treatment" in storyboard_event:
@@ -1103,6 +1250,7 @@ def validate_visual_vocabulary_audit(
     storyboard: dict[str, Any],
     *,
     full_video: bool = False,
+    decision_complete: bool = False,
 ) -> list[str]:
     """Validate deliberate selection or rejection of the complete visual vocabulary.
 
@@ -1138,9 +1286,9 @@ def validate_visual_vocabulary_audit(
                 errors.append(f"visual vocabulary category {name} references unknown events: {', '.join(unknown)}")
         elif not str(row.get("rationale", "")).strip():
             errors.append(f"not-applicable visual vocabulary category {name} requires rationale")
-    if selected_count < 4:
+    if not decision_complete and selected_count < 4:
         errors.append("visual vocabulary requires at least four selected structures")
-    if len(selected_event_ids) < 4:
+    if not decision_complete and len(selected_event_ids) < 4:
         errors.append("visual vocabulary selections must reference at least four distinct storyboard events")
     if full_video:
         chapters = audit.get("chapter_decisions") or []

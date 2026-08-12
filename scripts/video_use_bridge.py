@@ -11,6 +11,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -99,6 +100,7 @@ CLAUSE_STARTS = ("但是", "然后", "所以", "因为", "另外", "而是", "�
 PHRASE_PUNCTUATION = tuple("，。！？；：,.!?;:")
 SENTENCE_END_PUNCTUATION = tuple("。！？.!?")
 PUNCTUATION_STYLES = {"source", "spoken_clean", "none"}
+SYNC_WORD_SELECTION_TOLERANCE_SECONDS = 0.001
 
 
 def _display_caption_text(text: str, punctuation_style: str) -> str:
@@ -269,19 +271,59 @@ def apply_audited_corrections(mapped_words: list[dict[str, Any]], corrections: d
     return corrected, applied
 
 
-def synchronization_report(mapped_words: list[dict[str, Any]], captions: list[dict[str, Any]],
-                           sample_count: int = 8) -> dict[str, Any]:
+def synchronization_report(
+    mapped_words: list[dict[str, Any]], captions: list[dict[str, Any]],
+    sample_count: int = 8, *, cut_boundaries: list[float] | None = None,
+    terminology: list[str] | None = None,
+    final_composite: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     if not captions:
         return {"passed": False, "reason": "no captions", "samples": []}
-    stride = max(1, len(captions) // max(1, sample_count))
+    required_indices = {0, len(captions) // 2, len(captions) - 1}
+    cut_coverage = []
+    for boundary in cut_boundaries or []:
+        nearest_index = min(
+            range(len(captions)),
+            key=lambda index: min(
+                abs(float(captions[index]["start"]) - float(boundary)),
+                abs(float(captions[index]["end"]) - float(boundary)),
+            ),
+        )
+        required_indices.add(nearest_index)
+        cut_coverage.append({
+            "time": round(float(boundary), 3),
+            "caption_index": nearest_index,
+        })
+    terminology_coverage: dict[str, dict[str, Any]] = {}
+    for term in terminology or []:
+        matches = [
+            index for index, caption in enumerate(captions)
+            if str(term) in str(caption.get("text") or "")
+        ]
+        if matches:
+            required_indices.add(matches[0])
+            terminology_coverage[str(term)] = {
+                "status": "sampled", "caption_index": matches[0],
+            }
+        else:
+            terminology_coverage[str(term)] = {"status": "not_found"}
+    target_count = max(max(1, sample_count), len(required_indices))
+    if target_count > len(required_indices):
+        stride = max(1, len(captions) // target_count)
+        required_indices.update(range(0, len(captions), stride))
+    selected_indices = sorted(required_indices)[:max(target_count, len(required_indices))]
     samples = []
-    for caption_index in range(0, len(captions), stride):
+    for caption_index in selected_indices:
         caption = captions[caption_index]
         caption_start = float(caption["start"])
         caption_end = float(caption["end"])
         words = [word for word in mapped_words
-                 if float(word["start"]) >= caption_start - 0.000001
-                 and float(word["end"]) <= caption_end + 0.000001]
+                 if float(word["start"]) >= (
+                     caption_start - SYNC_WORD_SELECTION_TOLERANCE_SECONDS
+                 )
+                 and float(word["end"]) <= (
+                     caption_end + SYNC_WORD_SELECTION_TOLERANCE_SECONDS
+                 )]
         if not words:
             samples.append({"caption_index": caption_index, "passed": False, "reason": "no mapped words"})
         else:
@@ -295,18 +337,39 @@ def synchronization_report(mapped_words: list[dict[str, Any]], captions: list[di
                 "tail_error_s": round(lag, 4),
                 "passed": lead <= 0.08 and lag <= 0.08,
             })
-        if len(samples) >= sample_count:
-            break
     overlaps = [index for index in range(1, len(captions))
                 if float(captions[index]["start"]) < float(captions[index - 1]["end"])]
+    composite = dict(final_composite or {})
+    if composite.get("required") is True:
+        composite["passed"] = (
+            composite.get("full_av_decode") is True
+            and composite.get("subtitle_filter_verified") is True
+            and bool(re.fullmatch(r"[a-f0-9]{64}", str(composite.get("media_sha256") or "")))
+            and bool(re.fullmatch(r"[a-f0-9]{64}", str(composite.get("caption_sha256") or "")))
+        )
+    else:
+        composite["passed"] = True
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "mapping_owner": "video-use",
         "formula": "word.start - segment.start + segment.timeline_start",
         "sample_count": len(samples),
         "samples": samples,
+        "coverage": {
+            "first_caption_index": 0,
+            "middle_caption_index": len(captions) // 2,
+            "last_caption_index": len(captions) - 1,
+            "required_caption_indices": sorted(required_indices),
+            "cut_boundaries": cut_coverage,
+            "terminology": terminology_coverage,
+        },
+        "final_composite": composite,
         "overlap_indices": overlaps,
-        "passed": bool(samples) and all(item.get("passed") for item in samples) and not overlaps,
+        "passed": (
+            bool(samples) and all(item.get("passed") for item in samples)
+            and not overlaps and composite["passed"]
+            and all(row["status"] == "sampled" for row in terminology_coverage.values())
+        ),
     }
 
 
@@ -329,6 +392,8 @@ def main() -> int:
     parser.add_argument("--pause-break", type=float, default=0.5)
     parser.add_argument("--punctuation-style", choices=sorted(PUNCTUATION_STYLES),
                         default="spoken_clean")
+    parser.add_argument("--cut-boundary", action="append", type=float, default=[])
+    parser.add_argument("--terminology", action="append", default=[])
     args = parser.parse_args()
     edl_path = Path(args.edl).resolve()
     edl = json.loads(edl_path.read_text(encoding="utf-8"))
@@ -345,7 +410,9 @@ def main() -> int:
     captions = build_captions(corrected, max_chars=args.max_chars,
                               max_duration=args.max_duration, pause_break=args.pause_break,
                               punctuation_style=args.punctuation_style)
-    report = synchronization_report(corrected, captions)
+    report = synchronization_report(
+        corrected, captions, cut_boundaries=args.cut_boundary, terminology=args.terminology,
+    )
     report["applied_corrections"] = applied
     report["text_policy"] = "verbatim mapped words plus audited evidenced corrections; no summarization"
     report["punctuation_style"] = args.punctuation_style

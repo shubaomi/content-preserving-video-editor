@@ -1,0 +1,164 @@
+{
+  "schema_version": "1.0.0",
+  "candidate_id": "content-preserving-video-editor-p0-p2-design-freeze-2026-08-11",
+  "created_at": "2026-08-11T01:31:36.8335388-07:00",
+  "status": "approved",
+  "approved": true,
+  "user_approval": {
+    "status": "approved",
+    "approved_by": "HongRun",
+    "approved_at": "2026-08-11T03:00:12.2540015-07:00",
+    "approval_evidence": "User message: 批准 design-freeze-candidate，按照实施计划进入下一阶段实现。"
+  },
+  "canonical_objective": {
+    "absolute_path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\p0-p2-design\\goal-objective.md",
+    "sha256": "402ec6d6b96d8e0b964f3b24eb0ce4231d4e9947ece28ad5650eb283810d3a12",
+    "resume_rule": "After every task resume, context compaction, or model switch, fully read this file and verify its SHA-256 before continuing."
+  },
+  "repository_baseline": {
+    "root": "E:\\Projects\\Skills\\content-preserving-video-editor",
+    "branch": "main",
+    "head": "39428ac81991fdcaf5eb39bbab148b3e76de54c6",
+    "remote": "https://github.com/shubaomi/content-preserving-video-editor.git",
+    "baseline_was_clean": true,
+    "candidate_worktree_scope": [
+      "references/p0-p2-design/"
+    ]
+  },
+  "phase_boundaries": {
+    "production_code_implemented": false,
+    "upstream_source_modified": false,
+    "long_video_rendered": false,
+    "git_commit_created": false,
+    "git_push_performed": false,
+    "implementation_authorized": true,
+    "next_phase_requires_explicit_user_approval": false
+  },
+  "maturity": {
+    "this_candidate": "documented",
+    "current_capability_inventory_at_audit": {
+      "total": 56,
+      "director_integrated": 46,
+      "fixture_validated": 10,
+      "real_project_validated": 0,
+      "production_default": 0
+    },
+    "promotion_statement": "This design candidate does not promote any current implementation capability."
+  },
+  "documents": [
+    {
+      "path": "requirements-traceability.md",
+      "sha256": "6386dac39897b8375a790da9b9a765987d0e48f67a53cbca3d60febbd73d53a3",
+      "purpose": "Stable RQ-001 through RQ-020 traceability and evidence ownership"
+    },
+    {
+      "path": "motion-quality-engine-v1.md",
+      "sha256": "1559251d4b7a6dcf8705545ae73b4ac9ac25f69082603f8b81c7168cf790b10a",
+      "purpose": "Semantic, stateful, keyframed motion design and 16 non-quota recipes"
+    },
+    {
+      "path": "p0-p2-implementation-plan.md",
+      "sha256": "ad5f55683fc9b4bece208c2376d8c5d3f3516fd0448756e60f4deb5c2d87c9b9",
+      "purpose": "Dependency-ordered tests-first implementation, migration, cache, rollback, and cost plan"
+    },
+    {
+      "path": "acceptance-matrix.md",
+      "sha256": "8a0675ea0cdd4e2cdfb1ddba553b0937f014a88d7987083fa18c681caa54243e",
+      "purpose": "Automated, multimodal, and user gates with two real canaries"
+    },
+    {
+      "path": "machine-contracts.md",
+      "sha256": "6ab1d80a6077038d12e1ef1c09f8d73a1817a1d89ce596fd03066a1aa34a7287",
+      "purpose": "Seven contract semantics, invariants, examples, validation, and migration"
+    },
+    {
+      "path": "architecture-decisions.md",
+      "sha256": "9cc395141e221f2174f929c97b131aa3d9a960608036a1d4c76c567a97102cc1",
+      "purpose": "System/tool ownership, schema strategy, optional adapters, and external research boundaries"
+    },
+    {
+      "path": "risk-and-cost-ledger.md",
+      "sha256": "83d1894904269c42c9ef406a72fa74af2e358fd9627c0f481465cce91ec4d406",
+      "purpose": "Technical, creative, license, privacy, cost, Goodhart, and rollback risks"
+    },
+    {
+      "path": "design-review-report.md",
+      "sha256": "9e5e9f76bc61e3f15b5d07b23ac2ea88c5feb9541b8c4de6573c38939ad41739",
+      "purpose": "Comprehensive design review and resolved findings"
+    }
+  ],
+  "schemas": [
+    {
+      "contract": "motion-design-contract",
+      "path": "schemas/motion-design-contract.schema.json",
+      "sha256": "4e8d099d9abeb212f49af510a2579e12d63ef0151cf7caaed15d806b694d3db6"
+    },
+    {
+      "contract": "motion-recipe",
+      "path": "schemas/motion-recipe.schema.json",
+      "sha256": "83081934cb897c446d7a11167e8cffe4940b3ea89be9cc82e1c20a41c705d5e4"
+    },
+    {
+      "contract": "target-binding",
+      "path": "schemas/target-binding.schema.json",
+      "sha256": "e5f7ee5ccedc41b2d687d7d961500cb254ad0f22021a60288eddf510cbc5d87f"
+    },
+    {
+      "contract": "keyframe-receipt",
+      "path": "schemas/keyframe-receipt.schema.json",
+      "sha256": "87a6d72a4db2c21a084cad60f2452825ad5da310a484cd2739bbf835980b37d1"
+    },
+    {
+      "contract": "creative-review",
+      "path": "schemas/creative-review.schema.json",
+      "sha256": "cffe6d715d0eb7367812f588be6526485f026be10a7a7bcad83d05092581eeed"
+    },
+    {
+      "contract": "motion-audio-decision",
+      "path": "schemas/motion-audio-decision.schema.json",
+      "sha256": "ce9279b6c94fa60690b4663d1032907c1f61bb75fe8aac674a01616ea556bcf6"
+    },
+    {
+      "contract": "real-project-validation",
+      "path": "schemas/real-project-validation.schema.json",
+      "sha256": "1653c77e1c4169d3f6b10e86a71ff23c3fe195af9a2cdd3e6dbb1c8ce7f88603"
+    }
+  ],
+  "validation": {
+    "canonical_objective_hash": "pass",
+    "required_document_inventory": "pass",
+    "rq_001_through_rq_020_traceability": "pass",
+    "json_parse": "pass",
+    "json_schema_draft_2020_12_meta_validation": "pass",
+    "seven_positive_schema_instances": "pass",
+    "focused_negative_schema_instances": "pass",
+    "cross_document_consistency": "pass",
+    "design_review": {
+      "status": "pass_as_candidate",
+      "unresolved_blockers": 0,
+      "unresolved_highs": 0
+    },
+    "production_behavior": "not_run_by_phase_boundary",
+    "real_canaries": "not_run_by_phase_boundary"
+  },
+  "recommended_open_decisions": [
+    {
+      "id": "OD-001",
+      "recommendation": "Approve additive project schema v10 and keep MQE opt-in for migrated projects until both current real canaries pass."
+    },
+    {
+      "id": "OD-002",
+      "recommendation": "Use the current authorized landscape product/data-report source for R-L and provide one separate authorized portrait talking-head source for R-P during implementation."
+    },
+    {
+      "id": "OD-003",
+      "recommendation": "Keep advanced 3D/WebGL/shader recipes disabled by default; use DOM/SVG/GSAP as the standard path."
+    },
+    {
+      "id": "OD-004",
+      "recommendation": "Use 100 percent audio-decision coverage with adaptive audible cues instead of sound on every event."
+    }
+  ],
+  "candidate_manifest_excludes_self_hash": true,
+  "next_action": "Create the implementation Goal and execute the approved dependency-ordered plan. Keep real-canary, long-render, and user aesthetic gates explicit."
+}

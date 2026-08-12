@@ -3,11 +3,66 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+import math
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from director_contracts import read_json, write_json
+from director_contracts import read_json, sha256_file, write_json
+
+
+def build_handoff_package(
+    edl: dict[str, Any], *, backend: str,
+    authorized_capabilities: set[str] | None = None,
+    authoritative_edl_path: Path | None = None,
+) -> dict[str, Any]:
+    """Describe a typed human handoff without claiming an editor/render API."""
+    if backend not in {"opencut", "openmontage", "other_nle"}:
+        raise ValueError("unsupported NLE handoff backend")
+    capabilities = set(authorized_capabilities or set())
+    unsupported_effects: list[str] = []
+    for row in edl.get("ranges") or []:
+        for effect in row.get("effects") or []:
+            effect_type = str((effect or {}).get("type") or "unknown")
+            if effect_type not in capabilities:
+                unsupported_effects.append(effect_type)
+    timeline = edl_to_otio(edl)
+    restored = otio_to_internal(timeline)
+    losses = validate_roundtrip(edl, restored)
+    package = {
+        "schema_version": 1,
+        "status": "action_required",
+        "backend": backend,
+        "authority": "video-use-edl",
+        "timeline": timeline,
+        "capability_report": {
+            "authorized": sorted(capabilities),
+            "editor_api_verified": False,
+            "cli_verified": False,
+            "headless_render_verified": False,
+        },
+        "loss_report": {
+            "unsupported_effects": sorted(set(unsupported_effects)),
+            "roundtrip_differences": losses,
+            "lossless": not unsupported_effects and not losses,
+        },
+        "headless_render_claimed": False,
+        "human_finish_required": True,
+        "returned_master_requires_full_revalidation": True,
+    }
+    package["timeline_sha256"] = hashlib.sha256(json.dumps(
+        timeline, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    if authoritative_edl_path is not None:
+        path = authoritative_edl_path.resolve()
+        if not path.is_file() or read_json(path) != edl:
+            raise ValueError("authoritative EDL path is missing or differs from payload")
+        package["authoritative_edl"] = {
+            "path": str(path), "sha256": sha256_file(path),
+        }
+    return package
 
 
 def _time(value: float, rate: float) -> dict[str, Any]:
@@ -28,13 +83,13 @@ def _seconds(value: dict[str, Any], *, field: str) -> float:
         ticks = float(value["value"])
     except (KeyError, TypeError, ValueError) as error:
         raise ValueError(f"invalid OTIO {field}") from error
-    if rate <= 0:
+    if not math.isfinite(rate) or rate <= 0:
         raise ValueError(f"invalid OTIO {field} rate")
     return ticks / rate
 
 
 def edl_to_otio(edl: dict[str, Any], *, rate: float = 30.0) -> dict[str, Any]:
-    if rate <= 0:
+    if not math.isfinite(rate) or rate <= 0:
         raise ValueError("OTIO rate must be positive")
     sources = edl.get("sources") or {}
     gaps_by_clip = {str(row.get("after_clip_id")): row for row in (edl.get("gaps") or [])}

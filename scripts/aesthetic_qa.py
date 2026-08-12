@@ -7,7 +7,7 @@ import json
 import math
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
 
@@ -375,7 +375,11 @@ def _source_state_delta(left: Path, right: Path) -> float:
         return sum(ImageStat.Stat(difference).mean) / (3 * 255)
 
 
-def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
+def validate(
+    review: dict[str, Any], storyboard: dict[str, Any], *,
+    keyframe_receipt_paths: Mapping[str, Path] | None = None,
+    decision_complete: bool = False,
+) -> list[str]:
     errors: list[str] = []
     criteria = review.get("criteria") or {}
     for name in REQUIRED_CRITERIA:
@@ -449,7 +453,7 @@ def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
             errors.append(f"technical QA is not pass: {name}")
     events = [event for event in (storyboard.get("events") or []) if event.get("treatment") != "quiet_source"]
     signatures = {visual_signature(event) for event in events}
-    if len(events) < 4 or len(signatures) < 4:
+    if not decision_complete and (len(events) < 4 or len(signatures) < 4):
         errors.append("sample must contain at least four genuinely distinct visual structures")
     for signature in signatures:
         if len(signature) != len(REQUIRED_VISUAL_FIELDS) or any(not item for item in signature):
@@ -461,6 +465,7 @@ def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
     reviewed_event_ids = set(review.get("reviewed_event_ids") or [])
     for event in events:
         event_id = str(event.get("id", ""))
+        semantic_event_id = str(event.get("semantic_event_id") or event_id)
         if event_id not in reviewed_event_ids:
             errors.append(f"event not included in aesthetic review: {event_id}")
         phases = snapshots.get(event_id) or {}
@@ -472,6 +477,37 @@ def validate(review: dict[str, Any], storyboard: dict[str, Any]) -> list[str]:
                 errors.extend(_image_evidence_errors(
                     evidence, f"event {event_id} {phase} snapshot evidence",
                 ))
+        if keyframe_receipt_paths is not None:
+            receipt_path = keyframe_receipt_paths.get(semantic_event_id)
+            if receipt_path is None or not Path(receipt_path).is_file():
+                errors.append(f"event {event_id} keyframe receipt is missing")
+            else:
+                try:
+                    receipt = json.loads(Path(receipt_path).read_text(encoding="utf-8"))
+                except (OSError, ValueError, json.JSONDecodeError):
+                    errors.append(f"event {event_id} keyframe receipt is invalid")
+                    receipt = {}
+                receipt_phases = {
+                    str(row.get("phase") or ""): row
+                    for row in receipt.get("phase_observations") or []
+                    if isinstance(row, dict)
+                }
+                for review_phase in REQUIRED_PHASES:
+                    receipt_phase = "mid" if review_phase == "midpoint" else review_phase
+                    receipt_snapshot = (
+                        receipt_phases.get(receipt_phase) or {}
+                    ).get("snapshot") or {}
+                    reviewed_path = _evidence_path(phases.get(review_phase))
+                    expected_path = _evidence_path(receipt_snapshot)
+                    if (
+                        reviewed_path is None or expected_path is None
+                        or reviewed_path != expected_path
+                        or not expected_path.is_file()
+                        or receipt_snapshot.get("sha256") != sha256_file(expected_path)
+                    ):
+                        errors.append(
+                            f"event {event_id} {review_phase} review differs from keyframe receipt"
+                        )
         errors.extend(_composite_contrast_errors(
             composite_contrast.get(event_id), phases, event_id,
         ))

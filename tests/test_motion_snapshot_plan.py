@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 
@@ -130,6 +131,66 @@ class MotionSnapshotPlanTests(unittest.TestCase):
         }
         self.assertNotIn("#quiet-a", selectors)
         self.assertIn({"kind": "before", "a": "#motion-a", "b": "#motion-b"}, assertions)
+
+    def test_mqe_plan_captures_every_compiler_selected_event_and_binds_recipe(self) -> None:
+        storyboard = {
+            "duration": 20.0,
+            "events": [
+                {
+                    "id": "render-a", "semantic_event_id": "event-a",
+                    "motion_design_contract_id": "motion-sample", "recipe_id": "MQE-01",
+                    "start": 2.0, "end": 5.0, "tier": "micro",
+                },
+                {
+                    "id": "render-b", "semantic_event_id": "event-b",
+                    "motion_design_contract_id": "motion-sample", "recipe_id": "MQE-02",
+                    "start": 8.0, "end": 12.0, "tier": "micro",
+                },
+            ],
+        }
+        contract = {
+            "contract_id": "motion-sample",
+            "selected_event_ids": ["event-a", "event-b"],
+            "opportunities": [
+                {"semantic_event_id": "event-a", "decision": "render", "recipe_id": "MQE-01"},
+                {"semantic_event_id": "event-b", "decision": "render", "recipe_id": "MQE-02"},
+            ],
+        }
+        registry = json.loads(
+            (Path(__file__).parents[1] / "references" / "motion-recipes-v1.json").read_text(
+                encoding="utf-8",
+            )
+        )
+
+        plan = MODULE.build_plan(
+            storyboard, motion_design_contract=contract, recipe_registry=registry,
+        )
+
+        self.assertEqual([row["semantic_event_id"] for row in plan["beats"]], ["event-a", "event-b"])
+        self.assertEqual([row["recipe_id"] for row in plan["beats"]], ["MQE-01", "MQE-02"])
+        self.assertEqual(plan["strategy"]["event_coverage"], "all_compiler_selected_events")
+        self.assertTrue(all(row["keyframe_receipt_required"] for row in plan["beats"]))
+
+    def test_mqe_snapshot_points_follow_recipe_phase_ratios(self) -> None:
+        recipe = {
+            "phases": [
+                {"name": "entrance", "duration_ratio": 0.2},
+                {"name": "explain", "duration_ratio": 0.3},
+                {"name": "hold", "duration_ratio": 0.4},
+                {"name": "exit", "duration_ratio": 0.1},
+            ],
+        }
+
+        points = MODULE.snapshot_points(
+            {"start": 10.0, "end": 20.0}, composition_duration=30.0, recipe=recipe,
+        )
+
+        self.assertEqual(points, {
+            "entrance": 11.0,
+            "midpoint": 13.5,
+            "pre_exit": 19.5,
+            "post_exit": 20.18,
+        })
 
 
 if __name__ == "__main__":

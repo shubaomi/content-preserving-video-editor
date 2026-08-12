@@ -25,9 +25,15 @@ Complete a video only when applicable gates pass.
   yet perform this supplemental capture automatically.
 - Fail managed acquisition when extracted frame count or timestamps differ from
   the request. Partial extraction cannot claim full-duration coverage.
-- Require each sample and full Storyboard event to inherit the approved semantic
-  event identity, word IDs, anchor, source/output timing, viewer takeaway, and
-  approved visible copy. Require an exact derived `visible_copy_manifest` and
+- When motion quality is enabled, require one decision and rationale for every
+  ordered semantic opportunity. Require the sample/full Storyboard semantic-ID
+  sequence to equal exactly the `render`-decision subset; non-render decisions
+  must remain outside the Storyboard. Legacy schema-v1/v2 briefs retain their
+  one-to-one compatibility behavior.
+- Require each rendered event to inherit the approved identity, word IDs,
+  anchor, source/output timing, target-frame evidence, relevance rationale,
+  visual mechanism, viewer takeaway, and approved visible-copy list. Require an
+  exact derived `visible_copy_manifest` and
   treat all other event strings as either explicitly allowed metadata or
   approved copy. Reject nested authority fields, arbitrary render props,
   missing/reordered mappings, and extra copy. Continue to inspect final DOM/OCR
@@ -74,11 +80,26 @@ Complete a video only when applicable gates pass.
 - Check technical terms.
 - Avoid faces and critical UI.
 - Apply captions after the output edit is final and verify output-timeline remapping.
-- For source-first/preserve work without a verified existing caption layer,
+- For any work, including `polish_existing`, without an independently verified
+  existing caption layer,
   require `final-compose-command.json.caption_delivery.mode=burned_in_last`, the
   current video-use `master.srt` hash, and an FFmpeg subtitles filter. A sidecar
   SRT alone is not delivered caption evidence.
+- In Motion Quality sample review, apply the same current `master.srt` to the
+  baseline and candidate before human comparison. Require aligned durations,
+  distinct raw/derived paths, exact caption/input/output hashes, the recorded
+  subtitles filter, and successful full decodes in
+  `sample-caption-delivery.json`. Store these derived media outside the
+  HyperFrames project so they cannot change its source manifest.
 - Validate names, product terms, URLs, commands, and technical vocabulary against the project glossary and visible UI.
+- A real-canary pass must be written by
+  `scripts/build_real_project_validation.py`, not hand-authored. Require a real
+  30–90 second authorized source, distinct decoded baseline/candidate media,
+  RQ-001 through RQ-020 automated results, separate recommendation-only
+  multimodal evidence, named-user sample/publishability decisions, measured
+  correction/render/cost fields, and current config/code hashes. Missing or
+  stale evidence blocks the write; one orientation cannot substitute for the
+  other.
 
 ## Visuals
 
@@ -105,7 +126,8 @@ Complete a video only when applicable gates pass.
 - Confirm source rotation and effective display ratio were detected before layout.
 - Confirm every generated visual matches the chosen canvas rather than relying on blind cropping.
 - Sample portrait, landscape, or square safe zones for face, pointer, UI, and caption collisions.
-- Confirm every semantic beat has one primary explanatory visual.
+- Confirm every selected render beat has one primary explanatory visual; an
+  evidenced non-render decision does not require an overlay.
 - Reject anchors that are only discourse/UI verbs, repeat an exact anchor more than twice, recur inside the configured cooldown, or reproduce a subtitle-length clause.
 - Reject duplicated viewer takeaways across IP images, callout cards, captions, and annotations.
 - Reject long full-canvas topic images inside continuous demonstrations unless marked as a chapter bridge.
@@ -129,6 +151,30 @@ Complete a video only when applicable gates pass.
 - Compare hash-bound entrance, midpoint, and pre-exit source-state evidence.
   Static or scene-bounded geometry that spans a page/modal/layout transition is
   blocking; shorten the window or use reviewed keyframed tracking.
+- With Motion Quality enabled, require every render event to explicitly declare
+  whether target binding is required. Targetless recipes must carry no binding
+  IDs. Source-bound recipes must resolve every declared binding file and match
+  its semantic event plus source/output window. Reject stale evidence hashes,
+  out-of-canvas boxes, low-confidence visible observations, invented boxes for
+  lost targets, uncovered state changes, or active windows that continue past a
+  state boundary/loss.
+- Require adaptive layout to distinguish verified landscape critical-UI lanes
+  from portrait face/hand/caption protection. When required protected-region
+  evidence is absent, allow only the recorded `caption_only` fallback or
+  `action_required`; a low-occupancy guess is not approval.
+- Recompute target boxes and connector endpoints at entrance, mid-hold,
+  pre-exit, and post-exit. The post-exit observation must contain no remaining
+  target or connector. A report whose findings or status differ from recomputed
+  geometry is invalid.
+- With Motion Quality enabled, require every semantic opportunity in the
+  `motion-design-contract` and require `selected_event_ids` to equal the ordered
+  render subset. Validate the exact source and semantic/production/evidence/
+  brand hashes, all 16 versioned recipe records, four phase ratios/poses,
+  orientation variants, runtime/seek-safety flags, and declared fallback chain.
+  Reject keyword-, cadence-, quota-, random-template-, random-family-, or
+  SFX-driven selection. Require each HyperFrames Storyboard event to preserve
+  the compiled contract ID, recipe ID, choreography fingerprint, semantic ID,
+  approved copy, windows, and target binding IDs.
 - Snapshot, connector, and generated-human anatomy evidence must be a decodable
   image of reviewable size. Placeholder bytes, corrupt images, stale hashes, or
   a path-existence-only assertion do not pass aesthetic QA.
@@ -163,20 +209,60 @@ Complete a video only when applicable gates pass.
 - Confirm Studio movement persists after playback and timeline seeking.
 - Confirm generated source has no accidental long manual keyframes or global class-wide transforms.
 - Reject `data-layout-allow-overflow`, `data-layout-allow-occlusion`, unsupported motion variants, generic IP placeholders, and any declared variant without distinct renderer behavior.
+- With Motion Quality enabled, require a current
+  `renderer-project-manifest.json` that inventories every editable project
+  source. Reject any later source edit or addition. Runtime evidence outputs are
+  excluded from this source inventory.
+- Require `renderer-export.json` from the actual painted project runtime and one
+  schema-valid keyframe receipt for every compiled render event. Each receipt
+  must contain exactly `entrance`, `mid`, `pre_exit`, and `post_exit`, bind the
+  exact project/contract/recipe/source/targets/check/animation-map/export, and
+  cite real decodable phase images. Request metadata or a midpoint screenshot is
+  not proof.
+- Produce the runtime export with the Director-provided capture request. Require
+  Playwright to use the browser returned by `npx hyperframes browser path`,
+  verify the media `currentTime` at every phase, and fail closed when the browser,
+  local dependency, seek, or painted DOM is unavailable. A source frame-zero
+  screenshot at a requested later time is invalid evidence.
+- Back the receipt's logical `animation_map` artifact with the installed
+  `npx hyperframes keyframes <project> --json` operation. Do not accept a
+  fabricated `animation-map` command.
+- Use the Director-provided receipt builder after parity exists. Require at
+  least one positive-duration HyperFrames tween to overlap every compiled
+  render event's approved output window; unrelated global keyframes do not
+  prove that event's animation.
+- Recompute approved visible copy, DOM geometry, source state, targets,
+  connectors, clipping, caption overlap, and composite contrast from the export
+  and receipts. Require zero post-exit remnant. Any missing, corrupt, stale, or
+  contradictory evidence becomes `action_required`.
 - Require `preview-render-parity.json` for representative semantic events before
-  final render authorization. Compare Studio and short-render evidence at the
-  same declared time within project tolerances; do not use a full long render to
-  create this gate.
+  final render authorization. Motion Quality mode instead requires every
+  compiled event and all four phases. Compare Studio and short-render evidence
+  at the same declared time within project tolerances; do not use a full long
+  render to create this gate.
 - For each sampled event, compare selector geometry and size, visibility,
   animation phase, connector count/attachment, clipping/cropping, and caption
   occlusion. A failed or relaxed parity report blocks final delivery.
-- Reject a motion plan below its selected profile floor unless an explicit
-  user-approved sparse override includes evidence. Reject long quiet gaps that
-  have only a generic prose justification without verified source-frame samples.
+- Do not reject a decision-complete plan because it falls below a numerical
+  event/family floor or exceeds a fixed gap. Reject incomplete decisions,
+  ungrounded quiet/source reuse, or rendered filler instead. Legacy density
+  profiles remain compatibility checks only while schema-v1/v2 is in use.
+- Before Motion Quality preview approval, require a distinct, aligned 60–90
+  second baseline/candidate pair; exact compiler, Storyboard, audio-plan, gate,
+  media and receipt hashes; every selected event's entrance/mid/pre-exit/
+  post-exit images; SFX-off/on and optional BGM-off/on auditions. The review
+  defaults pending, drift makes it stale, and only a named human may approve it
+  with publish willingness, a paired preference, and a reason. UI proposals stay pending.
+- If the sample audio plan contains cues, require the complete paired-review
+  candidate to bind and audibly contain every ordered cue before caption-last
+  delivery. Recompute the raw candidate, audio-plan, cue asset, mixed-output,
+  and receipt hashes; reject missing/reordered cues, a stale asset, an invalid
+  mix command, or a failed full audio/video decode. Do not require a mix when all
+  decisions are explicitly `intentionally_silent`.
 - Require sample/full visual-dynamics reports to bind the current Production
   Contract, Storyboard/timeline, captions, design tokens, and reviewed evidence.
-  More events do not compensate for weak anchors, repeated layout families,
-  clipped geometry, long unexplained quiet gaps, or redundant visuals.
+  More events do not compensate for weak anchors, clipped geometry, ungrounded
+  non-render decisions, or redundant visuals.
 - When Golden Editorial Regression is enabled, compare the full structure to the
   approved sample baseline. Allow drift only through a current approved
   correction-ledger entry whose related hashes still match.
@@ -184,6 +270,10 @@ Complete a video only when applicable gates pass.
   preview-stage artifact receipt, implementation, integrity, target, and
   before-value guards. Removed events and
   quiet/IP/connector/SFX/BGM/cover/rejection drift are blocking structural changes.
+- For Golden schema v2, require hash-current renderer export, four-phase
+  receipts, normalized DOM/motion/geometry fingerprints, and representative
+  overlay-crop perceptual hashes. Do not use whole-frame pixel equality, and do
+  not reuse sample audio decisions as full-timeline audio evidence.
 - Snapshot mutable cover evidence at sample approval. Correction-ledger targets and
   related-file hashes must cover the actual owning Storyboard, semantic brief,
   audio plan, or cover artifact; an unrelated current file is not approval evidence.
@@ -203,7 +293,11 @@ Complete a video only when applicable gates pass.
 - Verify audio with BGM on and off.
 - Require a `cue` or evidenced `intentionally_silent` decision for every
   non-quiet event. Enforce the configured coverage and unique-asset ratios,
-  same-file cooldown, cue duration, and post-gain audibility range.
+  treating 100% as decision coverage while audible cue coverage follows the
+  configured perceptual corridor. Validate the authorized cue identity in the
+  actual full-band mixed window, not by filename, nominal volume, or a sampled
+  waveform susceptible to aliasing. Also enforce same-file cooldown, cue
+  duration, and the post-gain audibility range.
 - When at least two cues are selected, enforce `maximum_family_ratio` (default
   0.5) so unique filenames and simple pitch changes cannot make one repeated
   sonic motif look diverse.
@@ -216,6 +310,9 @@ Complete a video only when applicable gates pass.
   target tolerance checks; reject missing, stale, target-mismatched, or merely
   self-declared reports. A provider-generated BGM selected by the full audio
   plan must be the same hashed asset used by final composition.
+- Distinguish an explicit `disabled` BGM choice from `unavailable` after the
+  configured authorized provider chain produced no asset. Both require a reason;
+  `unavailable` also retains the attempted provider outcomes.
 - Require `final-compose-command.json` to bind the motion hash, BGM/audio-plan
   hashes, exact command/settings, and current intermediate hash. Never reuse a
   pre-normalized file merely because that path exists.
@@ -270,7 +367,16 @@ Complete a video only when applicable gates pass.
 
 ## Pre-publish package
 
-- Include a cover, final video, editable project, QA report, and asset provenance.
+- Evaluate `delivery.required_assets` before final delivery. Required stages
+  must be complete at `ready` or `asset_ready` as configured; explicit
+  `contract_ready` never passes. An asset is `not_applicable` only through a
+  non-empty evidence-backed reason, such as explicit caption delivery `none`.
+- Require the Production Contract to bind `identity.mode`. In `third_party`
+  mode, reject HongRun identity assets, personal intro/outro, and first-person
+  brand expression before creative generation or delivery.
+- Always include the final video and applicable QA/provenance. Include a cover
+  only when it was produced or the configured publish/release package requires
+  one; never fabricate a cover or crop preview for an optional absent cover.
 - Verify the cover uses an authorized identity reference and matches the actual topic.
 - When enhanced editorial production is enabled, require a hash-bound
   `cover-editorial-plan.json`, valid semantic event IDs, and one to three
@@ -337,6 +443,22 @@ Complete a video only when applicable gates pass.
 
 ## P0/P1/P2 blocking gates
 
+- Route screen/product and portrait talking-head sources through different
+  format grammars. For portrait, reject product-dashboard cards and require
+  face-safe expressive treatments; technical pass and publish willingness do
+  not substitute for the user's separate brand-taste decision.
+- Advanced runtime recipes require current seek-safety, deterministic fallback,
+  parity, device, license, and cost evidence. Otherwise require deterministic
+  2D fallback.
+- Remotion requires hash-bound maintained components, parseable parity, and
+  license files. Parity recomputes the decodable reference/render image delta
+  and requires either a component-bound `visual_only`/`audio_policy: forbidden`
+  contract or bound audio bytes;
+  legacy strings and boolean pass flags fail. Explicitly enabled optional media
+  adapters without real reviewed output become `action_required`.
+- Editorial promise closure must jointly bind hook, title, description, CTA,
+  proof motion copy, and applicable cover to current proof IDs and reject
+  prohibited claims or mechanical repetition.
 - Reproduce the current golden report from fixture, policy, six-media evidence,
   Director/schema version, and implementation hashes. Tamper, missing, expiry,
   semantic mismatch, layout drift, or caption drift must fail.

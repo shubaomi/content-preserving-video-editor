@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import hashlib
+import http.client
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -14,6 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from review_server import (  # noqa: E402
     RequestRejected,
     ReviewServerConfig,
+    create_review_server,
     propose_pending_change,
     propose_event_action,
     validate_bind_host,
@@ -63,6 +66,96 @@ class ReviewServerTests(unittest.TestCase):
                 )
             with self.assertRaisesRegex(RequestRejected, "path"):
                 validate_request(config, method="GET", path="/../../secret", headers=self._headers(), body=b"")
+
+    def test_file_origin_requires_explicit_opt_in_and_still_requires_tokens(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            body = b"{}"
+            headers = self._headers(body)
+            headers["Origin"] = "null"
+            with self.assertRaisesRegex(RequestRejected, "Origin"):
+                validate_request(
+                    self._config(root), method="POST", path="/api/proposals",
+                    headers=headers, body=body,
+                )
+            config = ReviewServerConfig(
+                root=root, proposal_dir=root / "proposals",
+                auth_token="secret-token", csrf_token="csrf-token",
+                max_body_bytes=256, allow_file_origin=True,
+            )
+            validate_request(
+                config, method="POST", path="/api/proposals", headers=headers, body=body,
+            )
+            preflight = {
+                "Host": "127.0.0.1:8765", "Origin": "null",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization,x-csrf-token,content-type",
+                "Content-Length": "0",
+            }
+            validate_request(
+                config, method="OPTIONS", path="/api/proposals",
+                headers=preflight, body=b"",
+            )
+            headers["Authorization"] = "Bearer wrong"
+            with self.assertRaisesRegex(RequestRejected, "token"):
+                validate_request(
+                    config, method="POST", path="/api/proposals", headers=headers, body=body,
+                )
+
+    def test_explicit_file_origin_preflight_returns_narrow_cors_headers(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            artifact = root / "storyboard.json"
+            artifact.write_text('{"events":[]}', encoding="utf-8")
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+            config = ReviewServerConfig(
+                root=root, proposal_dir=root / "proposals",
+                auth_token="secret-token", csrf_token="csrf-token",
+                allow_file_origin=True,
+            )
+            server = create_review_server(config, host="127.0.0.1", port=0)
+            worker = threading.Thread(target=server.handle_request, daemon=True)
+            worker.start()
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            connection.request("OPTIONS", "/api/proposals", headers={
+                "Origin": "null",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "authorization,x-csrf-token,content-type",
+                "Content-Length": "0",
+            })
+            response = connection.getresponse()
+            response.read()
+            self.assertEqual(response.status, 204)
+            self.assertEqual(response.getheader("Access-Control-Allow-Origin"), "null")
+            self.assertEqual(response.getheader("Access-Control-Allow-Methods"), "POST, OPTIONS")
+            connection.close()
+            worker.join(timeout=3)
+
+            payload = json.dumps({
+                "status": "pending", "action": "move", "event_id": "event-1",
+                "target_path": str(artifact), "target_sha256": digest,
+                "selector": "#event-1", "before_value": "left", "after_value": "right",
+                "reason": "align the verified target", "approver": "reviewer",
+                "timestamp": "2026-08-11T12:00:00+00:00",
+                "related_files": [{"path": str(artifact), "sha256": digest}],
+            }).encode("utf-8")
+            worker = threading.Thread(target=server.handle_request, daemon=True)
+            worker.start()
+            connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            connection.request("POST", "/api/proposals", body=payload, headers={
+                "Origin": "null", "Authorization": "Bearer secret-token",
+                "X-CSRF-Token": "csrf-token", "Content-Type": "application/json",
+                "Content-Length": str(len(payload)),
+            })
+            response = connection.getresponse()
+            response_payload = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.status, 201)
+            self.assertEqual(response.getheader("Access-Control-Allow-Origin"), "null")
+            self.assertEqual(response_payload["status"], "pending")
+            self.assertFalse(response_payload["applied"])
+            connection.close()
+            worker.join(timeout=3)
+            server.server_close()
 
     def test_proposal_is_path_allowlisted_and_can_only_be_pending(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

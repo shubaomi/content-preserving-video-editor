@@ -31,12 +31,27 @@ from asr_router import (
     validate_pipeline_reports,
 )
 from audio_qa import validate as validate_audio_plan
-from audio_production import produce_audio_assets
+from audio_production import (
+    audition_filename_stem,
+    materialize_motion_audio_decisions,
+    materialize_sample_audio_evidence,
+    materialize_sample_review_mix,
+    produce_audio_assets,
+    validate_sample_audio_evidence,
+    validate_sample_review_mix_receipt,
+)
 from brand_motion_playbook import compile_playbook, validate_playbook
 from build_motion_snapshot_plan import build_motion_sidecar, build_plan as build_motion_snapshot_plan
 from capability_registry import build_capability_inventory, build_toolchain_report, capability_config
 from clip_factory import build_clip_manifest, validate_clip_manifest
 from correction_ledger import append_correction, new_ledger, validate_ledger
+from creative_review import (
+    build_contract as build_creative_review_contract,
+    mark_stale as mark_creative_review_stale,
+    record_user_decision as record_creative_user_decision,
+    validate_sample_pair_durations,
+    validate_review as validate_creative_review,
+)
 from cover_production import CoverProductionActionRequired, produce_cover, write_cover_request
 from cover_reference_pack import (
     build_candidate_specs,
@@ -51,9 +66,11 @@ from director_contracts import (
     DirectorContractError,
     ProjectContext,
     assert_valid,
+    is_decision_complete_brief,
     load_project_context,
     read_json,
     sha256_file,
+    selected_semantic_event_ids,
     validate_semantic_brief,
     validate_semantic_evidence_binding,
     validate_storyboard,
@@ -69,20 +86,35 @@ from evidence_acquisition import acquire as acquire_evidence
 from editorial_regression import (
     create_baseline, evaluate_regression, validate_baseline, validate_regression,
 )
+from editorial_promise import (
+    build_promise_closure, build_promise_ledger, validate_promise_bindings,
+)
 from hyperframes_router import route_hyperframes
 from ip_production import IpProductionActionRequired, produce_ip_components
+from keyframe_receipt import validate_keyframe_receipt, validate_renderer_export
 from manual_finish import (
     build_handoff_manifest,
     validate_returned_final_qa,
 )
 from media_catalog_adapter import run_media_catalog
+from motion_contracts import (
+    DEFAULT_RECIPE_REGISTRY,
+    load_recipe_registry,
+    validate_motion_design_contract,
+    validate_storyboard_motion_binding,
+)
+from motion_quality_engine import build_hyperframes_choreography, compile_motion_design
 from motion_preferences import apply as apply_motion_preferences, load as load_motion_preferences
 from normalize_social_audio import (
     normalize as normalize_social_audio,
     validate_report as validate_audio_normalization_report,
 )
 from localization_pipeline import build_localization_manifest, validate_localization_manifest
-from otio_adapter import edl_to_otio, otio_to_internal, validate_roundtrip as validate_otio_roundtrip
+from otio_adapter import (
+    build_handoff_package as build_typed_nle_handoff,
+    edl_to_otio, otio_to_internal, validate_roundtrip as validate_otio_roundtrip,
+)
+from optional_media_adapter import authorize_optional_adapter
 from post_publish_metrics import import_metrics as import_post_publish_metrics
 from feedback_loop import analyze_feedback_snapshots
 from podcast_pipeline import build_podcast_manifest, validate_podcast_manifest
@@ -99,6 +131,7 @@ from provider_governance import (
     write_provider_result_receipt,
 )
 from render_with_cache import run_pipeline as run_cached_pipeline
+from renderer_project_manifest import build_manifest as build_renderer_project_manifest
 from event_render_pipeline import EventRenderUnavailable, execute_event_render_pipeline
 from state_migrations import CURRENT_STATE_SCHEMA_VERSION, load_and_migrate_state
 from project_initializer import PRESETS as PROJECT_PRESETS, initialize_project
@@ -108,6 +141,10 @@ from action_required_contract import create_action_packet, validate_action_packe
 from semantic_confidence import build_candidate_report, validate_candidate_report
 from review_dashboard import generate_dashboard
 from review_server import ReviewServerConfig, create_review_server
+from sample_caption_delivery import (
+    materialize_pair as materialize_sample_caption_pair,
+    validate_receipt as validate_sample_caption_receipt,
+)
 from preference_learning import build_preference_candidates, write_preference_candidates
 from technical_qa import run_technical_qa, validate_report as validate_technical_report
 from portable_audit_bundle import create_portable_audit_bundle
@@ -116,15 +153,21 @@ from prepublish_privacy_audit import create_privacy_audit
 from rights_authorization_manifest import create_rights_authorization_report
 from release_delivery_pack import create_release_delivery_pack, verify_release_delivery_pack
 from validate_platform_export import validate_bound_report as validate_platform_report
-from video_use_bridge import render_command, render_helper_path
+from video_use_bridge import render_command, render_helper_path, synchronization_report
 from visual_dynamics_qa import (
     build_report as build_visual_dynamics_report,
     validate_report as validate_visual_dynamics_report,
 )
+from delivery_readiness import asset_is_required, validate_required_asset_readiness
+from select_motion_safe_zones import (
+    build_adaptive_layout_constraints,
+    subject_track_face_regions,
+)
+from target_binding import validate_binding, validate_storyboard_bindings
 
 
 STATE_VERSION = CURRENT_STATE_SCHEMA_VERSION
-DIRECTOR_VERSION = "2.3.0"
+DIRECTOR_VERSION = "2.6.0"
 
 ROLE_CONTRACT = {
     "director": [
@@ -167,6 +210,70 @@ def _json_sha256(value: Any) -> str:
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _semantic_inheritance_contract(
+    brief: dict[str, Any], *, motion_quality_enabled: bool,
+) -> dict[str, Any]:
+    bind = [
+        "treatment", "anchor", "transcript_word_ids", "source_start", "source_end",
+        "output_start", "output_end", "viewer_takeaway", "approved_visible_copy",
+    ]
+    if motion_quality_enabled:
+        bind.extend(("target_frame_evidence", "relevance_rationale", "visual_mechanism"))
+    contract: dict[str, Any] = {
+        "explicit_semantic_event_id_required": True,
+        "bind": bind,
+        "derived_visible_copy_manifest": (
+            "exact normalized list from approved_visible_copy; empty when none"
+        ),
+        "other_render_text_fields_forbidden": True,
+        "storyboard_semantic_fallback_forbidden": True,
+    }
+    if motion_quality_enabled:
+        contract.update({
+            "selection": "ordered render-decision subset only",
+            "selected_semantic_event_ids": selected_semantic_event_ids(brief),
+            "nonrender_opportunities_must_not_be_serialized": True,
+            "event_or_family_quota": None,
+            "fixed_cadence": None,
+        })
+    return contract
+
+
+def _target_binding_request_contract(
+    *, layout_path: Path, binding_dir: Path, schema_path: Path,
+    identity_mode: str,
+) -> dict[str, Any]:
+    """Describe the fail-closed geometry artifacts expected from motion planning."""
+    layout_path = layout_path.resolve()
+    schema_path = schema_path.resolve()
+    if not layout_path.is_file():
+        raise DirectorContractError("adaptive layout evidence is missing")
+    if not schema_path.is_file():
+        raise DirectorContractError("target-binding schema is missing")
+    return {
+        "mode": "stateful_target_binding_v1",
+        "schema": str(schema_path),
+        "schema_sha256": sha256_file(schema_path),
+        "binding_directory": str(binding_dir.resolve()),
+        "adaptive_layout": str(layout_path),
+        "adaptive_layout_sha256": sha256_file(layout_path),
+        "event_declaration": {
+            "target_binding_required": "explicit boolean",
+            "target_binding_ids": "exact ordered binding IDs; empty only for targetless recipes",
+        },
+        "tracking_modes": ["static", "scene_bounded", "keyframed"],
+        "material_state_changes": [
+            "scene", "route", "modal", "scroll", "zoom", "layout",
+            "visibility", "rotation",
+        ],
+        "unresolved_source_bound_event": "do_not_render",
+        "allowed_safe_results": ["fallback", "action_required"],
+        "guessed_coordinates_allowed": False,
+        "identity_mode": identity_mode,
+        "personal_assets": "forbidden" if identity_mode == "third_party" else "authorized_only",
+    }
 
 
 def prepare_cover_reference_pack(
@@ -291,6 +398,75 @@ def _review_evidence_files(review: dict[str, Any]) -> list[Path]:
     return result
 
 
+def _load_protected_region_review(
+    manifest_path: Path, *, project_root: Path, source_sha256: str,
+) -> tuple[dict[str, dict[str, Any]], list[Path]]:
+    """Load a hash-bound observation without inventing missing geometry."""
+    if not manifest_path.is_file():
+        raise DirectorContractError(
+            f"protected-region review manifest is missing: {manifest_path}"
+        )
+    review = read_json(manifest_path)
+    if review.get("schema_version") != 1:
+        raise DirectorContractError("protected-region review schema_version must be 1")
+    if review.get("source_sha256") != source_sha256:
+        raise DirectorContractError("protected-region review source hash does not match")
+    reviewer = review.get("reviewer")
+    reviewed_at = review.get("reviewed_at")
+    if not isinstance(reviewer, str) or not reviewer.strip():
+        raise DirectorContractError("protected-region review requires a reviewer")
+    if not isinstance(reviewed_at, str) or not reviewed_at.strip():
+        raise DirectorContractError("protected-region review requires reviewed_at")
+    raw_observations = review.get("observations")
+    if not isinstance(raw_observations, dict) or not raw_observations:
+        raise DirectorContractError("protected-region review requires observations")
+    observations: dict[str, dict[str, Any]] = {}
+    artifacts = [manifest_path.resolve()]
+    for region_type, raw in raw_observations.items():
+        if region_type not in {"faces", "hands"} or not isinstance(raw, dict):
+            raise DirectorContractError(
+                f"protected-region review has unsupported observation: {region_type}"
+            )
+        if raw.get("status") != "observed_absent":
+            raise DirectorContractError(
+                f"protected-region review {region_type} must use observed_absent"
+            )
+        evidence = raw.get("evidence")
+        if not isinstance(evidence, list) or len(evidence) < 2:
+            raise DirectorContractError(
+                f"protected-region review {region_type} requires at least two evidence frames"
+            )
+        normalized_evidence: list[dict[str, str]] = []
+        for item in evidence:
+            if not isinstance(item, dict) or not item.get("path") or not item.get("sha256"):
+                raise DirectorContractError(
+                    f"protected-region review {region_type} evidence is incomplete"
+                )
+            path = Path(str(item["path"]))
+            path = path.resolve() if path.is_absolute() else (project_root / path).resolve()
+            try:
+                path.relative_to(project_root.resolve())
+            except ValueError as error:
+                raise DirectorContractError(
+                    "protected-region review evidence must stay inside the project"
+                ) from error
+            declared_hash = str(item["sha256"]).lower()
+            if not path.is_file() or sha256_file(path) != declared_hash:
+                raise DirectorContractError(
+                    f"protected-region review evidence hash mismatch: {path}"
+                )
+            normalized_evidence.append({"path": str(path), "sha256": declared_hash})
+            artifacts.append(path)
+        observations[region_type] = {
+            "status": "observed_absent",
+            "reviewer": reviewer,
+            "reviewed_at": reviewed_at,
+            "evidence": normalized_evidence,
+            "evidence_sha256": [item["sha256"] for item in normalized_evidence],
+        }
+    return observations, artifacts
+
+
 def _cover_delivery_gate(review: dict[str, Any]) -> tuple[list[str], bool]:
     """Apply identity checks only when the selected cover depicts a person."""
     identity_required = review.get("identity_applicable") is not False
@@ -302,6 +478,34 @@ def _cover_delivery_gate(review: dict[str, Any]) -> tuple[list[str], bool]:
     if review.get("natural_expression_and_energy") is not True:
         errors.append("expression-or-energy gate failed")
     return errors, identity_required
+
+
+def _audio_plan_asset_files(plan: dict[str, Any], base_dir: Path) -> list[Path]:
+    """Return materialized cue/BGM assets so Director state binds their bytes."""
+    cue_values = [
+        row.get("asset") for row in (
+            (plan.get("motion_sfx") or {}).get("event_decisions") or []
+        ) if isinstance(row, dict) and row.get("decision") == "cue"
+    ]
+    values: list[tuple[Any, Path | None]] = [
+        (value, (base_dir / "assets" / "sfx").resolve()) for value in cue_values
+    ]
+    background = plan.get("background_music") or {}
+    if background.get("mode") == "authorized_asset":
+        values.append((background.get("source"), None))
+    result: list[Path] = []
+    seen: set[Path] = set()
+    for value, allowed_root in values:
+        if not value:
+            continue
+        path = Path(str(value))
+        path = path.resolve() if path.is_absolute() else (base_dir / path).resolve()
+        if allowed_root is not None and not path.is_relative_to(allowed_root):
+            continue
+        if path.is_file() and path not in seen:
+            seen.add(path)
+            result.append(path)
+    return result
 
 
 def _ffprobe_duration(path: Path) -> float:
@@ -326,9 +530,17 @@ def _existing_stage_readiness(
         return status
     artifact_paths = [Path(str(value)) for value in (row.get("artifacts") or [])]
     if stage == "audio":
-        return "asset_ready" if any(
-            path.name.lower() == "audio-plan.json" for path in artifact_paths
-        ) else "contract_ready"
+        plan = next((path for path in artifact_paths if path.name.lower() == "audio-plan.json"), None)
+        storyboard = plan.parent / "storyboard.json" if plan else None
+        if plan and plan.is_file() and storyboard and storyboard.is_file():
+            try:
+                if not validate_audio_plan(
+                    read_json(plan), read_json(storyboard), project, base_dir=plan.parent,
+                ):
+                    return "asset_ready"
+            except (OSError, ValueError, json.JSONDecodeError):
+                pass
+        return "contract_ready"
     if stage == "cover":
         if project.get("cover", {}).get("enabled", True) is False:
             return "not_applicable"
@@ -664,6 +876,262 @@ class Director:
     @property
     def evidence_bundle_path(self) -> Path:
         return self.root / "evidence" / "evidence-bundle.json"
+
+    @property
+    def adaptive_layout_path(self) -> Path:
+        return self.root / "evidence" / "adaptive-layout-constraints.json"
+
+    @property
+    def sample_target_binding_dir(self) -> Path:
+        return self.root / "target-bindings" / "sample"
+
+    @property
+    def full_target_binding_dir(self) -> Path:
+        return self.root / "target-bindings" / "full"
+
+    def motion_design_dir(self, scope: str) -> Path:
+        if scope not in {"sample", "full"}:
+            raise DirectorContractError(f"unknown motion-design scope: {scope}")
+        return self.root / "motion-design" / scope
+
+    def renderer_evidence_contract_path(self, scope: str) -> Path:
+        project = (
+            self.sample_hyperframes_project if scope == "sample"
+            else self.full_hyperframes_project
+        )
+        return project / "renderer-evidence-contract.json"
+
+    def renderer_export_path(self, scope: str) -> Path:
+        project = (
+            self.sample_hyperframes_project if scope == "sample"
+            else self.full_hyperframes_project
+        )
+        return project / "renderer-export.json"
+
+    def renderer_project_manifest_path(self, scope: str) -> Path:
+        project = (
+            self.sample_hyperframes_project if scope == "sample"
+            else self.full_hyperframes_project
+        )
+        return project / "renderer-project-manifest.json"
+
+    def _runtime_capture_request(self, scope: str) -> dict[str, Any]:
+        if scope not in {"sample", "full"}:
+            raise DirectorContractError(f"unknown renderer-evidence scope: {scope}")
+        project = (
+            self.sample_hyperframes_project if scope == "sample"
+            else self.full_hyperframes_project
+        )
+        target_binding_dir = (
+            self.sample_target_binding_dir if scope == "sample"
+            else self.full_target_binding_dir
+        )
+        return {
+            "runtime_capture_tool": str(
+                (Path(__file__).resolve().parent / "capture_hyperframes_runtime_evidence.py")
+            ),
+            "runtime_capture_args": {
+                "project": str(project),
+                "storyboard": str(project / "storyboard.json"),
+                "motion_design_contract": str(
+                    self.motion_design_dir(scope) / "motion-design-contract.json"
+                ),
+                "project_artifact": str(self.renderer_project_manifest_path(scope)),
+                "target_binding_dir": str(target_binding_dir),
+                "output": str(self.renderer_export_path(scope)),
+                "snapshot_dir": str(project / "motion-snapshots" / "runtime"),
+            },
+            "receipt_builder_tool": str(
+                (Path(__file__).resolve().parent / "build_keyframe_receipts.py")
+            ),
+            "receipt_builder_args": {
+                "project": str(project),
+                "motion_design_contract": str(
+                    self.motion_design_dir(scope) / "motion-design-contract.json"
+                ),
+                "project_artifact": str(self.renderer_project_manifest_path(scope)),
+                "renderer_export": str(self.renderer_export_path(scope)),
+                "target_binding_dir": str(target_binding_dir),
+                "parity": str(self.motion_parity_path(scope)),
+                "output_dir": str(self.keyframe_receipt_dir(scope)),
+            },
+            "browser_resolution": ["npx", "hyperframes", "browser", "path"],
+            "missing_runtime_behavior": "action_required",
+        }
+
+    def keyframe_receipt_dir(self, scope: str) -> Path:
+        project = (
+            self.sample_hyperframes_project if scope == "sample"
+            else self.full_hyperframes_project
+        )
+        return project / "keyframe-receipts"
+
+    def motion_parity_path(self, scope: str) -> Path:
+        qa_dir = "sample-qa" if scope == "sample" else "full-qa"
+        return self.root / qa_dir / "preview-render-parity.json"
+
+    @property
+    def creative_review_path(self) -> Path:
+        return self.root / "sample-qa" / "creative-review.json"
+
+    @property
+    def creative_review_dashboard_path(self) -> Path:
+        return self.root / "review" / "creative-review.html"
+
+    @property
+    def sample_baseline_raw_path(self) -> Path:
+        return self.video_use_dir / "base-preview.mp4"
+
+    @property
+    def sample_candidate_raw_path(self) -> Path:
+        return self.sample_hyperframes_project / "sample-preview.mp4"
+
+    @property
+    def sample_candidate_sfx_path(self) -> Path:
+        return self.root / "review-media" / "candidate-with-sfx.mp4"
+
+    @property
+    def sample_review_mix_receipt_path(self) -> Path:
+        return self.root / "sample-qa" / "sample-review-mix.json"
+
+    @property
+    def motion_audio_decision_manifest_path(self) -> Path:
+        return self.root / "sample-qa" / "motion-audio-decisions" / "manifest.json"
+
+    @property
+    def creative_review_motion_audio_path(self) -> Path:
+        if self.motion_audio_decision_manifest_path.is_file():
+            return self.motion_audio_decision_manifest_path
+        return self.sample_hyperframes_project / "audio-plan.json"
+
+    @property
+    def sample_candidate_review_raw_path(self) -> Path:
+        audio_plan = self.sample_hyperframes_project / "audio-plan.json"
+        if audio_plan.is_file():
+            decisions = (read_json(audio_plan).get("motion_sfx") or {}).get("event_decisions") or []
+            if any(
+                isinstance(row, dict) and row.get("decision") == "cue"
+                for row in decisions
+            ):
+                return self.sample_candidate_sfx_path
+        return self.sample_candidate_raw_path
+
+    @property
+    def sample_caption_receipt_path(self) -> Path:
+        return self.root / "sample-qa" / "sample-caption-delivery.json"
+
+    def _sample_requires_caption_delivery(self) -> bool:
+        if self.project.get("motion_quality", {}).get("enabled") is not True:
+            return False
+        if self.project.get("editing", {}).get("caption_delivery") == "none":
+            return False
+        analysis_path = self.root / "input-mode-analysis.json"
+        caption_analysis = {}
+        if analysis_path.is_file():
+            caption_analysis = read_json(analysis_path).get("captions") or {}
+        verified_burned = caption_analysis.get("burned_in") or {}
+        return not (
+            bool(caption_analysis.get("subtitle_streams"))
+            or (
+                verified_burned.get("detected") is True
+                and verified_burned.get("verification_status") == "verified"
+            )
+        )
+
+    @property
+    def sample_baseline_path(self) -> Path:
+        if self._sample_requires_caption_delivery():
+            return self.root / "review-media" / "baseline-captioned.mp4"
+        return self.sample_baseline_raw_path
+
+    @property
+    def sample_candidate_path(self) -> Path:
+        if self._sample_requires_caption_delivery():
+            return self.root / "review-media" / "candidate-captioned.mp4"
+        return self.sample_candidate_review_raw_path
+
+    def _ensure_sample_caption_delivery(self) -> list[Path]:
+        if not self._sample_requires_caption_delivery():
+            return [self.sample_baseline_raw_path, self.sample_candidate_review_raw_path]
+
+        captions = self.video_use_dir / "master.srt"
+        required = [self.sample_baseline_raw_path, self.sample_candidate_review_raw_path, captions]
+        missing = [str(path.resolve()) for path in required if not path.is_file()]
+        expected_paths = {
+            "caption_source": captions.resolve(),
+            "baseline_input": self.sample_baseline_raw_path.resolve(),
+            "baseline_output": self.sample_baseline_path.resolve(),
+            "candidate_input": self.sample_candidate_review_raw_path.resolve(),
+            "candidate_output": self.sample_candidate_path.resolve(),
+        }
+
+        def receipt_errors() -> list[str]:
+            if not self.sample_caption_receipt_path.is_file():
+                return ["sample caption delivery receipt is missing"]
+            receipt = read_json(self.sample_caption_receipt_path)
+            errors = validate_sample_caption_receipt(receipt)
+            observed = {
+                "caption_source": Path(str((receipt.get("caption_source") or {}).get("path") or "")).resolve(),
+                "baseline_input": Path(str(((receipt.get("baseline") or {}).get("input") or {}).get("path") or "")).resolve(),
+                "baseline_output": Path(str(((receipt.get("baseline") or {}).get("output") or {}).get("path") or "")).resolve(),
+                "candidate_input": Path(str(((receipt.get("candidate") or {}).get("input") or {}).get("path") or "")).resolve(),
+                "candidate_output": Path(str(((receipt.get("candidate") or {}).get("output") or {}).get("path") or "")).resolve(),
+            }
+            if observed != expected_paths:
+                errors.append("sample caption delivery receipt does not bind the configured paired media")
+            return errors
+
+        errors = receipt_errors()
+        if not missing and errors and self.execute_external:
+            materialize_sample_caption_pair(
+                baseline_input=self.sample_baseline_raw_path,
+                candidate_input=self.sample_candidate_review_raw_path,
+                captions=captions,
+                baseline_output=self.sample_baseline_path,
+                candidate_output=self.sample_candidate_path,
+                receipt_path=self.sample_caption_receipt_path,
+            )
+            errors = receipt_errors()
+        if missing or errors:
+            request_path = self.root / "sample-qa" / "sample-caption-delivery-request.json"
+            write_json(request_path, {
+                "schema_version": 1,
+                "owner": "director_ffmpeg",
+                "purpose": "apply the same output-timeline captions to both paired review media",
+                "missing_inputs": missing,
+                "validation_errors": errors,
+                "caption_source": str(captions.resolve()),
+                "baseline_input": str(self.sample_baseline_raw_path.resolve()),
+                "candidate_input": str(self.sample_candidate_review_raw_path.resolve()),
+                "expected_outputs": [
+                    str(self.sample_baseline_path.resolve()),
+                    str(self.sample_candidate_path.resolve()),
+                    str(self.sample_caption_receipt_path.resolve()),
+                ],
+                "automatic_execution": "rerun with --execute-external",
+            })
+            self._action_required(
+                "sample_qa",
+                "A hash-bound captioned paired sample is required before creative review",
+                [{
+                    "owner": "director_ffmpeg",
+                    "request": str(request_path),
+                    "expected_outputs": [
+                        str(self.sample_baseline_path.resolve()),
+                        str(self.sample_candidate_path.resolve()),
+                        str(self.sample_caption_receipt_path.resolve()),
+                    ],
+                }],
+            )
+        return [
+            self.sample_baseline_path,
+            self.sample_candidate_path,
+            self.sample_caption_receipt_path,
+        ]
+
+    @property
+    def creative_review_audio_dir(self) -> Path:
+        return self.root / "sample-qa" / "review-audio"
 
     @property
     def full_semantic_brief_path(self) -> Path:
@@ -1377,6 +1845,15 @@ class Director:
             ],
         }
         corrections = self.context.edit_dir / "transcripts" / "caption-corrections-v2.json"
+        cursor = 0.0
+        for row in (edl.get("ranges") or [])[:-1]:
+            cursor += float(row["end"]) - float(row["start"])
+            plan["caption_bridge_command"].extend(["--cut-boundary", f"{cursor:.6f}"])
+        terminology = (
+            (self.project.get("editing") or {}).get("caption_terminology") or []
+        )
+        for term in terminology:
+            plan["caption_bridge_command"].extend(["--terminology", str(term)])
         if corrections.is_file():
             plan["caption_bridge_command"].extend(["--corrections", str(corrections)])
         plan_path = self.video_use_dir / "execution-plan.json"
@@ -1481,15 +1958,6 @@ class Director:
                            for row in (bundle.get("representative_frames") or [])
                            if isinstance(row, dict) and row.get("path")]
         artifacts = [output, *declared_frames, *analysis_artifacts]
-        design_tokens_path = self.context.edit_dir / "design-tokens.json"
-        if isinstance(bundle.get("design_tokens"), dict):
-            write_json(design_tokens_path, {
-                "schema_version": 1,
-                "source_evidence_bundle": str(output.resolve()),
-                "source_evidence_bundle_sha256": sha256_file(output),
-                **bundle["design_tokens"],
-            })
-            artifacts.append(design_tokens_path)
         display = bundle.get("display") or {}
         target_ratio = "9:16" if display.get("orientation") == "portrait" else "16:9"
         subject_track = output_dir / "subject-track.json"
@@ -1500,12 +1968,80 @@ class Director:
                 "--video", str(self.context.source_video), "--out", str(subject_track),
                 "--target-ratio", target_ratio,
             ],
-            inputs=[self.context.source_video, output],
+            inputs=[self.context.source_video],
             outputs=[subject_track],
             settings={"orientation": display.get("orientation"), "target_ratio": target_ratio},
         )
         if result.get("status") in {"complete", "reused"}:
+            if not subject_track.is_file():
+                raise DirectorContractError(
+                    "capability subject_tracking reported completion without its declared output: "
+                    f"{subject_track}"
+                )
             artifacts.append(subject_track)
+            tracked_faces = subject_track_face_regions(
+                read_json(subject_track),
+                report_path=subject_track,
+                report_sha256=sha256_file(subject_track),
+            )
+            if tracked_faces:
+                protected = bundle.setdefault("protected_regions", {})
+                protected["faces"] = tracked_faces
+                protected.setdefault("sources", {})["faces"] = {
+                    "kind": "subject_track",
+                    "path": str(subject_track.resolve()),
+                    "sha256": sha256_file(subject_track),
+                }
+                protected["status"] = "detector_evidence_available"
+        protected_review = (
+            (self.project.get("analysis") or {}).get("protected_region_review") or {}
+        )
+        if protected_review.get("enabled") is True:
+            configured_manifest = protected_review.get("manifest")
+            if not configured_manifest:
+                raise DirectorContractError(
+                    "analysis.protected_region_review.manifest is required when enabled"
+                )
+            review_path = self._project_path(str(configured_manifest))
+            observations, review_artifacts = _load_protected_region_review(
+                review_path,
+                project_root=self.context.root,
+                source_sha256=sha256_file(self.context.source_video),
+            )
+            protected = bundle.setdefault("protected_regions", {})
+            protected.setdefault("observations", {}).update(observations)
+            protected.setdefault("sources", {})["review"] = {
+                "kind": "protected_region_review",
+                "path": str(review_path.resolve()),
+                "sha256": sha256_file(review_path),
+            }
+            protected["status"] = "detector_and_review_evidence_available"
+            artifacts.extend(review_artifacts)
+        write_json(output, bundle)
+        if self.project.get("motion_quality", {}).get("enabled") is True:
+            source_config = self.project.get("source", {})
+            configured_content_type = str(source_config.get("content_type") or "").strip()
+            content_type = configured_content_type or (
+                "talking_head"
+                if (bundle.get("display") or {}).get("orientation") == "portrait"
+                else "screen_tutorial"
+            )
+            layout_contract = build_adaptive_layout_constraints(
+                bundle,
+                content_type=content_type,
+                identity_mode=str((self.project.get("identity") or {}).get("mode") or "generic"),
+            )
+            write_json(self.adaptive_layout_path, layout_contract)
+            artifacts.append(self.adaptive_layout_path)
+        design_tokens_path = self.context.edit_dir / "design-tokens.json"
+        if isinstance(bundle.get("design_tokens"), dict):
+            write_json(design_tokens_path, {
+                "schema_version": 1,
+                "source_evidence_bundle": str(output.resolve()),
+                "source_evidence_bundle_sha256": sha256_file(output),
+                **bundle["design_tokens"],
+            })
+            artifacts.append(design_tokens_path)
         if self.context.input_mode == "polish_existing":
             polish_analysis = self.root / "input-mode-analysis.json"
             analysis_result = self._run_capability(
@@ -1536,11 +2072,12 @@ class Director:
 
     def stage_semantic_brief(self) -> None:
         transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
+        motion_quality_enabled = self.project.get("motion_quality", {}).get("enabled") is True
         if not self.semantic_brief_path.is_file():
             bundle = read_json(self.evidence_bundle_path) if self.evidence_bundle_path.is_file() else {}
             packet = self.root / "semantic-brief-request.json"
             write_json(packet, {
-                "schema_version": 2,
+                "schema_version": 3 if motion_quality_enabled else 2,
                 "owner": "director_with_llm",
                 "required_content_reading": "raw_word_transcript_and_evidence_frames",
                 "transcript": str(transcript) if transcript.is_file() else None,
@@ -1552,6 +2089,33 @@ class Director:
                 "output": str(self.semantic_brief_path),
                 "deterministic_rules_role": "reject low-information, repeats, overlap, overflow, duplication, and filler only",
                 "forbidden": ["keyword score as semantic author", "project script hardcoded events", "density quota filler"],
+                **({
+                    "editorial_intent": self.project.get("editorial_intent"),
+                    "promise_ledger_required": True,
+                    "promise_binding_surfaces": [
+                        "hook", "title", "cover", "description", "cta", "motion_copy",
+                    ],
+                    "promise_rules": [
+                        "all claims bind to proof semantic event ids",
+                        "wording may vary across surfaces but must not mechanically repeat",
+                        "prohibited claims are forbidden",
+                        "neutral education cannot invent a sales goal",
+                    ],
+                } if (self.project.get("editorial_intent") or {}).get("enabled") is True else {}),
+                **({
+                    "opportunity_model": "decision_complete_v1",
+                    "allowed_decisions": [
+                        "render", "annotation", "caption_only", "reuse_source",
+                        "quiet_source", "action_required",
+                    ],
+                    "one_decision_per_opportunity": True,
+                    "rendered_storyboard_is_ordered_subset": True,
+                    "fixed_cadence_or_event_family_quota": False,
+                    "render_requirements": [
+                        "semantic parent", "approved visible copy", "word IDs",
+                        "source/output window", "viewer takeaway", "frame evidence",
+                    ],
+                } if motion_quality_enabled else {}),
             })
             self._action_required(
                 "semantic_brief",
@@ -1560,12 +2124,66 @@ class Director:
                   "request": str(packet), "expected_artifact": str(self.semantic_brief_path)}],
             )
         brief = read_json(self.semantic_brief_path)
-        assert_valid(validate_semantic_brief(brief, require_sample_variety=True), "semantic brief")
+        if motion_quality_enabled and not is_decision_complete_brief(brief):
+            raise DirectorContractError(
+                "enabled motion quality requires a schema 3 decision-complete semantic brief"
+            )
+        assert_valid(
+            validate_semantic_brief(
+                brief, require_sample_variety=not motion_quality_enabled,
+            ),
+            "semantic brief",
+        )
         assert_valid(validate_semantic_evidence_binding(
             brief, transcript_path=transcript, evidence_bundle_path=self.evidence_bundle_path,
         ), "semantic brief evidence binding")
+        editorial_config = self.project.get("editorial_intent") or {}
+        if editorial_config.get("enabled") is True:
+            brief_for_ledger = dict(brief)
+            if not isinstance(brief_for_ledger.get("editorial_intent"), dict):
+                configured = {key: value for key, value in editorial_config.items() if key != "enabled"}
+                if configured.get("mode") == "explicit":
+                    brief_for_ledger["editorial_intent"] = configured
+            promise_ledger_path = self.root / "editorial-promise-ledger.json"
+            promise_ledger = build_promise_ledger(brief_for_ledger)
+            promise_ledger["semantic_brief"] = {
+                "path": str(self.semantic_brief_path.resolve()),
+                "sha256": sha256_file(self.semantic_brief_path),
+            }
+            write_json(promise_ledger_path, promise_ledger)
+        unresolved = [
+            str(row.get("id") or "<missing>")
+            for row in (brief.get("events") or [])
+            if isinstance(row, dict) and row.get("decision") == "action_required"
+        ]
+        if unresolved:
+            self._action_required(
+                "semantic_brief",
+                "Semantic opportunities require a material editorial decision",
+                [{
+                    "owner": "user_or_editorial_director",
+                    "capability": "resolve semantic opportunity decisions",
+                    "request": str(self.semantic_brief_path),
+                    "opportunity_ids": unresolved,
+                    "expected_artifact": str(self.semantic_brief_path),
+                }],
+            )
         artifacts = [self.semantic_brief_path]
+        if editorial_config.get("enabled") is True:
+            artifacts.append(self.root / "editorial-promise-ledger.json")
         artifacts.extend(self._semantic_confidence_gate(brief))
+        optional_media_artifacts = self._optional_media_adapter_artifacts()
+        artifacts.extend(optional_media_artifacts)
+        if optional_media_artifacts:
+            self._action_required(
+                "semantic_brief",
+                "Enabled optional media adapters require an explicit provider execution and review",
+                [{
+                    "owner": "configured_optional_media_provider",
+                    "capability": "materialize optional media evidence or assets",
+                    "report": str(optional_media_artifacts[0]),
+                }],
+            )
         evidence = read_json(self.evidence_bundle_path)
         extension_routes = route_extensions(self.project, evidence, brief)
         extension_report = self.root / "conditional-extensions.json"
@@ -1610,30 +2228,152 @@ class Director:
             artifacts.append(preference_output)
         if transcript.is_file():
             hook_path = self.root / "hook-pacing-audit.json"
+            promise_ledger_path = self.root / "editorial-promise-ledger.json"
+            hook_command = [
+                sys.executable, str(Path(__file__).with_name("audit_hook_pacing.py")),
+                "--transcript", str(transcript), "--out", str(hook_path),
+            ]
+            if promise_ledger_path.is_file():
+                hook_command.extend(["--promise-ledger", str(promise_ledger_path)])
             hook_result = self._run_capability(
                 "hook_pacing",
-                command=[
-                    sys.executable, str(Path(__file__).with_name("audit_hook_pacing.py")),
-                    "--transcript", str(transcript), "--out", str(hook_path),
-                ],
-                inputs=[transcript, self.semantic_brief_path], outputs=[hook_path],
+                command=hook_command,
+                inputs=[transcript, self.semantic_brief_path, *(
+                    [promise_ledger_path] if promise_ledger_path.is_file() else []
+                )], outputs=[hook_path],
             )
             if hook_result.get("status") in {"complete", "reused"}:
                 artifacts.append(hook_path)
             publishing_path = self.root / "publish-metadata.json"
             title = str(self.project.get("content", {}).get("title") or self.project.get("video_id", "video"))
+            publishing_command = [
+                sys.executable, str(Path(__file__).with_name("generate_publishing_copy.py")),
+                "--title", title, "--transcript", str(transcript), "--out", str(publishing_path),
+            ]
+            if promise_ledger_path.is_file():
+                publishing_command.extend(["--promise-ledger", str(promise_ledger_path)])
             publishing_result = self._run_capability(
                 "publishing_copy",
-                command=[
-                    sys.executable, str(Path(__file__).with_name("generate_publishing_copy.py")),
-                    "--title", title, "--transcript", str(transcript), "--out", str(publishing_path),
-                ],
-                inputs=[transcript, self.semantic_brief_path], outputs=[publishing_path],
+                command=publishing_command,
+                inputs=[transcript, self.semantic_brief_path, *(
+                    [promise_ledger_path] if promise_ledger_path.is_file() else []
+                )], outputs=[publishing_path],
                 settings={"title": title},
             )
             if publishing_result.get("status") in {"complete", "reused"}:
+                if promise_ledger_path.is_file():
+                    publishing = read_json(publishing_path)
+                    binding = publishing.get("promise_binding") or {}
+                    assert_valid(
+                        validate_promise_bindings(
+                            read_json(promise_ledger_path), binding.get("surfaces") or [],
+                        ),
+                        "publishing promise binding",
+                    )
                 artifacts.append(publishing_path)
         self._complete("semantic_brief", artifacts)
+
+    def _optional_media_adapter_artifacts(self) -> list[Path]:
+        adapters = (self.project.get("extensions") or {}).get(
+            "optional_media_adapters"
+        ) or []
+        enabled = [row for row in adapters if isinstance(row, dict) and row.get("enabled") is True]
+        if not enabled:
+            return []
+        decisions = [authorize_optional_adapter(row) for row in enabled]
+        output = self.root / "optional-media-adapters.json"
+        write_json(output, {
+            "schema_version": 1,
+            "status": (
+                "unavailable" if any(row.get("status") == "unavailable" for row in decisions)
+                else "action_required"
+            ),
+            "adapters": decisions,
+            "automatic_execution_claimed": False,
+            "aesthetic_approval_granted": False,
+            "publication_authorized": False,
+        })
+        return [output]
+
+    def _ensure_editorial_promise_closure(self) -> Path | None:
+        ledger_path = self.root / "editorial-promise-ledger.json"
+        if not ledger_path.is_file():
+            return None
+        ledger = read_json(ledger_path)
+        rows: list[dict[str, Any]] = []
+        inputs: dict[str, dict[str, str]] = {}
+        hook_path = self.root / "hook-pacing-audit.json"
+        if hook_path.is_file():
+            hook = read_json(hook_path)
+            if isinstance(hook.get("promise_binding"), dict):
+                rows.append(hook["promise_binding"])
+            inputs["hook"] = {"path": str(hook_path), "sha256": sha256_file(hook_path)}
+        publishing_path = self.root / "publish-metadata.json"
+        if publishing_path.is_file():
+            publishing = read_json(publishing_path)
+            for row in (publishing.get("promise_binding") or {}).get("surfaces") or []:
+                if isinstance(row, dict) and row.get("surface") not in {
+                    value.get("surface") for value in rows if isinstance(value, dict)
+                }:
+                    rows.append(row)
+            inputs["publishing"] = {
+                "path": str(publishing_path), "sha256": sha256_file(publishing_path),
+            }
+        cover_plan_path = self.context.edit_dir / "cover" / "cover-editorial-plan.json"
+        if cover_plan_path.is_file():
+            cover_plan = read_json(cover_plan_path)
+            binding = (cover_plan.get("editorial_promise") or {}).get("binding")
+            if isinstance(binding, dict):
+                rows.append(binding)
+            inputs["cover"] = {
+                "path": str(cover_plan_path), "sha256": sha256_file(cover_plan_path),
+            }
+        contract_path = self.motion_design_dir("sample") / "motion-design-contract.json"
+        if contract_path.is_file():
+            contract = read_json(contract_path)
+            promise_proof = set(
+                str(value) for value in (ledger.get("single_promise") or {}).get(
+                    "proof_event_ids"
+                ) or []
+            )
+            approved = [
+                row for row in contract.get("opportunities") or []
+                if isinstance(row, dict) and row.get("decision") == "render"
+                and str(row.get("semantic_event_id")) in promise_proof
+            ]
+            copy = " / ".join(
+                str(value) for row in approved for value in row.get("approved_visible_copy") or []
+                if str(value).strip()
+            )
+            proof = [str(row.get("semantic_event_id")) for row in approved]
+            if copy and proof:
+                rows.append({
+                    "surface": "motion_copy", "copy": copy,
+                    "promise_id": ledger.get("promise_id"), "proof_event_ids": proof,
+                })
+            inputs["motion"] = {
+                "path": str(contract_path), "sha256": sha256_file(contract_path),
+            }
+        proof = list((ledger.get("single_promise") or {}).get("proof_event_ids") or [])
+        rows.append({
+            "surface": "cta", "copy": str(ledger.get("cta") or ""),
+            "promise_id": ledger.get("promise_id"), "proof_event_ids": proof,
+        })
+        required = {"hook", "title", "description", "cta", "motion_copy"}
+        if cover_plan_path.is_file():
+            required.add("cover")
+        closure = build_promise_closure(ledger, rows, required_surfaces=required)
+        closure["inputs"] = inputs
+        closure["promise_ledger"] = {
+            "path": str(ledger_path), "sha256": sha256_file(ledger_path),
+        }
+        output = self.root / "editorial-promise-closure.json"
+        write_json(output, closure)
+        if closure.get("status") != "pass":
+            raise DirectorContractError(
+                "editorial promise closure failed: " + "; ".join(closure.get("errors") or [])
+            )
+        return output
 
     def _semantic_confidence_gate(self, brief: dict[str, Any]) -> list[Path]:
         config = self.project.get("analysis", {}).get("semantic_confidence", {})
@@ -1651,7 +2391,8 @@ class Director:
                     "expected_artifact": str(self.semantic_brief_path),
                 }],
             )
-        event_ids = {
+        selected_ids = set(selected_semantic_event_ids(brief))
+        event_ids = selected_ids if is_decision_complete_brief(brief) else {
             str(row.get("id")) for row in (brief.get("events") or [])
             if isinstance(row, dict) and row.get("treatment") != "quiet_source"
         }
@@ -1781,11 +2522,447 @@ class Director:
         )
         self._complete("brand_motion_playbook", list(outputs))
 
+    def _motion_source_media(self) -> dict[str, Any]:
+        evidence = read_json(self.evidence_bundle_path)
+        display = evidence.get("display") or {}
+        try:
+            duration = float(evidence.get("duration_seconds"))
+            width = int(display.get("width"))
+            height = int(display.get("height"))
+        except (TypeError, ValueError):
+            raise DirectorContractError(
+                "motion-design compilation requires measured duration and display dimensions"
+            )
+        orientation = str(display.get("orientation") or "")
+        if duration <= 0 or width <= 0 or height <= 0 or orientation not in {
+            "landscape", "portrait", "square", "mixed",
+        }:
+            raise DirectorContractError(
+                "motion-design compilation requires valid source duration, dimensions, and orientation"
+            )
+        configured_type = str(
+            (self.project.get("source") or {}).get("content_type")
+            or (self.project.get("content") or {}).get("type") or ""
+        ).lower()
+        if configured_type in {"screen_tutorial", "screen_recording", "product_demo"}:
+            source_type = "screen_recording"
+        elif configured_type in {"talking_head", "portrait_talking_head", "interview"}:
+            source_type = "talking_head"
+        elif configured_type in {"mixed", "hybrid", "screen_plus_camera"}:
+            source_type = "mixed"
+        else:
+            source_type = "other"
+        return {
+            "path": str(self.context.source_video.resolve()),
+            "sha256": sha256_file(self.context.source_video),
+            "duration_seconds": duration,
+            "width": width,
+            "height": height,
+            "orientation": orientation,
+            "source_type": source_type,
+        }
+
+    def _ensure_motion_design(
+        self, *, scope: str, brief_path: Path, binding_dir: Path,
+    ) -> tuple[dict[str, Any], list[Path]]:
+        output_dir = self.motion_design_dir(scope)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        contract_path = output_dir / "motion-design-contract.json"
+        report_path = output_dir / "motion-design-compile-report.json"
+        choreography_path = output_dir / "hyperframes-choreography.json"
+        brand_path = self.root / "brand-motion" / "brand-motion-playbook.json"
+        artifacts = {
+            "semantic_brief": brief_path,
+            "production_contract": self.production_contract_path,
+            "evidence_bundle": self.evidence_bundle_path,
+            "brand_playbook": brand_path,
+        }
+        missing = [str(path) for path in artifacts.values() if not path.is_file()]
+        if missing:
+            raise DirectorContractError(
+                "motion-design compilation requires current input artifacts: " + ", ".join(missing)
+            )
+        target_bindings: dict[str, dict[str, Any]] = {}
+        binding_errors: list[str] = []
+        for path in sorted(binding_dir.glob("*.json")):
+            payload = read_json(path)
+            errors = validate_binding(payload, require_resolved=True)
+            if errors:
+                binding_errors.extend(f"{path.name}: {error}" for error in errors)
+                continue
+            target_bindings[str(payload["binding_id"])] = payload
+        assert_valid(binding_errors, f"{scope} motion-design target bindings")
+        existing_created_at = None
+        if contract_path.is_file():
+            try:
+                existing_created_at = read_json(contract_path).get("created_at")
+            except (OSError, ValueError, json.JSONDecodeError):
+                existing_created_at = None
+        compiled = compile_motion_design(
+            project_id=str(self.project.get("video_id") or self.context.root.name),
+            semantic_brief=read_json(brief_path),
+            source_media=self._motion_source_media(),
+            identity_mode=str((self.project.get("identity") or {}).get("mode") or "generic"),
+            input_artifacts=artifacts,
+            adaptive_layout=read_json(self.adaptive_layout_path),
+            target_bindings=target_bindings,
+            advanced_runtimes_enabled=(
+                (self.project.get("motion_quality") or {}).get("advanced_runtimes", {})
+                .get("enabled") is True
+            ),
+            advanced_runtime_evidence=(
+                (self.project.get("motion_quality") or {}).get("advanced_runtimes", {})
+                .get("evidence")
+            ),
+            recipe_registry=load_recipe_registry(DEFAULT_RECIPE_REGISTRY),
+            created_at=str(existing_created_at or utc_now()),
+        )
+        write_json(contract_path, compiled["contract"])
+        write_json(report_path, {key: value for key, value in compiled.items() if key != "contract"})
+        write_json(
+            choreography_path,
+            build_hyperframes_choreography(
+                compiled["contract"], advanced_runtime=compiled["advanced_runtime"],
+            ),
+        )
+        assert_valid(
+            validate_motion_design_contract(
+                read_json(contract_path), artifact_paths=artifacts,
+                recipe_registry=load_recipe_registry(DEFAULT_RECIPE_REGISTRY),
+            ),
+            f"{scope} motion-design contract",
+        )
+        return read_json(contract_path), [
+            contract_path, report_path, choreography_path, DEFAULT_RECIPE_REGISTRY,
+        ]
+
+    def _motion_design_request(
+        self, scope: str, contract: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not isinstance(contract, dict):
+            raise DirectorContractError("motion-design request requires a compiled contract")
+        output_dir = self.motion_design_dir(scope)
+        contract_path = output_dir / "motion-design-contract.json"
+        choreography_path = output_dir / "hyperframes-choreography.json"
+        registry = load_recipe_registry(DEFAULT_RECIPE_REGISTRY)
+        recipes = {row["recipe_id"]: row for row in registry["recipes"]}
+        selected_recipe_ids = [
+            row.get("recipe_id") for row in contract.get("opportunities") or []
+            if row.get("decision") == "render"
+        ]
+        advanced_required = any(
+            (recipes.get(str(recipe_id)) or {}).get("runtime", {}).get(
+                "advanced_feature_flag_required"
+            ) is True
+            for recipe_id in selected_recipe_ids
+        )
+        choreography = read_json(choreography_path)
+        return {
+            "selection_owner": "director_motion_quality_engine",
+            "renderer_authority": "typed_choreography_only",
+            "contract": str(contract_path.resolve()),
+            "contract_sha256": sha256_file(contract_path),
+            "typed_choreography": str(choreography_path.resolve()),
+            "typed_choreography_sha256": sha256_file(choreography_path),
+            "format_grammar_id": (
+                (choreography.get("format_grammar") or {}).get("grammar_id")
+            ),
+            "format_grammar_sha256": choreography.get("format_grammar_sha256"),
+            "recipe_registry": str(DEFAULT_RECIPE_REGISTRY.resolve()),
+            "recipe_registry_sha256": sha256_file(DEFAULT_RECIPE_REGISTRY),
+            "selected_event_ids": list(contract.get("selected_event_ids") or []),
+            "required_hyperframes_skills": [
+                "hyperframes", "hyperframes-core", "hyperframes-creative",
+                "hyperframes-animation", "hyperframes-cli",
+                *(["hyperframes-keyframes"] if advanced_required else []),
+            ],
+            "forbidden": [
+                "renderer-selected semantics", "renderer-selected recipe",
+                "renderer-invented visible copy", "renderer-guessed target geometry",
+            ],
+        }
+
+    def _write_renderer_evidence_contract(
+        self, *, scope: str, motion_contract: dict[str, Any], storyboard_path: Path,
+    ) -> Path:
+        project = (
+            self.sample_hyperframes_project if scope == "sample"
+            else self.full_hyperframes_project
+        )
+        project_artifact = project / "index.html"
+        contract_path = self.motion_design_dir(scope) / "motion-design-contract.json"
+        selected = [
+            {
+                "event_id": row["semantic_event_id"],
+                "recipe_id": row["recipe_id"],
+                "approved_visible_copy": list(row.get("approved_visible_copy") or []),
+                "target_binding_ids": list(row.get("target_binding_ids") or []),
+                "required_phases": ["entrance", "mid", "pre_exit", "post_exit"],
+            }
+            for row in motion_contract.get("opportunities") or []
+            if row.get("decision") == "render"
+        ]
+        path = self.renderer_evidence_contract_path(scope)
+        write_json(path, {
+            "schema_version": 1,
+            "owner": "director",
+            "renderer": "hyperframes",
+            "scope": scope,
+            "project_entrypoint": {
+                "path": str(project_artifact.resolve()),
+                "sha256": sha256_file(project_artifact),
+            },
+            "storyboard": {
+                "path": str(storyboard_path.resolve()),
+                "sha256": sha256_file(storyboard_path),
+            },
+            "motion_design_contract": {
+                "path": str(contract_path.resolve()),
+                "sha256": sha256_file(contract_path),
+            },
+            "source_media": {
+                "path": str(self.context.source_video.resolve()),
+                "sha256": sha256_file(self.context.source_video),
+            },
+            "outputs": {
+                "renderer_export": str(self.renderer_export_path(scope).resolve()),
+                "renderer_project_manifest": str(
+                    self.renderer_project_manifest_path(scope).resolve()
+                ),
+                "keyframe_receipt_directory": str(self.keyframe_receipt_dir(scope).resolve()),
+                "preview_render_parity": str(self.motion_parity_path(scope).resolve()),
+            },
+            "events": selected,
+            "required_runtime_exports": [
+                "actual_visible_text", "dom_geometry", "source_state", "targets",
+                "connectors", "crop", "caption_overlap", "composite_contrast",
+            ],
+            "required_tools": ["strict_check", "animation_map"],
+            **self._runtime_capture_request(scope),
+            "request_metadata_is_not_render_evidence": True,
+        })
+        return path
+
+    def _validate_motion_render_evidence(
+        self, *, scope: str, storyboard: dict[str, Any],
+    ) -> tuple[list[str], list[Path]]:
+        contract_path = self.motion_design_dir(scope) / "motion-design-contract.json"
+        project = (
+            self.sample_hyperframes_project if scope == "sample"
+            else self.full_hyperframes_project
+        )
+        project_artifact = self.renderer_project_manifest_path(scope)
+        renderer_export_path = self.renderer_export_path(scope)
+        parity_path = self.motion_parity_path(scope)
+        evidence_contract_path = self.renderer_evidence_contract_path(scope)
+        errors: list[str] = []
+        required = [
+            contract_path, project_artifact, renderer_export_path, parity_path,
+            evidence_contract_path,
+        ]
+        missing = [str(path) for path in required if not path.is_file()]
+        if missing:
+            return ["motion render evidence is missing: " + ", ".join(missing)], required
+        motion_contract = read_json(contract_path)
+        evidence_contract = read_json(evidence_contract_path)
+        expected_contract_artifacts = {
+            "project_entrypoint": project / "index.html",
+            "storyboard": project / "storyboard.json",
+            "motion_design_contract": contract_path,
+            "source_media": self.context.source_video,
+        }
+        if evidence_contract.get("schema_version") != 1 or evidence_contract.get("owner") != "director":
+            errors.append("renderer evidence contract metadata is invalid")
+        for name, expected_path in expected_contract_artifacts.items():
+            row = evidence_contract.get(name) or {}
+            expected_path = expected_path.resolve()
+            if Path(str(row.get("path") or "")).resolve() != expected_path:
+                errors.append(f"renderer evidence contract {name} path is stale")
+            if not expected_path.is_file() or row.get("sha256") != (
+                sha256_file(expected_path) if expected_path.is_file() else None
+            ):
+                errors.append(f"renderer evidence contract {name} hash is stale")
+        expected_outputs = {
+            "renderer_export": self.renderer_export_path(scope),
+            "renderer_project_manifest": self.renderer_project_manifest_path(scope),
+            "keyframe_receipt_directory": self.keyframe_receipt_dir(scope),
+            "preview_render_parity": parity_path,
+        }
+        for name, expected_path in expected_outputs.items():
+            if Path(str((evidence_contract.get("outputs") or {}).get(name) or "")).resolve() != expected_path.resolve():
+                errors.append(f"renderer evidence contract {name} output is stale")
+        renderer_export = read_json(renderer_export_path)
+        errors.extend(validate_renderer_export(
+            renderer_export, project_artifact=project_artifact,
+            motion_design_contract_path=contract_path,
+        ))
+        expected_ids = list(motion_contract.get("selected_event_ids") or [])
+        receipt_dir = self.keyframe_receipt_dir(scope)
+        receipt_paths: dict[str, Path] = {}
+        if receipt_dir.is_dir():
+            for path in sorted(receipt_dir.glob("*.json")):
+                try:
+                    event_id = str(read_json(path).get("event_id") or "")
+                except (OSError, ValueError, json.JSONDecodeError):
+                    errors.append(f"invalid keyframe receipt JSON: {path}")
+                    continue
+                if not event_id or event_id in receipt_paths:
+                    errors.append(f"duplicate or missing keyframe receipt event_id: {path}")
+                    continue
+                receipt_paths[event_id] = path.resolve()
+        if set(receipt_paths) != set(expected_ids):
+            errors.append("keyframe receipt event set differs from compiler-selected events")
+        binding_dir = (
+            self.sample_target_binding_dir if scope == "sample" else self.full_target_binding_dir
+        )
+        bindings_by_id: dict[str, Path] = {}
+        for path in sorted(binding_dir.glob("*.json")):
+            try:
+                binding_id = str(read_json(path).get("binding_id") or "")
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            if binding_id:
+                bindings_by_id[binding_id] = path.resolve()
+        opportunities = {
+            str(row.get("semantic_event_id")): row
+            for row in motion_contract.get("opportunities") or [] if isinstance(row, dict)
+        }
+        for event_id in expected_ids:
+            receipt_path = receipt_paths.get(event_id)
+            if receipt_path is None:
+                continue
+            opportunity = opportunities.get(event_id) or {}
+            binding_paths = [
+                bindings_by_id[binding_id]
+                for binding_id in opportunity.get("target_binding_ids") or []
+                if binding_id in bindings_by_id
+            ]
+            errors.extend(
+                f"{event_id}: {error}" for error in validate_keyframe_receipt(
+                    read_json(receipt_path),
+                    motion_design_contract_path=contract_path,
+                    recipe_registry_path=DEFAULT_RECIPE_REGISTRY,
+                    target_binding_paths=binding_paths,
+                    renderer_export_path=renderer_export_path,
+                    maximum_caption_overlap_ratio=0.0,
+                    minimum_composite_contrast_ratio=4.5,
+                    maximum_connector_error_pixels=4.0,
+                )
+            )
+        parity = read_json(parity_path)
+        errors.extend(validate_preview_render_parity(
+            parity, storyboard,
+            configured_tolerances=self.project["qa"]["preview_render_parity"]["tolerances"],
+            expected_bindings={
+                "project_artifact": project_artifact,
+                "motion_design_contract": contract_path,
+                "source_media": self.context.source_video,
+            },
+            keyframe_receipt_paths=receipt_paths,
+        ))
+        artifacts = [*required, *receipt_paths.values()]
+        return errors, artifacts
+
     def stage_hyperframes_storyboard(self) -> None:
         project = self.sample_hyperframes_project
+        brief = read_json(self.semantic_brief_path)
+        motion_quality_enabled = self.project.get("motion_quality", {}).get("enabled") is True
+        target_binding_contract = None
+        motion_design_artifacts: list[Path] = []
+        motion_contract: dict[str, Any] | None = None
+        if motion_quality_enabled:
+            self.sample_target_binding_dir.mkdir(parents=True, exist_ok=True)
+            target_binding_contract = _target_binding_request_contract(
+                layout_path=self.adaptive_layout_path,
+                binding_dir=self.sample_target_binding_dir,
+                schema_path=Path(__file__).parents[1] / "references" / "p0-p2-design"
+                / "schemas" / "target-binding.schema.json",
+                identity_mode=str((self.project.get("identity") or {}).get("mode") or "generic"),
+            )
+            binding_events = [
+                event for event in brief.get("events") or []
+                if isinstance(event, dict) and event.get("decision") == "render"
+                and event.get("target_binding_ids")
+            ]
+            required_binding_ids = [
+                str(binding_id)
+                for event in binding_events
+                for binding_id in event.get("target_binding_ids") or []
+            ]
+            if len(required_binding_ids) != len(set(required_binding_ids)):
+                raise DirectorContractError(
+                    "sample semantic brief assigns a target binding ID more than once"
+                )
+            missing_binding_ids = [
+                binding_id for binding_id in required_binding_ids
+                if not (self.sample_target_binding_dir / f"{binding_id}.json").is_file()
+            ]
+            if missing_binding_ids:
+                request_path = self.root / "target-binding-request.json"
+                write_json(request_path, {
+                    "schema_version": 1,
+                    "owner": "director",
+                    "scope": "sample",
+                    "source_media": str(self.context.source_video.resolve()),
+                    "source_media_sha256": sha256_file(self.context.source_video),
+                    "semantic_brief": str(self.semantic_brief_path.resolve()),
+                    "semantic_brief_sha256": sha256_file(self.semantic_brief_path),
+                    "target_binding_contract": target_binding_contract,
+                    "required_binding_ids": missing_binding_ids,
+                    "events": [{
+                        "semantic_event_id": str(event.get("id") or ""),
+                        "target_binding_ids": [
+                            str(value) for value in event.get("target_binding_ids") or []
+                            if str(value) in missing_binding_ids
+                        ],
+                        "source_window": {
+                            "start_seconds": event.get("source_start"),
+                            "end_seconds": event.get("source_end"),
+                        },
+                        "output_window": {
+                            "start_seconds": event.get("output_start"),
+                            "end_seconds": event.get("output_end"),
+                        },
+                        "target_frame_evidence": list(
+                            event.get("target_frame_evidence") or []
+                        ),
+                        "safe_failure": "fallback_or_action_required_without_guessed_coordinates",
+                    } for event in binding_events if any(
+                        str(value) in missing_binding_ids
+                        for value in event.get("target_binding_ids") or []
+                    )],
+                    "expected_outputs": [
+                        str((self.sample_target_binding_dir / f"{binding_id}.json").resolve())
+                        for binding_id in missing_binding_ids
+                    ],
+                })
+                self._action_required(
+                    "hyperframes_storyboard",
+                    "source-bound target bindings are required before motion compilation",
+                    [{
+                        "owner": "director_target_binding",
+                        "capability": "evidence-backed stateful target geometry",
+                        "request": str(request_path),
+                        "expected_outputs": [
+                            str((self.sample_target_binding_dir / f"{binding_id}.json").resolve())
+                            for binding_id in missing_binding_ids
+                        ],
+                        "guessed_coordinates_allowed": False,
+                    }],
+                )
+            motion_contract, motion_design_artifacts = self._ensure_motion_design(
+                scope="sample", brief_path=self.semantic_brief_path,
+                binding_dir=self.sample_target_binding_dir,
+            )
+        motion_request = (
+            self._motion_design_request("sample", motion_contract)
+            if motion_contract is not None else None
+        )
         evidence = read_json(self.evidence_bundle_path) if self.evidence_bundle_path.is_file() else {}
         route_path = self.root / "renderer-route.json"
-        route = route_hyperframes(self.project, evidence)
+        route = route_hyperframes(
+            self.project, evidence, motion_design_contract=motion_contract,
+        )
         renderer_artifacts: list[Path] = []
         catalog_report_path = self.root / "media-catalog-report.json"
         catalog_call = lambda: run_media_catalog(
@@ -1817,8 +2994,8 @@ class Director:
             remotion = self.project.get("renderer", {}).get("remotion", {})
             command = remotion.get("command") or []
             outputs = [self._project_path(value) for value in (remotion.get("outputs") or [])]
-            react_inputs = [self._project_path(value) for value in
-                            (remotion.get("react_component_paths") or [])]
+            react_inputs = [Path(value).resolve() for value in
+                            (route.get("remotion_component_paths") or [])]
             if command and outputs:
                 result = self._run_capability(
                     "remotion_renderer", command=[str(value) for value in command],
@@ -1832,6 +3009,23 @@ class Director:
             else:
                 route["remotion_adapter_status"] = "unavailable"
                 route["remotion_adapter_reason"] = "no adapter command and outputs configured"
+            if remotion.get("required") is True and route.get("remotion_adapter_status") not in {
+                "complete", "reused",
+            }:
+                self._action_required(
+                    "hyperframes_storyboard", "Required Remotion event adapter did not complete",
+                    [{"owner": "remotion", "route": str(route_path),
+                      "expected_outputs": [str(value) for value in outputs]}],
+                )
+        else:
+            remotion = self.project.get("renderer", {}).get("remotion", {})
+            if isinstance(remotion, dict) and remotion.get("enabled") is True \
+                    and remotion.get("required") is True:
+                self._action_required(
+                    "hyperframes_storyboard", "Required Remotion evidence is unavailable or stale",
+                    [{"owner": "remotion", "route": str(route_path),
+                      "expected_artifact": str(route_path)}],
+                )
         write_json(route_path, route)
         ip_artifacts: list[Path] = []
         if self.project.get("visuals", {}).get("ip_production", {}).get("enabled") is True:
@@ -1862,26 +3056,24 @@ class Director:
         if not storyboard_path.is_file() or not index_path.is_file() or not vocabulary_path.is_file():
             packet = self.root / "hyperframes-request.json"
             write_json(packet, {
-                "schema_version": 2,
+                "schema_version": 3 if motion_quality_enabled else 2,
                 "owner": "hyperframes",
                 "semantic_brief": str(self.semantic_brief_path),
-                "semantic_inheritance": {
-                    "explicit_semantic_event_id_required": True,
-                    "bind": [
-                        "treatment", "anchor", "transcript_word_ids", "source_start", "source_end",
-                        "output_start", "output_end", "viewer_takeaway", "approved_visible_copy",
-                    ],
-                    "derived_visible_copy_manifest": (
-                        "exact normalized list from approved_visible_copy; empty when none"
-                    ),
-                    "other_render_text_fields_forbidden": True,
-                    "storyboard_semantic_fallback_forbidden": True,
-                },
+                "semantic_inheritance": _semantic_inheritance_contract(
+                    brief, motion_quality_enabled=motion_quality_enabled,
+                ),
                 "scope": "60-90 second sample only",
                 "project": str(project),
-                "required_skills": ["hyperframes", "hyperframes-core", "hyperframes-creative",
-                                    "hyperframes-animation", "hyperframes-cli"],
-                "required_outputs": ["index.html", "storyboard.json", "frame.md", "visual-vocabulary-audit.json"],
+                "required_skills": (
+                    motion_request["required_hyperframes_skills"] if motion_request else
+                    ["hyperframes", "hyperframes-core", "hyperframes-creative",
+                     "hyperframes-animation", "hyperframes-cli"]
+                ),
+                "required_outputs": [
+                    "index.html", "storyboard.json", "frame.md", "visual-vocabulary-audit.json",
+                    *(["renderer-export.json", "keyframe-receipts/*.json"]
+                      if motion_quality_enabled else []),
+                ],
                 "motion_output": "hyperframes_render",
                 "renderer_route": str(route_path),
                 "brand_motion_playbook": str(
@@ -1892,7 +3084,20 @@ class Director:
                 "route_capabilities": route["capability_skills"],
                 "ip_component_artifacts": [str(path) for path in ip_artifacts],
                 "optional_renderer_artifacts": [str(path) for path in renderer_artifacts],
-                "minimum_distinct_sample_structures": 4,
+                **({"target_binding_contract": target_binding_contract}
+                   if target_binding_contract is not None else {}),
+                **({"motion_design": motion_request} if motion_request is not None else {}),
+                **({"renderer_evidence": {
+                    "contract_output": str(self.renderer_evidence_contract_path("sample")),
+                    "project_manifest": str(self.renderer_project_manifest_path("sample")),
+                    "renderer_export": str(self.renderer_export_path("sample")),
+                    "keyframe_receipt_directory": str(self.keyframe_receipt_dir("sample")),
+                    "preview_render_parity": str(self.motion_parity_path("sample")),
+                    "required_phases": ["entrance", "mid", "pre_exit", "post_exit"],
+                    "actual_runtime_export_required": True,
+                    **self._runtime_capture_request("sample"),
+                }} if motion_quality_enabled else {}),
+                **({} if motion_quality_enabled else {"minimum_distinct_sample_structures": 4}),
                 "forbidden": list(FORBIDDEN_NEW_PATHS[2:]),
             })
             self._action_required(
@@ -1902,10 +3107,28 @@ class Director:
                   "request": str(packet), "expected_project": str(project)}],
             )
         storyboard = read_json(storyboard_path)
-        brief = read_json(self.semantic_brief_path)
         assert_valid(validate_storyboard(storyboard, brief), "HyperFrames storyboard")
+        binding_artifacts: list[Path] = []
+        renderer_evidence_artifacts: list[Path] = []
+        if motion_quality_enabled:
+            assert_valid(
+                validate_storyboard_motion_binding(storyboard, motion_contract or {}),
+                "sample motion-design binding",
+            )
+            assert_valid(
+                validate_storyboard_bindings(storyboard, self.sample_target_binding_dir),
+                "sample target bindings",
+            )
+            binding_artifacts = sorted(self.sample_target_binding_dir.glob("*.json"))
+            renderer_evidence_artifacts.append(self._write_renderer_evidence_contract(
+                scope="sample", motion_contract=motion_contract or {},
+                storyboard_path=storyboard_path,
+            ))
         assert_valid(
-            validate_visual_vocabulary_audit(read_json(vocabulary_path), storyboard),
+            validate_visual_vocabulary_audit(
+                read_json(vocabulary_path), storyboard,
+                decision_complete=motion_quality_enabled,
+            ),
             "sample visual vocabulary audit",
         )
         commands = {
@@ -1922,13 +3145,26 @@ class Director:
         write_json(command_path, commands)
         snapshot_plan_path = project / "motion-snapshot-plan.json"
         motion_sidecar_path = project / "motion.json"
-        snapshot_plan = build_motion_snapshot_plan(storyboard)
+        snapshot_plan = build_motion_snapshot_plan(
+            storyboard,
+            motion_design_contract=motion_contract if motion_quality_enabled else None,
+            recipe_registry=(
+                load_recipe_registry(DEFAULT_RECIPE_REGISTRY) if motion_quality_enabled else None
+            ),
+        )
         write_json(snapshot_plan_path, snapshot_plan)
         write_json(motion_sidecar_path, build_motion_sidecar(snapshot_plan))
+        project_manifest_path = self.renderer_project_manifest_path("sample")
+        if motion_quality_enabled:
+            build_renderer_project_manifest(project, project_manifest_path)
         self._complete("hyperframes_storyboard", [storyboard_path, vocabulary_path, index_path,
                                                     command_path, route_path, snapshot_plan_path,
                                                     motion_sidecar_path, *ip_artifacts,
-                                                    *renderer_artifacts])
+                                                    *renderer_artifacts, self.adaptive_layout_path,
+                                                    *binding_artifacts, *motion_design_artifacts,
+                                                    *renderer_evidence_artifacts,
+                                                    *([project_manifest_path]
+                                                      if motion_quality_enabled else [])])
 
     def stage_audio(self) -> None:
         path = self.root / "audio-contract.json"
@@ -1953,15 +3189,33 @@ class Director:
             artifacts.append(audio_plan)
         elif (self.project.get("audio", {}).get("production", {}).get("enabled") is True
               and storyboard.is_file() and self.execute_external):
-            artifacts.extend(self._metered_provider_call(
-                ("sfx", "bgm"),
-                lambda: produce_audio_assets(
-                    storyboard=storyboard, project=self.project, project_root=self.context.root,
-                    output_dir=self.context.edit_dir / "audio", source_audio=self.context.source_video,
-                    runner=self.adapter_runner,
-                ),
-                stage="audio",
-            ))
+            producer = lambda: produce_audio_assets(
+                storyboard=storyboard, project=self.project, project_root=self.context.root,
+                output_dir=self.context.edit_dir / "audio", source_audio=self.context.source_video,
+                runner=self.adapter_runner, semantic_brief=self.semantic_brief_path,
+            )
+            bgm = self.project.get("audio", {}).get("bgm", {})
+            bgm_enabled = bgm.get("enabled", bgm.get("enabled_by_default", True)) is True
+            bgm_asset = None
+            if bgm.get("asset"):
+                configured_asset = Path(str(bgm["asset"]))
+                bgm_asset = (
+                    configured_asset.resolve()
+                    if configured_asset.is_absolute()
+                    else (self.context.root / configured_asset).resolve()
+                )
+            external_bgm = (
+                bgm_enabled
+                and not (bgm_asset and bgm_asset.is_file())
+                and any(
+                    isinstance(row, dict) and row.get("enabled") is True
+                    for row in (bgm.get("provider_chain") or [])
+                )
+            )
+            if external_bgm:
+                artifacts.extend(self._metered_provider_call(("bgm",), producer, stage="audio"))
+            else:
+                artifacts.extend(producer())
         else:
             write_json(production_request, {
                 "schema_version": 1,
@@ -1973,11 +3227,189 @@ class Director:
                 "execute_with": "run/resume using --execute-external or the deliver command",
             })
             artifacts.append(production_request)
+        if (audio_plan.is_file() and storyboard.is_file() and self.sample_candidate_raw_path.is_file()
+                and self.execute_external):
+            plan_payload = read_json(audio_plan)
+            storyboard_payload = read_json(storyboard)
+            if not isinstance(plan_payload, dict) or not isinstance(storyboard_payload, dict):
+                plan_payload = {}
+                storyboard_payload = {}
+            decisions = (plan_payload.get("motion_sfx") or {}).get("event_decisions") or []
+            mix_check = ((plan_payload.get("motion_sfx") or {}).get("mix_audibility_check") or {})
+            expected_mix_evidence = self.creative_review_audio_dir.parent / "mix-audibility.json"
+            declared_evidence = mix_check.get("evidence")
+            declared_evidence_path = None
+            if declared_evidence:
+                candidate = Path(str(declared_evidence))
+                declared_evidence_path = (
+                    candidate.resolve()
+                    if candidate.is_absolute()
+                    else (audio_plan.parent / candidate).resolve()
+                )
+            mix_evidence_ready = False
+            if (
+                mix_check.get("status") == "pass"
+                and declared_evidence_path == expected_mix_evidence.resolve()
+                and expected_mix_evidence.is_file()
+                and mix_check.get("evidence_sha256") == sha256_file(expected_mix_evidence)
+            ):
+                mix_evidence_ready = not validate_sample_audio_evidence(
+                    audio_plan=audio_plan, storyboard=storyboard,
+                    candidate_media=self.sample_candidate_raw_path,
+                    evidence_path=expected_mix_evidence,
+                    output_dir=self.creative_review_audio_dir,
+                    expected_evidence_path=expected_mix_evidence,
+                    declared_evidence_sha256=str(mix_check.get("evidence_sha256") or ""),
+                )
+            expected_auditions = []
+            by_id = {
+                str(event.get("id")): event
+                for event in (storyboard_payload.get("events") or [])
+                if isinstance(event, dict) and event.get("treatment") != "quiet_source"
+            }
+            for decision in decisions:
+                event = by_id.get(str(decision.get("event_id"))) or {}
+                stem = audition_filename_stem(
+                    str(event.get("semantic_event_id") or decision.get("event_id"))
+                )
+                expected_auditions.extend([
+                    self.creative_review_audio_dir / f"{stem}-sfx-off.wav",
+                    self.creative_review_audio_dir / f"{stem}-sfx-on.wav",
+                ])
+            if decisions and (
+                not mix_evidence_ready or any(not path.is_file() for path in expected_auditions)
+            ):
+                artifacts.extend(materialize_sample_audio_evidence(
+                    storyboard=storyboard,
+                    audio_plan=audio_plan,
+                    candidate_media=self.sample_candidate_raw_path,
+                    output_dir=self.creative_review_audio_dir,
+                ))
+            cue_decisions = [
+                row for row in decisions
+                if isinstance(row, dict) and row.get("decision") == "cue"
+            ]
+            if cue_decisions:
+                mix_errors = ["sample review mix receipt is missing"]
+                if self.sample_review_mix_receipt_path.is_file():
+                    try:
+                        mix_errors = validate_sample_review_mix_receipt(
+                            read_json(self.sample_review_mix_receipt_path),
+                            candidate_media=self.sample_candidate_raw_path,
+                            audio_plan=audio_plan,
+                            output=self.sample_candidate_sfx_path,
+                        )
+                    except (OSError, ValueError, json.JSONDecodeError) as error:
+                        mix_errors = [f"sample review mix receipt cannot be validated: {error}"]
+                if mix_errors:
+                    materialize_sample_review_mix(
+                        candidate_media=self.sample_candidate_raw_path,
+                        audio_plan=audio_plan,
+                        output=self.sample_candidate_sfx_path,
+                        receipt_path=self.sample_review_mix_receipt_path,
+                    )
+                artifacts.extend([
+                    self.sample_candidate_sfx_path,
+                    self.sample_review_mix_receipt_path,
+                ])
+                perceptual = (
+                    (self.project.get("audio") or {}).get("sfx", {}).get("perceptual") or {}
+                )
+                if perceptual.get("enabled") is True:
+                    evidence_path = self.creative_review_audio_dir.parent / "mix-audibility.json"
+                    license_path = self.sample_hyperframes_project / "audio-sfx-manifest.json"
+                    motion_contract = self.motion_design_dir("sample") / "motion-design-contract.json"
+                    required_motion_audio = [evidence_path, license_path, motion_contract]
+                    if any(not item.is_file() for item in required_motion_audio):
+                        self._action_required(
+                            "audio",
+                            "Perceptual motion-audio contracts require measured mix, license, and motion-design evidence",
+                            [{"owner": "director_audio", "missing_artifacts": [
+                                str(item) for item in required_motion_audio if not item.is_file()
+                            ]}],
+                        )
+                    artifacts.extend(materialize_motion_audio_decisions(
+                        motion_design_contract=motion_contract,
+                        audio_plan=audio_plan,
+                        source_audio=self.context.source_video,
+                        final_mix=self.sample_candidate_sfx_path,
+                        perceptual_evidence=evidence_path,
+                        license_evidence=license_path,
+                        audio_policy=perceptual,
+                        output_dir=self.motion_audio_decision_manifest_path.parent,
+                    ))
         if (self.root / "adapter-state.json").is_file():
             artifacts.append(self.root / "adapter-state.json")
+        validation_errors: list[str] = []
+        audio_assets: list[Path] = []
+        if not storyboard.is_file():
+            validation_errors.append("sample storyboard is missing")
+        elif not audio_plan.is_file():
+            validation_errors.append("sample audio plan is missing")
+        else:
+            try:
+                audio_plan_payload = read_json(audio_plan)
+                storyboard_payload = read_json(storyboard)
+                if not isinstance(audio_plan_payload, dict):
+                    validation_errors.append("sample audio plan must be a JSON object")
+                    audio_plan_payload = {}
+                if not isinstance(storyboard_payload, dict):
+                    validation_errors.append("sample storyboard must be a JSON object")
+                    storyboard_payload = {}
+                validation_errors.extend(validate_audio_plan(
+                    audio_plan_payload, storyboard_payload, self.project,
+                    base_dir=self.sample_hyperframes_project,
+                ))
+                decisions = ((audio_plan_payload.get("motion_sfx") or {}).get(
+                    "event_decisions"
+                ) or [])
+                if any(
+                    isinstance(row, dict) and row.get("decision") == "cue"
+                    for row in decisions
+                ):
+                    audibility = ((audio_plan_payload.get("motion_sfx") or {}).get(
+                        "mix_audibility_check"
+                    ) or {})
+                    evidence_value = audibility.get("evidence")
+                    evidence_path = Path(str(evidence_value or ""))
+                    evidence_path = (
+                        evidence_path.resolve() if evidence_path.is_absolute()
+                        else (audio_plan.parent / evidence_path).resolve()
+                    )
+                    validation_errors.extend(validate_sample_audio_evidence(
+                        audio_plan=audio_plan, storyboard=storyboard,
+                        candidate_media=self.sample_candidate_raw_path,
+                        evidence_path=evidence_path,
+                        output_dir=self.creative_review_audio_dir,
+                        expected_evidence_path=(
+                            self.creative_review_audio_dir.parent / "mix-audibility.json"
+                        ),
+                        declared_evidence_sha256=str(audibility.get("evidence_sha256") or ""),
+                    ))
+                if not validation_errors:
+                    audio_assets = _audio_plan_asset_files(
+                        audio_plan_payload, self.sample_hyperframes_project,
+                    )
+            except (OSError, ValueError, json.JSONDecodeError) as error:
+                validation_errors.append(f"sample audio plan cannot be validated: {error}")
+        readiness_path = self.root / "audio-readiness.json"
+        readiness = "asset_ready" if not validation_errors else "contract_ready"
+        write_json(readiness_path, {
+            "schema_version": 1,
+            "status": readiness,
+            "storyboard": str(storyboard.resolve()),
+            "storyboard_sha256": sha256_file(storyboard) if storyboard.is_file() else None,
+            "audio_plan": str(audio_plan.resolve()),
+            "audio_plan_sha256": sha256_file(audio_plan) if audio_plan.is_file() else None,
+            "asset_records": [
+                {"path": str(asset), "sha256": sha256_file(asset)} for asset in audio_assets
+            ],
+            "validation_errors": validation_errors,
+        })
+        artifacts.extend([readiness_path, self.sample_candidate_raw_path, *audio_assets])
         self._complete(
             "audio", artifacts,
-            readiness="asset_ready" if audio_plan.is_file() else "contract_ready",
+            readiness=readiness,
         )
 
     def stage_cover(self) -> None:
@@ -2006,14 +3438,14 @@ class Director:
                 "user_identity_approval_remains_distinct": True,
             })
         cover_config = self.project.get("cover", {})
-        if cover_config.get("production", {}).get("enabled") is not True:
-            self._complete("cover", [path], readiness="contract_ready")
-            return
         if cover_config.get("enabled", True) is False:
             decision = self.root / "cover-decision.json"
             write_json(decision, {"schema_version": 1, "status": "disabled",
                                   "reason": "project explicitly disabled cover production"})
             self._complete("cover", [path, decision], readiness="not_applicable")
+            return
+        if cover_config.get("production", {}).get("enabled") is not True:
+            self._complete("cover", [path], readiness="contract_ready")
             return
         prepared_project = self.project
         reference_artifacts: list[Path] = []
@@ -2067,13 +3499,23 @@ class Director:
 
     def stage_sample_qa(self) -> None:
         self._validate_current_production_contract()
+        caption_review_artifacts = self._ensure_sample_caption_delivery()
+        promise_closure = self._ensure_editorial_promise_closure()
         review_path = self.root / "sample-qa" / "aesthetic-review.json"
         storyboard_path = self.sample_hyperframes_project / "storyboard.json"
         audio_plan_path = self.sample_hyperframes_project / "audio-plan.json"
-        if not review_path.is_file() or not audio_plan_path.is_file():
+        storyboard = read_json(storyboard_path)
+        motion_quality_enabled = self.project.get("motion_quality", {}).get("enabled") is True
+        motion_errors: list[str] = []
+        motion_artifacts: list[Path] = []
+        if motion_quality_enabled:
+            motion_errors, motion_artifacts = self._validate_motion_render_evidence(
+                scope="sample", storyboard=storyboard,
+            )
+        if not review_path.is_file() or not audio_plan_path.is_file() or motion_errors:
             packet = self.root / "sample-qa-request.json"
             write_json(packet, {
-                "schema_version": 2,
+                "schema_version": 3 if motion_quality_enabled else 2,
                 "owner": "director_with_human_level_visual_review",
                 "sample_duration_seconds": [60, 90],
                 "storyboard": str(storyboard_path),
@@ -2086,6 +3528,15 @@ class Director:
                     "replayable connector/target measurements", "composited overlay contrast over source footage",
                 ],
                 "missing_artifacts": [str(path) for path in (review_path, audio_plan_path) if not path.is_file()],
+                **({
+                    "renderer_evidence_errors": motion_errors,
+                    "renderer_evidence_contract": str(
+                        self.renderer_evidence_contract_path("sample")
+                    ),
+                    "renderer_export": str(self.renderer_export_path("sample")),
+                    "keyframe_receipt_directory": str(self.keyframe_receipt_dir("sample")),
+                    "preview_render_parity": str(self.motion_parity_path("sample")),
+                } if motion_quality_enabled else {}),
                 "output": str(review_path),
             })
             self._action_required(
@@ -2095,8 +3546,16 @@ class Director:
                   "expected_artifact": str(review_path)}],
             )
         review = read_json(review_path)
-        storyboard = read_json(storyboard_path)
-        errors = validate_aesthetic_review(review, storyboard)
+        keyframe_receipts: dict[str, Path] | None = None
+        if motion_quality_enabled:
+            keyframe_receipts = {
+                str(read_json(path).get("event_id") or ""): path.resolve()
+                for path in sorted(self.keyframe_receipt_dir("sample").glob("*.json"))
+            }
+        errors = validate_aesthetic_review(
+            review, storyboard, keyframe_receipt_paths=keyframe_receipts,
+            decision_complete=motion_quality_enabled,
+        )
         assert_valid(errors, "sample aesthetic QA")
         assert_valid(
             validate_audio_plan(
@@ -2114,6 +3573,10 @@ class Director:
             semantic_brief_path=self.semantic_brief_path,
             config=dynamics_config,
             production_contract_path=self.production_contract_path,
+            renderer_export_path=(
+                self.renderer_export_path("sample") if motion_quality_enabled else None
+            ),
+            keyframe_receipt_paths=keyframe_receipts,
         )
         write_json(dynamics_path, dynamics)
         assert_valid(
@@ -2121,6 +3584,10 @@ class Director:
                 dynamics, storyboard_path, self.semantic_brief_path,
                 config=dynamics_config,
                 production_contract_path=self.production_contract_path,
+                renderer_export_path=(
+                    self.renderer_export_path("sample") if motion_quality_enabled else None
+                ),
+                keyframe_receipt_paths=keyframe_receipts,
             ),
             "sample visual dynamics QA",
         )
@@ -2138,17 +3605,206 @@ class Director:
             "audio_plan": str(audio_plan_path), "audio_plan_sha256": sha256_file(audio_plan_path),
             "visual_dynamics": str(dynamics_path),
             "visual_dynamics_sha256": sha256_file(dynamics_path),
+            "motion_render_evidence": (
+                {"status": "pass", "artifact_count": len(motion_artifacts)}
+                if motion_quality_enabled else {"status": "disabled"}
+            ),
             "errors": [],
         })
         self._complete("sample_qa", [storyboard_path, review_path, audio_plan_path, dynamics_path,
                                      report_path,
-                                     *_review_evidence_files(review)])
+                                     *caption_review_artifacts,
+                                     *([promise_closure] if promise_closure is not None else []),
+                                     *_review_evidence_files(review), *motion_artifacts])
+
+    def _creative_review_receipts(self) -> dict[str, Path]:
+        receipts: dict[str, Path] = {}
+        for path in sorted(self.keyframe_receipt_dir("sample").glob("*.json")):
+            try:
+                event_id = str(read_json(path).get("event_id") or "")
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            if event_id:
+                receipts[event_id] = path.resolve()
+        return receipts
+
+    def _creative_review_audio_auditions(
+        self, event_ids: list[str],
+    ) -> tuple[dict[str, dict[str, Path]], list[str]]:
+        auditions: dict[str, dict[str, Path]] = {}
+        missing: list[str] = []
+        for event_id in event_ids:
+            rows: dict[str, Path] = {}
+            file_stem = audition_filename_stem(event_id)
+            for name in ("sfx_off", "sfx_on", "bgm_off", "bgm_on"):
+                stem = f"{file_stem}-{name.replace('_', '-')}"
+                path = next(
+                    (candidate.resolve() for suffix in (".wav", ".mp3", ".m4a", ".aac")
+                     if (candidate := self.creative_review_audio_dir / f"{stem}{suffix}").is_file()),
+                    None,
+                )
+                if path is not None:
+                    rows[name] = path
+            if "sfx_off" not in rows or "sfx_on" not in rows:
+                missing.append(
+                    str(self.creative_review_audio_dir / f"{event_id}-sfx-off|sfx-on.(wav|mp3|m4a|aac)")
+                )
+            auditions[event_id] = rows
+        return auditions, missing
+
+    def _ensure_creative_review(self) -> list[Path]:
+        motion_contract_path = self.motion_design_dir("sample") / "motion-design-contract.json"
+        storyboard_path = self.sample_hyperframes_project / "storyboard.json"
+        audio_plan_path = self.sample_hyperframes_project / "audio-plan.json"
+        gate_paths = [
+            self.root / "sample-qa" / "gate-report.json",
+            self.root / "sample-qa" / "aesthetic-review.json",
+            self.root / "sample-qa" / "visual-dynamics-qa.json",
+            self.motion_parity_path("sample"),
+        ]
+        receipts = self._creative_review_receipts()
+        motion_contract = read_json(motion_contract_path) if motion_contract_path.is_file() else {}
+        event_ids = [str(value) for value in motion_contract.get("selected_event_ids") or []]
+        auditions, missing_auditions = self._creative_review_audio_auditions(event_ids)
+        required = [
+            self.sample_baseline_path, self.sample_candidate_path, motion_contract_path,
+            storyboard_path, self.semantic_brief_path, audio_plan_path, *gate_paths,
+        ]
+        missing = [str(path) for path in required if not path.is_file()]
+        if set(receipts) != set(event_ids):
+            missing.append(str(self.keyframe_receipt_dir("sample") / "<every-event>.json"))
+        missing.extend(missing_auditions)
+        request_path = self.root / "sample-qa" / "creative-review-request.json"
+        if missing:
+            write_json(request_path, {
+                "schema_version": 1,
+                "owner": "hyperframes_audio_and_director_review",
+                "purpose": "materialize a paired baseline/candidate review without a long render",
+                "baseline": str(self.sample_baseline_path),
+                "candidate": str(self.sample_candidate_path),
+                "candidate_requirement": "actual 60-90 second HyperFrames sample render",
+                "motion_design_contract": str(motion_contract_path),
+                "keyframe_receipts": str(self.keyframe_receipt_dir("sample")),
+                "audio_audition_directory": str(self.creative_review_audio_dir),
+                "audio_audition_naming": "<event-id>-sfx-off/on and optional bgm-off/on",
+                "required_event_ids": event_ids,
+                "missing": missing,
+                "output": str(self.creative_review_path),
+                "user_decision_default": "pending",
+                "request_metadata_is_not_review_evidence": True,
+            })
+            self._action_required(
+                "preview_approval",
+                "Paired baseline/candidate media, four-phase evidence, and audio auditions are required",
+                [{
+                    "owner": "hyperframes_audio_and_director_review",
+                    "request": str(request_path),
+                    "expected_outputs": [str(self.sample_candidate_path), str(self.creative_review_path)],
+                }],
+            )
+        if not self.creative_review_path.is_file():
+            try:
+                baseline_duration = _ffprobe_duration(self.sample_baseline_path)
+                candidate_duration = _ffprobe_duration(self.sample_candidate_path)
+                duration_errors = validate_sample_pair_durations(
+                    baseline_duration, candidate_duration,
+                )
+                if duration_errors:
+                    raise ValueError("; ".join(duration_errors))
+                build_creative_review_contract(
+                    project_id=str(self.project.get("video_id") or self.context.root.name),
+                    baseline_path=self.sample_baseline_path,
+                    candidate_path=self.sample_candidate_path,
+                    baseline_duration_seconds=baseline_duration,
+                    candidate_duration_seconds=candidate_duration,
+                    motion_design_contract_path=motion_contract_path,
+                    storyboard_path=storyboard_path,
+                    semantic_brief_path=self.semantic_brief_path,
+                    keyframe_receipt_paths=receipts,
+                    gate_report_paths=gate_paths,
+                    audio_auditions=auditions,
+                    motion_audio_decisions_path=self.creative_review_motion_audio_path,
+                    output=self.creative_review_path,
+                )
+            except (
+                OSError, ValueError, json.JSONDecodeError, DirectorContractError,
+                subprocess.CalledProcessError,
+            ) as error:
+                write_json(request_path, {
+                    "schema_version": 1,
+                    "owner": "director_with_media_review",
+                    "reason": str(error),
+                    "output": str(self.creative_review_path),
+                    "user_decision_default": "pending",
+                })
+                self._action_required(
+                    "preview_approval", "Paired creative-review contract could not be built",
+                    [{"owner": "director_with_media_review", "request": str(request_path)}],
+                )
+        review = read_json(self.creative_review_path)
+        errors = validate_creative_review(
+            review,
+            motion_design_contract_path=motion_contract_path,
+            storyboard_path=storyboard_path,
+            keyframe_receipt_paths=receipts,
+            motion_audio_decisions_path=self.creative_review_motion_audio_path,
+        )
+        if errors:
+            write_json(self.creative_review_path, mark_creative_review_stale(review, errors))
+            write_json(request_path, {
+                "schema_version": 1, "owner": "director_with_media_review",
+                "reason": "creative review is stale or invalid", "errors": errors,
+                "output": str(self.creative_review_path),
+            })
+            self._action_required(
+                "preview_approval", "Paired creative-review evidence is stale or invalid",
+                [{"owner": "director_with_media_review", "request": str(request_path)}],
+            )
+        dashboard = generate_dashboard(
+            project_root=self.context.root,
+            director_root=self.root,
+            output=self.creative_review_dashboard_path,
+            creative_review_path=self.creative_review_path,
+            motion_design_contract_path=motion_contract_path,
+        )
+        return [
+            self.creative_review_path, dashboard, self.sample_baseline_path,
+            self.sample_candidate_path, *receipts.values(),
+            *[path for rows in auditions.values() for path in rows.values()],
+        ]
 
     def stage_preview_approval(self) -> None:
         approval = self.root / "preview-approval.json"
         storyboard = self.sample_hyperframes_project / "storyboard.json"
         review = self.root / "sample-qa" / "aesthetic-review.json"
         gate = self.root / "sample-qa" / "gate-report.json"
+        motion_quality_enabled = self.project.get("motion_quality", {}).get("enabled") is True
+        creative_artifacts: list[Path] = []
+        if motion_quality_enabled:
+            creative_artifacts = self._ensure_creative_review()
+            paired_review = read_json(self.creative_review_path)
+            if (
+                paired_review.get("status") != "approved"
+                or (paired_review.get("user_review") or {}).get("decision") != "approved"
+            ):
+                self._action_required(
+                    "preview_approval",
+                    "User paired creative approval is required before any full HyperFrames render",
+                    [{
+                        "owner": "user",
+                        "capability": "paired baseline/candidate creative approval",
+                        "dashboard": str(self.creative_review_dashboard_path),
+                        "expected_artifact": str(self.creative_review_path),
+                        "command": [
+                            sys.executable, str(Path(__file__).resolve()), "approve-sample",
+                            "--project", str(self.context.project_file),
+                            "--approved-by", "<human-name>",
+                            "--publish-willingness", "yes|no|unsure",
+                            "--preference", "baseline|candidate|tie",
+                            "--review-reason", "<why-the-candidate-is-or-is-not-publishable>",
+                        ],
+                    }],
+                )
         if not approval.is_file():
             self._action_required(
                 "preview_approval",
@@ -2166,6 +3822,8 @@ class Director:
             "aesthetic_review_sha256": review,
             "gate_report_sha256": gate,
         }
+        if motion_quality_enabled:
+            evidence["creative_review_sha256"] = self.creative_review_path
         for field, path in evidence.items():
             if not path.is_file() or row.get(field) != sha256_file(path):
                 raise DirectorContractError(
@@ -2180,7 +3838,7 @@ class Director:
             ):
                 raise DirectorContractError("sample approval is stale: golden editorial baseline")
             assert_valid(validate_baseline(read_json(baseline)), "golden editorial baseline")
-        artifacts = [approval]
+        artifacts = [approval, *creative_artifacts]
         if self.project.get("editorial_regression", {}).get("enabled") is True:
             baseline_path = self.root / "editorial-regression" / "golden-baseline.json"
             artifacts.append(baseline_path)
@@ -2196,6 +3854,57 @@ class Director:
     def stage_full_hyperframes_storyboard(self) -> None:
         project = self.full_hyperframes_project
         full_brief_path = self.full_semantic_brief_path
+        motion_quality_enabled = self.project.get("motion_quality", {}).get("enabled") is True
+        target_binding_contract = None
+        motion_design_artifacts: list[Path] = []
+        motion_contract: dict[str, Any] | None = None
+        if motion_quality_enabled:
+            self.full_target_binding_dir.mkdir(parents=True, exist_ok=True)
+            target_binding_contract = _target_binding_request_contract(
+                layout_path=self.adaptive_layout_path,
+                binding_dir=self.full_target_binding_dir,
+                schema_path=Path(__file__).parents[1] / "references" / "p0-p2-design"
+                / "schemas" / "target-binding.schema.json",
+                identity_mode=str((self.project.get("identity") or {}).get("mode") or "generic"),
+            )
+            if not full_brief_path.is_file():
+                packet = self.root / "full-semantic-brief-request.json"
+                write_json(packet, {
+                    "schema_version": 3,
+                    "owner": "director_with_llm",
+                    "scope": "complete output timeline",
+                    "approved_sample_semantic_brief": str(self.semantic_brief_path),
+                    "video_use_edl": str(self.video_use_dir / "edl.json"),
+                    "evidence_bundle": str(self.evidence_bundle_path),
+                    "required_output": str(full_brief_path),
+                    "opportunity_model": "decision_complete_v1",
+                    "hyperframes_authoring_allowed": False,
+                })
+                self._action_required(
+                    "full_hyperframes_storyboard",
+                    "A decision-complete full semantic brief is required before motion compilation",
+                    [{"owner": "director_with_llm", "request": str(packet),
+                      "expected_artifact": str(full_brief_path)}],
+                )
+            motion_contract, motion_design_artifacts = self._ensure_motion_design(
+                scope="full", brief_path=full_brief_path,
+                binding_dir=self.full_target_binding_dir,
+            )
+        motion_request = (
+            self._motion_design_request("full", motion_contract)
+            if motion_contract is not None else None
+        )
+        renderer_route_path = self.root / "renderer-route.json"
+        if motion_contract is not None:
+            renderer_route_path = self.root / "full-renderer-route.json"
+            write_json(
+                renderer_route_path,
+                route_hyperframes(
+                    self.project, read_json(self.evidence_bundle_path),
+                    motion_design_contract=motion_contract,
+                ),
+            )
+            motion_design_artifacts.append(renderer_route_path)
         storyboard_path = project / "storyboard.json"
         vocabulary_path = project / "visual-vocabulary-audit.json"
         index_path = project / "index.html"
@@ -2204,32 +3913,44 @@ class Director:
         if not full_brief_path.is_file() or any(not path.is_file() for path in required):
             packet = self.root / "full-hyperframes-request.json"
             write_json(packet, {
-                "schema_version": 2,
+                "schema_version": 3 if motion_quality_enabled else 2,
                 "owner": "hyperframes",
                 "scope": "complete output timeline; never copy the sample duration as the final duration",
                 "approved_sample_project": str(self.sample_hyperframes_project),
                 "approved_sample_semantic_brief": str(self.semantic_brief_path),
                 "full_semantic_brief": str(full_brief_path),
-                "semantic_inheritance": {
-                    "explicit_semantic_event_id_required": True,
-                    "bind": [
-                        "treatment", "anchor", "transcript_word_ids", "source_start", "source_end",
-                        "output_start", "output_end", "viewer_takeaway", "approved_visible_copy",
-                    ],
-                    "derived_visible_copy_manifest": (
-                        "exact normalized list from approved_visible_copy; empty when none"
-                    ),
-                    "other_render_text_fields_forbidden": True,
-                    "storyboard_semantic_fallback_forbidden": True,
-                },
+                "semantic_inheritance": _semantic_inheritance_contract(
+                    read_json(full_brief_path) if full_brief_path.is_file() else {"events": []},
+                    motion_quality_enabled=motion_quality_enabled,
+                ),
                 "video_use_edl": str(self.video_use_dir / "edl.json"),
                 "video_use_captions": str(self.video_use_dir / "captions.json"),
                 "expected_duration_seconds": self._expected_timeline_duration(),
                 "project": str(project),
-                "renderer_route": str(self.root / "renderer-route.json"),
-                "required_outputs": [full_brief_path.name, *[path.name for path in required]],
-                "required_skills": ["hyperframes", "hyperframes-core", "hyperframes-creative",
-                                    "hyperframes-animation", "hyperframes-cli"],
+                "renderer_route": str(renderer_route_path),
+                "required_outputs": [
+                    full_brief_path.name, *[path.name for path in required],
+                    *(["renderer-export.json", "keyframe-receipts/*.json"]
+                      if motion_quality_enabled else []),
+                ],
+                "required_skills": (
+                    motion_request["required_hyperframes_skills"] if motion_request else
+                    ["hyperframes", "hyperframes-core", "hyperframes-creative",
+                     "hyperframes-animation", "hyperframes-cli"]
+                ),
+                **({"target_binding_contract": target_binding_contract}
+                   if target_binding_contract is not None else {}),
+                **({"motion_design": motion_request} if motion_request is not None else {}),
+                **({"renderer_evidence": {
+                    "contract_output": str(self.renderer_evidence_contract_path("full")),
+                    "project_manifest": str(self.renderer_project_manifest_path("full")),
+                    "renderer_export": str(self.renderer_export_path("full")),
+                    "keyframe_receipt_directory": str(self.keyframe_receipt_dir("full")),
+                    "preview_render_parity": str(self.motion_parity_path("full")),
+                    "required_phases": ["entrance", "mid", "pre_exit", "post_exit"],
+                    "actual_runtime_export_required": True,
+                    **self._runtime_capture_request("full"),
+                }} if motion_quality_enabled else {}),
                 "forbidden": ["sample project reused as final", *FORBIDDEN_NEW_PATHS],
             })
             self._action_required(
@@ -2241,6 +3962,10 @@ class Director:
         if project.resolve() == self.sample_hyperframes_project.resolve():
             raise DirectorContractError("sample and full HyperFrames projects must be different directories")
         full_brief = read_json(full_brief_path)
+        if motion_quality_enabled and not is_decision_complete_brief(full_brief):
+            raise DirectorContractError(
+                "enabled motion quality requires a schema 3 decision-complete full semantic brief"
+            )
         assert_valid(validate_semantic_brief(full_brief), "full semantic brief")
         expected_duration = self._expected_timeline_duration()
         scope = full_brief.get("scope") or {}
@@ -2260,8 +3985,27 @@ class Director:
         ), "full semantic brief evidence binding")
         storyboard = read_json(storyboard_path)
         assert_valid(validate_storyboard(storyboard, full_brief), "full HyperFrames storyboard")
+        binding_artifacts: list[Path] = []
+        renderer_evidence_artifacts: list[Path] = []
+        if motion_quality_enabled:
+            assert_valid(
+                validate_storyboard_motion_binding(storyboard, motion_contract or {}),
+                "full motion-design binding",
+            )
+            assert_valid(
+                validate_storyboard_bindings(storyboard, self.full_target_binding_dir),
+                "full target bindings",
+            )
+            binding_artifacts = sorted(self.full_target_binding_dir.glob("*.json"))
+            renderer_evidence_artifacts.append(self._write_renderer_evidence_contract(
+                scope="full", motion_contract=motion_contract or {},
+                storyboard_path=storyboard_path,
+            ))
         assert_valid(
-            validate_visual_vocabulary_audit(read_json(vocabulary_path), storyboard, full_video=True),
+            validate_visual_vocabulary_audit(
+                read_json(vocabulary_path), storyboard, full_video=True,
+                decision_complete=motion_quality_enabled,
+            ),
             "full-video visual vocabulary audit",
         )
         composition = storyboard.get("composition") or {}
@@ -2303,12 +4047,25 @@ class Director:
         write_json(command_path, commands)
         snapshot_plan_path = project / "motion-snapshot-plan.json"
         motion_sidecar_path = project / "motion.json"
-        snapshot_plan = build_motion_snapshot_plan(storyboard)
+        snapshot_plan = build_motion_snapshot_plan(
+            storyboard,
+            motion_design_contract=motion_contract if motion_quality_enabled else None,
+            recipe_registry=(
+                load_recipe_registry(DEFAULT_RECIPE_REGISTRY) if motion_quality_enabled else None
+            ),
+        )
         write_json(snapshot_plan_path, snapshot_plan)
         write_json(motion_sidecar_path, build_motion_sidecar(snapshot_plan))
+        project_manifest_path = self.renderer_project_manifest_path("full")
+        if motion_quality_enabled:
+            build_renderer_project_manifest(project, project_manifest_path)
         self._complete("full_hyperframes_storyboard", [full_brief_path, *required, command_path,
                                                         snapshot_plan_path, motion_sidecar_path,
-                                                        *audio_artifacts])
+                                                        *audio_artifacts, *binding_artifacts,
+                                                        *motion_design_artifacts,
+                                                        *renderer_evidence_artifacts,
+                                                        *([project_manifest_path]
+                                                          if motion_quality_enabled else [])])
 
     def stage_full_hyperframes_qa(self) -> None:
         qa_dir = self.root / "full-qa"
@@ -2322,6 +4079,8 @@ class Director:
         storyboard_path = self.full_hyperframes_project / "storyboard.json"
         vocabulary_path = self.full_hyperframes_project / "visual-vocabulary-audit.json"
         check_command = commands["check"]
+        motion_quality_enabled = self.project.get("motion_quality", {}).get("enabled") is True
+        motion_evidence_artifacts: list[Path] = []
         self._validate_current_production_contract()
 
         def check_receipt_is_current() -> bool:
@@ -2454,14 +4213,36 @@ class Director:
         if failed:
             raise DirectorContractError("full HyperFrames snapshot review failed checks: " + ", ".join(failed))
         parity = read_json(parity_path)
-        assert_valid(
-            validate_preview_render_parity(
-                parity,
-                read_json(self.full_hyperframes_project / "storyboard.json"),
-                configured_tolerances=self.project["qa"]["preview_render_parity"]["tolerances"],
-            ),
-            "HyperFrames preview/render parity",
-        )
+        if motion_quality_enabled:
+            motion_errors, motion_evidence_artifacts = self._validate_motion_render_evidence(
+                scope="full", storyboard=read_json(storyboard_path),
+            )
+            if motion_errors:
+                self._action_required(
+                    "full_hyperframes_qa",
+                    "Renderer-produced keyframe, DOM/geometry, and parity evidence must pass",
+                    [{
+                        "owner": "hyperframes_with_director_review",
+                        "errors": motion_errors,
+                        "renderer_evidence_contract": str(
+                            self.renderer_evidence_contract_path("full")
+                        ),
+                        "expected_artifacts": [
+                            str(self.renderer_export_path("full")),
+                            str(self.keyframe_receipt_dir("full")),
+                            str(parity_path),
+                        ],
+                    }],
+                )
+        else:
+            assert_valid(
+                validate_preview_render_parity(
+                    parity,
+                    read_json(self.full_hyperframes_project / "storyboard.json"),
+                    configured_tolerances=self.project["qa"]["preview_render_parity"]["tolerances"],
+                ),
+                "HyperFrames preview/render parity",
+            )
         parity_snapshots = [
             Path(str(sample[field])).resolve()
             for sample in parity.get("samples") or []
@@ -2470,11 +4251,21 @@ class Director:
         ]
         dynamics_path = qa_dir / "visual-dynamics-qa.json"
         dynamics_config = self.project.get("qa", {}).get("visual_dynamics", {})
+        full_keyframe_receipts: dict[str, Path] | None = None
+        if motion_quality_enabled:
+            full_keyframe_receipts = {
+                str(read_json(path).get("event_id") or ""): path.resolve()
+                for path in sorted(self.keyframe_receipt_dir("full").glob("*.json"))
+            }
         dynamics = build_visual_dynamics_report(
             storyboard_path=storyboard_path,
             semantic_brief_path=self.full_semantic_brief_path,
             config=dynamics_config,
             production_contract_path=self.production_contract_path,
+            renderer_export_path=(
+                self.renderer_export_path("full") if motion_quality_enabled else None
+            ),
+            keyframe_receipt_paths=full_keyframe_receipts,
         )
         write_json(dynamics_path, dynamics)
         assert_valid(
@@ -2482,6 +4273,10 @@ class Director:
                 dynamics, storyboard_path, self.full_semantic_brief_path,
                 config=dynamics_config,
                 production_contract_path=self.production_contract_path,
+                renderer_export_path=(
+                    self.renderer_export_path("full") if motion_quality_enabled else None
+                ),
+                keyframe_receipt_paths=full_keyframe_receipts,
             ),
             "full visual dynamics QA",
         )
@@ -2512,6 +4307,16 @@ class Director:
                 audio_plan_path=self.full_hyperframes_project / "audio-plan.json",
                 cover_plan_path=self.root / "cover-contract.json",
                 correction_ledger_path=ledger_path if ledger_path.is_file() else None,
+                renderer_export_path=(
+                    self.renderer_export_path("full") if motion_quality_enabled else None
+                ),
+                keyframe_receipt_paths=(
+                    list((full_keyframe_receipts or {}).values())
+                    if motion_quality_enabled else ()
+                ),
+                # Sample audio decisions are not evidence for the full timeline.
+                # Full delivery audio is validated by the dedicated audio gates.
+                motion_audio_decisions_path=None,
             )
             write_json(regression_path, regression)
             assert_valid(
@@ -2562,6 +4367,9 @@ class Director:
             "strict_check_passed": True,
             "snapshot_review_passed": True,
             "preview_render_parity_passed": True,
+            "motion_render_evidence": (
+                "pass" if motion_quality_enabled else "disabled"
+            ),
             "visual_dynamics_passed": dynamics.get("status") == "pass",
             "platform_occlusion_passed": True if occlusion_artifacts else "disabled",
         })
@@ -2569,7 +4377,8 @@ class Director:
                                                  snapshot_review_path, parity_path,
                                                  dynamics_path, self.production_contract_path,
                                                  evidence_path, *regression_artifacts, *snapshot_paths,
-                                                *parity_snapshots, *occlusion_artifacts])
+                                                *parity_snapshots, *occlusion_artifacts,
+                                                *motion_evidence_artifacts])
 
     def _validate_final_render_authorization(self) -> Path:
         authorization = self.root / "final-render-authorization.json"
@@ -2842,7 +4651,10 @@ class Director:
         burn_captions = (
             not caption_disabled
             and not existing_caption_verified
-            and self.context.input_mode != "polish_existing"
+        )
+        caption_sync_closure_enabled = (
+            ((self.project.get("editing") or {}).get("caption_sync_closure") or {})
+            .get("enabled") is True
         )
         if burn_captions:
             if not caption_asset.is_file():
@@ -2873,8 +4685,6 @@ class Director:
                 "mode": "preserve_verified_existing",
                 "reason": (
                     "verified existing subtitle stream or burned captions"
-                    if existing_caption_verified else
-                    "explicit polish_existing mode preserves the established caption layer"
                 ),
             }
         bgm_value = bgm_config.get("asset")
@@ -3106,9 +4916,12 @@ class Director:
         if edl_path.is_file():
             cursor = 0.0
             ranges = read_json(edl_path).get("ranges") or []
-            for row in ranges[:-1]:
-                cursor += float(row["end"]) - float(row["start"])
-                boundaries.append(cursor)
+            for index, row in enumerate(ranges):
+                if index:
+                    boundaries.append(float(row.get("timeline_start", cursor)))
+                cursor = float(row.get("timeline_start", cursor)) + (
+                    float(row["end"]) - float(row["start"])
+                )
         technical = run_technical_qa(
             output,
             output=media_report,
@@ -3120,7 +4933,52 @@ class Director:
             raise DirectorContractError(
                 "final technical QA failed: " + "; ".join(technical.get("blocking_errors") or [])
             )
+        sync_closure_path = self.video_use_dir / "caption-sync-final.json"
+        initial_sync_path = self.video_use_dir / "caption-sync-report.json"
+        mapped_words_path = self.video_use_dir / "mapped-words.json"
+        captions_path = self.video_use_dir / "captions.json"
+        if burn_captions and caption_sync_closure_enabled:
+            required_sync = [initial_sync_path, mapped_words_path, captions_path, caption_asset]
+            if any(not path.is_file() for path in required_sync):
+                self._action_required(
+                    "final_compose", "Final caption sync closure inputs are incomplete",
+                    [{"owner": "video-use", "missing_artifacts": [
+                        str(path) for path in required_sync if not path.is_file()
+                    ]}],
+                )
+            mapped_payload = read_json(mapped_words_path)
+            caption_payload = read_json(captions_path)
+            terms = list((self.project.get("editing") or {}).get("caption_terminology") or [])
+            sync_closure = synchronization_report(
+                mapped_payload.get("words") or [], caption_payload.get("segments") or [],
+                cut_boundaries=boundaries, terminology=[str(value) for value in terms],
+                final_composite={
+                    "required": True,
+                    "path": str(output.resolve()),
+                    "media_sha256": sha256_file(output),
+                    "caption_path": str(caption_asset.resolve()),
+                    "caption_sha256": sha256_file(caption_asset),
+                    "full_av_decode": technical.get("status") == "pass",
+                    "subtitle_filter_verified": (
+                        caption_delivery.get("mode") == "burned_in_last"
+                        and caption_filter is not None
+                        and caption_filter in command
+                    ),
+                    "compose_command_sha256": hashlib.sha256(json.dumps(
+                        command, ensure_ascii=False, separators=(",", ":"),
+                    ).encode("utf-8")).hexdigest(),
+                },
+            )
+            sync_closure["initial_sync_report"] = {
+                "path": str(initial_sync_path.resolve()),
+                "sha256": sha256_file(initial_sync_path),
+            }
+            if sync_closure.get("passed") is not True:
+                raise DirectorContractError("final caption synchronization closure did not pass")
+            write_json(sync_closure_path, sync_closure)
         artifacts = [output, command_path, media_report]
+        if sync_closure_path.is_file() and caption_sync_closure_enabled:
+            artifacts.append(sync_closure_path)
         if normalize_enabled:
             artifacts.extend([compose_output, normalization_report])
         self._complete("final_compose", artifacts)
@@ -3432,6 +5290,17 @@ class Director:
             )
         manifest_path = self._write_manual_handoff_manifest()
         ledger_path = self._ensure_manual_correction_ledger()
+        typed_handoff_path: Path | None = None
+        if backend in {"opencut", "other_nle", "openmontage"}:
+            edl_path = self.video_use_dir / "edl.json"
+            if edl_path.is_file():
+                typed = build_typed_nle_handoff(
+                    read_json(edl_path), backend=backend,
+                    authorized_capabilities=set(config.get("authorized_capabilities") or []),
+                    authoritative_edl_path=edl_path,
+                )
+                typed_handoff_path = self.manual_finish_dir / "typed-nle-handoff.json"
+                write_json(typed_handoff_path, typed)
         if not returned.is_file():
             self._action_required(
                 "manual_finish_handoff",
@@ -3441,6 +5310,9 @@ class Director:
                     "backend": backend,
                     "handoff_manifest": str(manifest_path),
                     "correction_ledger": str(ledger_path),
+                    "typed_nle_handoff": (
+                        str(typed_handoff_path) if typed_handoff_path is not None else None
+                    ),
                     "expected_artifact": str(returned),
                     "capability_boundary": (
                         "The configured NLE is a human-facing option only; no CLI, MCP, Editor API, "
@@ -3514,6 +5386,7 @@ class Director:
         self._complete("manual_finish_handoff", [
             decision_path, manifest_path, ledger_path, receipt_path,
             media_report_path, returned_qa_path, final_correctness_path, returned,
+            *([typed_handoff_path] if typed_handoff_path is not None else []),
         ])
 
     def _build_optional_delivery_packages(
@@ -3652,6 +5525,15 @@ class Director:
                 [{"owner": "ffmpeg", "capability": "final composition, audio mix, encoding and decode QA",
                   "expected_artifact": str(output), "platform_validations": ["douyin", "wechat_channels"]}],
             )
+        readiness_errors = validate_required_asset_readiness(
+            self.project, self.state.get("stages") or {},
+        )
+        if readiness_errors:
+            self._action_required(
+                "delivery_qa",
+                "Required delivery assets are not deliverable",
+                [{"owner": "director", "readiness_errors": readiness_errors}],
+            )
         storyboard_path = self.full_hyperframes_project / "storyboard.json"
         final_review_path = self.root / "final-qa" / "aesthetic-review.json"
         audio_plan_path = self.full_hyperframes_project / "audio-plan.json"
@@ -3660,6 +5542,8 @@ class Director:
         if not cover_path.is_absolute():
             cover_path = (self.context.root / cover_path).resolve()
         cover_review_path = self.root / "final-qa" / "cover-review.json"
+        cover_required = asset_is_required(self.project, "cover")
+        cover_applicable = cover_required or cover_path.is_file()
         final_edit_correctness_path = self.video_use_dir / "final-edit-correctness.json"
         platform_paths = {
             name: self.root / "final-qa" / f"platform-{name}.json"
@@ -3685,12 +5569,26 @@ class Director:
             [regression_path]
             if self.project.get("editorial_regression", {}).get("enabled") is True else []
         )
-        required = [storyboard_path, final_review_path, audio_plan_path, cover_path,
-                     cover_review_path, final_edit_correctness_path,
+        required = [storyboard_path, final_review_path, audio_plan_path,
+                     final_edit_correctness_path,
                     media_report_path, self.production_contract_path,
                     sample_dynamics_path, full_dynamics_path,
                     provider_decision_path, cost_ledger_path, *regression_required,
-                    *manual_required, *platform_paths.values()]
+                     *manual_required, *platform_paths.values()]
+        compose_plan_path = self.root / "final-compose-command.json"
+        if compose_plan_path.is_file():
+            compose_plan = read_json(compose_plan_path)
+            caption_sync_closure_enabled = (
+                ((self.project.get("editing") or {}).get("caption_sync_closure") or {})
+                .get("enabled") is True
+            )
+            if (
+                caption_sync_closure_enabled
+                and (compose_plan.get("caption_delivery") or {}).get("mode") == "burned_in_last"
+            ):
+                required.append(self.video_use_dir / "caption-sync-final.json")
+        if cover_applicable:
+            required.extend([cover_path, cover_review_path])
         missing = [str(path) for path in required if not path.is_file()]
         if missing:
             self._action_required(
@@ -3729,12 +5627,36 @@ class Director:
             )
             if dynamics.get("status") != "pass":
                 raise DirectorContractError(f"{label} visual dynamics QA did not pass")
-        assert_valid(validate_aesthetic_review(final_review, read_json(storyboard_path)), "final aesthetic QA")
+        assert_valid(
+            validate_aesthetic_review(
+                final_review, read_json(storyboard_path),
+                decision_complete=self.project.get("motion_quality", {}).get("enabled") is True,
+            ),
+            "final aesthetic QA",
+        )
         output_hash = sha256_file(output)
         if final_review.get("reviewed_output_sha256") != output_hash:
             raise DirectorContractError(
                 "final aesthetic review must be bound to the exact universal output hash"
             )
+        final_sync_path = self.video_use_dir / "caption-sync-final.json"
+        if final_sync_path.is_file() and (
+            ((self.project.get("editing") or {}).get("caption_sync_closure") or {})
+            .get("enabled") is True
+        ):
+            final_sync = read_json(final_sync_path)
+            composite = final_sync.get("final_composite") or {}
+            caption_source = self.video_use_dir / "master.srt"
+            if (
+                final_sync.get("passed") is not True
+                or composite.get("passed") is not True
+                or composite.get("media_sha256") != output_hash
+                or not caption_source.is_file()
+                or composite.get("caption_sha256") != sha256_file(caption_source)
+            ):
+                raise DirectorContractError(
+                    "final caption synchronization closure is missing or stale"
+                )
         assert_valid(
             validate_video_use_final_correctness(
                 read_json(final_edit_correctness_path),
@@ -3753,26 +5675,28 @@ class Director:
             ),
             "final audio QA",
         )
-        cover_review = read_json(cover_review_path)
-        cover_hash = sha256_file(cover_path)
-        if cover_review.get("cover_sha256") != cover_hash:
-            raise DirectorContractError("cover review must be bound to the exact cover hash")
-        cover_errors, identity_required = _cover_delivery_gate(cover_review)
-        if cover_errors:
-            raise DirectorContractError("cover review failed: " + "; ".join(cover_errors))
-        if identity_required and cover_review.get("identity_approved_by_user") is not True:
-            self._action_required(
-                "delivery_qa",
-                "Cover likeness requires explicit user approval",
-                [{
-                    "owner": "user",
-                    "capability": "approve whether the regenerated cover is sufficiently faithful to their identity",
-                    "cover": str(cover_path),
-                    "review": str(cover_review_path),
-                }],
-            )
-        if cover_review.get("status") != "pass":
-            raise DirectorContractError("approved cover review must have pass status")
+        audio_assets = _audio_plan_asset_files(audio_plan, self.full_hyperframes_project)
+        cover_hash = sha256_file(cover_path) if cover_path.is_file() else None
+        if cover_applicable:
+            cover_review = read_json(cover_review_path)
+            if cover_review.get("cover_sha256") != cover_hash:
+                raise DirectorContractError("cover review must be bound to the exact cover hash")
+            cover_errors, identity_required = _cover_delivery_gate(cover_review)
+            if cover_errors:
+                raise DirectorContractError("cover review failed: " + "; ".join(cover_errors))
+            if identity_required and cover_review.get("identity_approved_by_user") is not True:
+                self._action_required(
+                    "delivery_qa",
+                    "Cover likeness requires explicit user approval",
+                    [{
+                        "owner": "user",
+                        "capability": "approve whether the regenerated cover is sufficiently faithful to their identity",
+                        "cover": str(cover_path),
+                        "review": str(cover_review_path),
+                    }],
+                )
+            if cover_review.get("status") != "pass":
+                raise DirectorContractError("approved cover review must have pass status")
         media_report = read_json(media_report_path)
         assert_valid(validate_technical_report(media_report, output), "final technical media QA")
         for name, path in platform_paths.items():
@@ -3782,7 +5706,12 @@ class Director:
         write_json(report, {"schema_version": 1, "universal_video": str(output),
                             "file_sha256": output_hash, "duplicate_platform_mp4s": False,
                             "validated_same_file_for": list(platform_paths),
-                             "cover": str(cover_path), "cover_sha256": cover_hash,
+                             "cover": str(cover_path) if cover_applicable else None,
+                             "cover_sha256": cover_hash,
+                             "cover_applicability": (
+                                 "required" if cover_required else
+                                 "optional_present" if cover_applicable else "optional_unavailable"
+                             ),
                              "audio_plan": str(audio_plan_path),
                              "production_contract": str(self.production_contract_path),
                              "production_contract_sha256": sha256_file(self.production_contract_path),
@@ -3799,9 +5728,11 @@ class Director:
             output=output, cover=cover_path, delivery_contract=report,
             required_evidence=required,
         )
-        self._complete("delivery_qa", [output, cover_path, report, *required,
+        delivery_artifacts = [output, report, *required,
                                        *optional_delivery,
-                                       *_review_evidence_files(final_review)])
+                                       *_review_evidence_files(final_review)]
+        delivery_artifacts.extend(audio_assets)
+        self._complete("delivery_qa", delivery_artifacts)
         self.state.update({"status": "complete", "current_stage": None})
         self._save()
 
@@ -3927,7 +5858,10 @@ def reset_stage(state_path: Path, stage: str) -> None:
             action_path.unlink(missing_ok=True)
 
 
-def approve_sample(director: Director, approved_by: str) -> Path:
+def approve_sample(
+    director: Director, approved_by: str, *, publish_willingness: str | None = None,
+    baseline_preference: str | None = None, review_reason: str | None = None,
+) -> Path:
     """Record explicit approval of the exact sample evidence currently on disk."""
     if director.state.get("stages", {}).get("sample_qa", {}).get("status") != "complete":
         raise DirectorContractError("sample_qa must be complete before sample approval")
@@ -3943,6 +5877,56 @@ def approve_sample(director: Director, approved_by: str) -> Path:
     approver = approved_by.strip()
     if not approver:
         raise DirectorContractError("approved_by is required")
+    creative_review_path: Path | None = None
+    if director.project.get("motion_quality", {}).get("enabled") is True:
+        if approver.lower() in {"user", "agent", "director", "renderer", "multimodal-agent"}:
+            raise DirectorContractError(
+                "Motion Quality paired review requires the explicit human reviewer's identity"
+            )
+        director._ensure_creative_review()
+        creative_review_path = director.creative_review_path
+        if publish_willingness not in {"yes", "no", "unsure"}:
+            raise DirectorContractError(
+                "Motion Quality sample approval requires --publish-willingness yes|no|unsure"
+            )
+        if baseline_preference not in {"baseline", "candidate", "tie"}:
+            raise DirectorContractError(
+                "Motion Quality sample approval requires --preference baseline|candidate|tie"
+            )
+        if not review_reason or not review_reason.strip():
+            raise DirectorContractError(
+                "Motion Quality sample approval requires --review-reason"
+            )
+        paired_review = record_creative_user_decision(
+            read_json(creative_review_path), decision="approved", reviewer=approver,
+            publish_willingness=publish_willingness,
+            baseline_preference=baseline_preference,
+            reason=review_reason,
+        )
+        errors = validate_creative_review(
+            paired_review,
+            motion_design_contract_path=(
+                director.motion_design_dir("sample") / "motion-design-contract.json"
+            ),
+            storyboard_path=storyboard,
+            keyframe_receipt_paths=director._creative_review_receipts(),
+            motion_audio_decisions_path=director.creative_review_motion_audio_path,
+            authorized_user_reviewers={approver},
+        )
+        if errors:
+            raise DirectorContractError(
+                "paired creative review approval is invalid:\n- " + "\n- ".join(errors)
+            )
+        write_json(creative_review_path, paired_review)
+        generate_dashboard(
+            project_root=director.context.root,
+            director_root=director.root,
+            output=director.creative_review_dashboard_path,
+            creative_review_path=creative_review_path,
+            motion_design_contract_path=(
+                director.motion_design_dir("sample") / "motion-design-contract.json"
+            ),
+        )
     baseline_path = director.root / "editorial-regression" / "golden-baseline.json"
     baseline_sha256 = "disabled"
     if director.project.get("editorial_regression", {}).get("enabled") is True:
@@ -3964,11 +5948,23 @@ def approve_sample(director: Director, approved_by: str) -> Path:
             ),
             approved_by=approver,
             output=baseline_path,
+            renderer_export_path=(
+                director.renderer_export_path("sample")
+                if director.project.get("motion_quality", {}).get("enabled") is True else None
+            ),
+            keyframe_receipt_paths=(
+                list(director._creative_review_receipts().values())
+                if director.project.get("motion_quality", {}).get("enabled") is True else ()
+            ),
+            motion_audio_decisions_path=(
+                director.motion_audio_decision_manifest_path
+                if director.motion_audio_decision_manifest_path.is_file() else None
+            ),
         )
         assert_valid(validate_baseline(baseline), "golden editorial baseline")
         baseline_sha256 = sha256_file(baseline_path)
     path = director.root / "preview-approval.json"
-    write_json(path, {
+    approval_payload = {
         "schema_version": 1,
         "approved": True,
         "approved_by": approver,
@@ -3980,7 +5976,13 @@ def approve_sample(director: Director, approved_by: str) -> Path:
         "gate_report_sha256": sha256_file(gate),
         "golden_baseline": str(baseline_path) if baseline_sha256 != "disabled" else None,
         "golden_baseline_sha256": baseline_sha256,
-    })
+    }
+    if creative_review_path is not None:
+        approval_payload.update({
+            "creative_review": str(creative_review_path),
+            "creative_review_sha256": sha256_file(creative_review_path),
+        })
+    write_json(path, approval_payload)
     reset_stage(director.state_path, "preview_approval")
     director.action_path.unlink(missing_ok=True)
     return path
@@ -4231,12 +6233,18 @@ def parser() -> argparse.ArgumentParser:
     approve = sub.add_parser("approve-sample", help="approve the exact current sample evidence")
     approve.add_argument("--project", required=True)
     approve.add_argument("--approved-by", default="user")
+    approve.add_argument("--publish-willingness", choices=("yes", "no", "unsure"))
+    approve.add_argument("--preference", choices=("baseline", "candidate", "tie"))
+    approve.add_argument("--review-reason")
     authorize = sub.add_parser("authorize-final-render", help="authorize the exact full project that passed QA")
     authorize.add_argument("--project", required=True)
     authorize.add_argument("--authorized-by", default="user")
     approve_alias = sub.add_parser("approve", help="approve the exact current sample evidence")
     approve_alias.add_argument("--project", required=True)
     approve_alias.add_argument("--approved-by", default="user")
+    approve_alias.add_argument("--publish-willingness", choices=("yes", "no", "unsure"))
+    approve_alias.add_argument("--preference", choices=("baseline", "candidate", "tie"))
+    approve_alias.add_argument("--review-reason")
     authorize_alias = sub.add_parser("authorize-render", help="authorize the exact checked full render")
     authorize_alias.add_argument("--project", required=True)
     authorize_alias.add_argument("--authorized-by", default="user")
@@ -4307,10 +6315,8 @@ def _dispatch(args: argparse.Namespace) -> int:
         if args.interactive and interactive.get("enabled") is not True:
             raise DirectorContractError("review.interactive.enabled must be true")
         output = Path(args.output).resolve() if args.output else director.root / "review" / "index.html"
-        dashboard = generate_dashboard(
-            project_root=director.context.root, director_root=director.root, output=output,
-        )
-        print(dashboard)
+        server = None
+        interactive_api_url = None
         if args.interactive:
             host = args.host or str(interactive.get("host") or "127.0.0.1")
             port = args.port if args.port is not None else int(interactive.get("port", 8765))
@@ -4320,14 +6326,32 @@ def _dispatch(args: argparse.Namespace) -> int:
                 auth_token=os.environ.get("DIRECTOR_REVIEW_TOKEN", ""),
                 csrf_token=os.environ.get("DIRECTOR_REVIEW_CSRF_TOKEN", ""),
                 max_body_bytes=int(interactive.get("max_body_bytes", 64 * 1024)),
+                allow_file_origin=True,
             )
             server = create_review_server(config, host=host, port=port)
-            print(f"http://{host}:{server.server_port}")
-            try:
+            url_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
+            interactive_api_url = f"http://{url_host}:{server.server_port}/api/proposals"
+        try:
+            dashboard = generate_dashboard(
+                project_root=director.context.root, director_root=director.root, output=output,
+                creative_review_path=(
+                    director.creative_review_path if director.creative_review_path.is_file() else None
+                ),
+                motion_design_contract_path=(
+                    director.motion_design_dir("sample") / "motion-design-contract.json"
+                    if (director.motion_design_dir("sample") / "motion-design-contract.json").is_file()
+                    else None
+                ),
+                interactive_api_url=interactive_api_url,
+            )
+            print(dashboard)
+            if server is not None:
+                print(interactive_api_url)
                 server.serve_forever()
-            except KeyboardInterrupt:
-                pass
-            finally:
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if server is not None:
                 server.server_close()
         return 0
     if args.command == "apply-correction":
@@ -4340,7 +6364,12 @@ def _dispatch(args: argparse.Namespace) -> int:
         print(director.state_path)
         return 0
     if args.command in {"approve-sample", "approve"}:
-        print(approve_sample(director, args.approved_by))
+        print(approve_sample(
+            director, args.approved_by,
+            publish_willingness=args.publish_willingness,
+            baseline_preference=args.preference,
+            review_reason=args.review_reason,
+        ))
         return 0
     if args.command in {"authorize-final-render", "authorize-render"}:
         print(authorize_final_render(director, args.authorized_by))

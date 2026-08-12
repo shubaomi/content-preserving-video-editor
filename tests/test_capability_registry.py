@@ -17,11 +17,100 @@ from capability_registry import (  # noqa: E402
     CAPABILITY_LEVELS,
     build_capability_inventory,
     build_toolchain_report,
+    validate_maturity_transition,
 )
 from director import Director  # noqa: E402
 
 
 class CapabilityRegistryTests(unittest.TestCase):
+    def test_maturity_vocabulary_matches_the_approved_five_states(self) -> None:
+        self.assertEqual(CAPABILITY_LEVELS, (
+            "documented",
+            "director_integrated",
+            "fixture_validated",
+            "real_project_validated",
+            "production_default",
+        ))
+
+    def test_fixture_maturity_cannot_jump_to_production_default(self) -> None:
+        errors = validate_maturity_transition(
+            "fixture_validated", "production_default", evidence={}
+        )
+        self.assertTrue(any("jump" in error for error in errors), errors)
+
+    def test_director_integration_promotion_requires_route_state_invalidation_and_failure_contract(self) -> None:
+        self.assertTrue(validate_maturity_transition(
+            "documented", "director_integrated", evidence={}
+        ))
+        self.assertEqual(validate_maturity_transition(
+            "documented",
+            "director_integrated",
+            evidence={"director_integration": {
+                "route": True,
+                "state": True,
+                "invalidation": True,
+                "failure_contract": True,
+            }},
+        ), [])
+
+    def test_fixture_promotion_requires_zero_failure_hash_bound_test_receipt(self) -> None:
+        self.assertTrue(validate_maturity_transition(
+            "director_integrated", "fixture_validated", evidence={}
+        ))
+        self.assertEqual(validate_maturity_transition(
+            "director_integrated",
+            "fixture_validated",
+            evidence={"fixture_validation": {
+                "status": "pass",
+                "test_count": 4,
+                "failures": 0,
+                "skipped": 0,
+                "source_tree_sha256": "b" * 64,
+            }},
+        ), [])
+
+    def test_real_project_promotion_requires_both_canaries_and_user_evidence(self) -> None:
+        implementation = "a" * 64
+        valid_evidence = {
+            "real_project_validations": [
+                {
+                    "canary_role": "landscape_screen",
+                    "status": "pass",
+                    "implementation_sha256": implementation,
+                    "user_review_status": "approved",
+                },
+                {
+                    "canary_role": "portrait_talking_head",
+                    "status": "pass",
+                    "implementation_sha256": implementation,
+                    "user_review_status": "approved",
+                },
+            ],
+        }
+        self.assertEqual(validate_maturity_transition(
+            "fixture_validated", "real_project_validated", evidence=valid_evidence
+        ), [])
+        missing_portrait = {
+            "real_project_validations": valid_evidence["real_project_validations"][:1],
+        }
+        self.assertTrue(validate_maturity_transition(
+            "fixture_validated", "real_project_validated", evidence=missing_portrait
+        ))
+
+    def test_production_default_requires_separate_explicit_promotion(self) -> None:
+        self.assertTrue(validate_maturity_transition(
+            "real_project_validated", "production_default", evidence={}
+        ))
+        self.assertEqual(validate_maturity_transition(
+            "real_project_validated",
+            "production_default",
+            evidence={"production_promotion": {
+                "approved": True,
+                "approved_by": "HongRun",
+                "approved_at": "2026-08-11T03:00:12-07:00",
+            }},
+        ), [])
+
     def test_inventory_declares_complete_adapter_contract_and_truthful_levels(self) -> None:
         project = {
             "schema_version": 3,
@@ -36,7 +125,32 @@ class CapabilityRegistryTests(unittest.TestCase):
             "local_semantic_corpus", "brand_motion_playbook", "editorial_regression",
             "review_dashboard", "clip_factory", "podcast_pipeline",
             "localization_pipeline", "openmontage_handoff",
+            "adaptive_layout", "stateful_target_binding",
+            "motion_quality_engine",
+            "hyperframes_keyframe_evidence",
+            "paired_creative_review",
+            "content_format_motion_grammar",
+            "perceptual_motion_audio",
+            "caption_sync_closure",
+            "editorial_promise_closure",
+            "current_golden_runtime_evidence",
+            "advanced_runtime_gate",
+            "typed_nle_handoff",
+            "optional_media_adapters",
         } <= set(by_name))
+        self.assertEqual(by_name["adaptive_layout"]["declared_maturity"], "fixture_validated")
+        self.assertIn(by_name["adaptive_layout"]["maturity"], {"director_integrated", "fixture_validated"})
+        self.assertEqual(by_name["stateful_target_binding"]["declared_maturity"], "fixture_validated")
+        self.assertEqual(by_name["motion_quality_engine"]["declared_maturity"], "fixture_validated")
+        self.assertEqual(by_name["hyperframes_keyframe_evidence"]["declared_maturity"], "fixture_validated")
+        self.assertEqual(by_name["paired_creative_review"]["declared_maturity"], "fixture_validated")
+        for name in (
+            "content_format_motion_grammar", "perceptual_motion_audio",
+            "caption_sync_closure", "editorial_promise_closure",
+            "current_golden_runtime_evidence", "advanced_runtime_gate",
+            "typed_nle_handoff", "optional_media_adapters",
+        ):
+            self.assertEqual(by_name[name]["declared_maturity"], "fixture_validated")
         self.assertFalse(by_name["openmontage_handoff"]["enabled"])
         self.assertEqual(by_name["production_contract"]["maturity"], "director_integrated")
         required = {
@@ -91,6 +205,32 @@ class CapabilityRegistryTests(unittest.TestCase):
         self.assertTrue({"hook_pacing", "publishing_copy", "media_catalog"} <= enabled)
         self.assertIn("evidence_acquisition", enabled)
         self.assertIn("design_tokens", enabled)
+
+    def test_p1_p2_capabilities_use_explicit_default_off_routes(self) -> None:
+        inventory = build_capability_inventory({
+            "motion_quality": {
+                "enabled": True,
+                "advanced_runtimes": {"enabled": True},
+            },
+            "editing": {"caption_sync_closure": {"enabled": True}},
+            "audio": {"sfx": {"perceptual": {"enabled": True}}},
+            "editorial_intent": {"enabled": True},
+            "editorial_regression": {"enabled": True},
+            "delivery": {"manual_finish": {"enabled": True}},
+            "extensions": {"optional_media_adapters": [{"enabled": True}]},
+        })
+        by_name = {row["name"]: row for row in inventory["capabilities"]}
+        for name in (
+            "content_format_motion_grammar", "perceptual_motion_audio",
+            "caption_sync_closure", "editorial_promise_closure",
+            "current_golden_runtime_evidence", "advanced_runtime_gate",
+            "typed_nle_handoff", "optional_media_adapters",
+        ):
+            self.assertTrue(by_name[name]["enabled"], name)
+        self.assertEqual(
+            by_name["optional_media_adapters"]["configuration_route"],
+            "extensions.optional_media_adapters",
+        )
 
     def test_analysis_adapters_and_legacy_catalog_have_truthful_distinct_routes(self) -> None:
         inventory = build_capability_inventory({

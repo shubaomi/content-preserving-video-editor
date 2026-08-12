@@ -35,6 +35,15 @@ EVENT_PATTERNS = {
     "semantic_icon": ("semantic_pluck", (0, 5, 9), 1.14),
 }
 
+# The semantic brief owns the audible intent. These profiles deliberately map
+# editorial family names to perceptually distinct motifs instead of deriving
+# every cue from the visual layout and creating accidental repetition.
+AUDIO_FAMILY_PATTERNS = {
+    "soft-focus": ("soft_focus", (0, 7), 1.18),
+    "two-note-contrast": ("two_note_contrast", (0, -3, 5), 1.28),
+    "phrase": ("phrase_rise", (0, 4, 9), 1.38),
+}
+
 SEMANTIC_PATTERN_TOKENS = (
     (("chapter", "transition", "section"), "chapter_transition"),
     (("compare", "comparison", "contrast", "versus"), "comparison_panel"),
@@ -64,6 +73,12 @@ def _event_id(value: object) -> str:
 
 
 def event_profile(event: dict, index: int) -> tuple[str, tuple[int, ...], float, int]:
+    audio_decision = event.get("audio_decision") or {}
+    audio_family = str(audio_decision.get("family") or "").strip().lower()
+    if audio_decision.get("type") == "cue" and audio_family in AUDIO_FAMILY_PATTERNS:
+        family, intervals, duration = AUDIO_FAMILY_PATTERNS[audio_family]
+        root = round(300 * (2 ** (((index * 5) % 12) / 12)))
+        return family, intervals, duration, root
     key = str(event.get("treatment") or event.get("visual_family") or "").lower()
     if key not in EVENT_PATTERNS:
         visual = event.get("visual_structure") or {}

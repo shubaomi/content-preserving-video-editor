@@ -387,10 +387,19 @@ class EvidenceAcquisitionTests(unittest.TestCase):
                 }), encoding="utf-8")
                 return output
 
+            def fake_adapter_run(**kwargs):
+                output = kwargs["outputs"][0]
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(json.dumps({
+                    "tracking": {"status": "not_detected", "series": []},
+                }), encoding="utf-8")
+                return {"status": "complete", "outputs": [{
+                    "path": str(output.resolve()), "available": True,
+                    "sha256": sha256_file(output),
+                }]}
+
             with patch("director.acquire_evidence", side_effect=fake_acquire):
-                with patch.object(director.adapter_runner, "run", return_value={
-                    "status": "complete", "outputs": []
-                }) as run:
+                with patch.object(director.adapter_runner, "run", side_effect=fake_adapter_run) as run:
                     director._start("evidence_acquisition")
                     director.stage_evidence_acquisition()
 
@@ -399,6 +408,46 @@ class EvidenceAcquisitionTests(unittest.TestCase):
             command = next(call.kwargs["command"] for call in run.call_args_list
                            if call.kwargs["name"] == "subject_tracking")
             self.assertIn("analyze_subject_track.py", " ".join(command))
+
+    def test_subject_tracking_completion_without_declared_output_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "source" / "input.mp4"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"fixture")
+            project = root / "project.yaml"
+            project.write_text(yaml.safe_dump({
+                "schema_version": 4, "version": 4, "video_id": "fixture",
+                "paths": {"root": str(root), "work": "work", "edit": "edit", "exports": "exports"},
+                "source": {"primary_video": "source/input.mp4", "input_mode": "raw"},
+                "workflow": {"capabilities": {"subject_tracking": {"enabled": True}}},
+            }), encoding="utf-8")
+            director = Director(project)
+            transcript = director.video_use_dir / "transcripts" / "input.json"
+            transcript.parent.mkdir(parents=True)
+            transcript.write_text(json.dumps({"words": [
+                {"id": "w1", "type": "word", "text": "内容", "start": 0, "end": 1}
+            ]}), encoding="utf-8")
+
+            def fake_acquire(**kwargs):
+                output = kwargs["output_dir"] / "evidence-bundle.json"
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(json.dumps({
+                    "schema_version": 1, "status": "pass",
+                    "source": {"sha256": sha256_file(source)},
+                    "transcript": {"sha256": sha256_file(transcript)},
+                    "representative_frames": [],
+                    "display": {"orientation": "portrait", "width": 1080, "height": 1920},
+                    "design_tokens": {"palette": []},
+                }), encoding="utf-8")
+                return output
+
+            with patch("director.acquire_evidence", side_effect=fake_acquire), patch.object(
+                director.adapter_runner, "run", return_value={"status": "complete", "outputs": []},
+            ):
+                director._start("evidence_acquisition")
+                with self.assertRaisesRegex(DirectorContractError, "without its declared output"):
+                    director.stage_evidence_acquisition()
 
     def test_evidence_stage_rejects_missing_source_hash(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

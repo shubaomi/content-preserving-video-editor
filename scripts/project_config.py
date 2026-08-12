@@ -7,7 +7,10 @@ import math
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 9
+CURRENT_PROJECT_SCHEMA_VERSION = 10
+IDENTITY_MODES = {"self", "third_party", "generic"}
+REQUIRED_ASSET_APPLICABILITY = {"required", "optional", "not_applicable"}
+DELIVERABLE_READINESS = {"ready", "asset_ready", "not_applicable"}
 MANUAL_FINISH_BACKENDS = {"opencut", "other_nle", "none"}
 MANUAL_FINISH_DEFAULTS: dict[str, Any] = {
     "enabled": False,
@@ -61,6 +64,10 @@ SEMANTIC_CONFIDENCE_DEFAULTS = {
     "low_confidence_threshold": 0.7,
     "second_provider": {"enabled": False},
 }
+PROTECTED_REGION_REVIEW_DEFAULTS = {
+    "enabled": False,
+    "manifest": None,
+}
 INTERACTIVE_REVIEW_DEFAULTS = {
     "enabled": False,
     "host": "127.0.0.1",
@@ -80,6 +87,17 @@ PREFERENCE_LEARNING_DEFAULTS = {
     "enabled": False,
     "minimum_samples": 2,
     "default_scope": "video",
+}
+EDITORIAL_INTENT_DEFAULTS: dict[str, Any] = {
+    "enabled": False,
+    "mode": "neutral_education",
+    "audience": None,
+    "viewer_job": None,
+    "single_promise": None,
+    "proof_event_ids": [],
+    "cta": None,
+    "tone": "neutral_educational",
+    "prohibited_claims": [],
 }
 FEEDBACK_LOOP_DEFAULTS = {
     "enabled": False,
@@ -101,6 +119,44 @@ RELEASE_PACK_DEFAULTS = {
     "publication_authorization": None,
     "output_dir": "exports/release-pack",
 }
+
+
+def _required_asset_defaults(caption_delivery: str) -> dict[str, dict[str, str]]:
+    captions = {
+        "stage": "video_use_timeline",
+        "applicability": "required",
+        "required_readiness": "ready",
+    }
+    if caption_delivery == "none":
+        captions = {
+            "stage": "video_use_timeline",
+            "applicability": "not_applicable",
+            "required_readiness": "not_applicable",
+            "reason": "editing.caption_delivery is explicitly none",
+        }
+    return {
+        "captions": captions,
+        "audio": {
+            "stage": "audio",
+            "applicability": "optional",
+            "required_readiness": "asset_ready",
+        },
+        "cover": {
+            "stage": "cover",
+            "applicability": "optional",
+            "required_readiness": "asset_ready",
+        },
+        "identity": {
+            "stage": "production_contract",
+            "applicability": "required",
+            "required_readiness": "ready",
+        },
+        "universal_video": {
+            "stage": "final_compose",
+            "applicability": "required",
+            "required_readiness": "ready",
+        },
+    }
 
 
 def _source_version(project: dict[str, Any]) -> int:
@@ -139,15 +195,96 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("project configuration must be a mapping")
     _source_version(project)
     migrated = deepcopy(project)
+    source = migrated.setdefault("source", {})
+    if not isinstance(source, dict):
+        raise ValueError("source must be a mapping")
+    if "content_type" in source and source["content_type"] not in {
+        "screen_tutorial", "talking_head",
+    }:
+        raise ValueError("source.content_type must be screen_tutorial or talking_head")
     editing = migrated.setdefault("editing", {})
     if not isinstance(editing, dict):
         raise ValueError("editing must be a mapping")
     caption_delivery = editing.setdefault("caption_delivery", "auto")
     if caption_delivery not in {"auto", "none"}:
         raise ValueError("editing.caption_delivery must be auto or none")
+    caption_sync = editing.setdefault("caption_sync_closure", {"enabled": False})
+    if not isinstance(caption_sync, dict) or not isinstance(
+        caption_sync.setdefault("enabled", False), bool
+    ):
+        raise ValueError("editing.caption_sync_closure.enabled must be a boolean")
+    terminology = editing.setdefault("caption_terminology", [])
+    if not isinstance(terminology, list) or any(
+        not isinstance(value, str) or not value.strip() for value in terminology
+    ):
+        raise ValueError("editing.caption_terminology must be a list of non-empty strings")
     delivery = migrated.setdefault("delivery", {})
     if not isinstance(delivery, dict):
         raise ValueError("delivery must be a mapping")
+    identity = migrated.setdefault("identity", {"mode": "generic"})
+    if not isinstance(identity, dict):
+        raise ValueError("identity must be a mapping")
+    identity_mode = identity.setdefault("mode", "generic")
+    if not isinstance(identity_mode, str) or identity_mode not in IDENTITY_MODES:
+        raise ValueError("identity.mode must be self, third_party, or generic")
+    motion_quality = migrated.setdefault("motion_quality", {"enabled": False})
+    if not isinstance(motion_quality, dict) or not isinstance(
+        motion_quality.setdefault("enabled", False), bool
+    ):
+        raise ValueError("motion_quality.enabled must be a boolean")
+    advanced_runtimes = motion_quality.setdefault("advanced_runtimes", {"enabled": False})
+    if not isinstance(advanced_runtimes, dict) or not isinstance(
+        advanced_runtimes.setdefault("enabled", False), bool
+    ):
+        raise ValueError("motion_quality.advanced_runtimes.enabled must be a boolean")
+    advanced_evidence = advanced_runtimes.setdefault("evidence", {})
+    if not isinstance(advanced_evidence, dict):
+        raise ValueError("motion_quality.advanced_runtimes.evidence must be a mapping")
+    required_assets = delivery.setdefault("required_assets", {})
+    if not isinstance(required_assets, dict):
+        raise ValueError("delivery.required_assets must be a mapping")
+    for asset_name, default_rule in _required_asset_defaults(caption_delivery).items():
+        rule = required_assets.setdefault(asset_name, deepcopy(default_rule))
+        if not isinstance(rule, dict):
+            raise ValueError(f"delivery.required_assets.{asset_name} must be a mapping")
+        for key, value in default_rule.items():
+            rule.setdefault(key, value)
+        prefix = f"delivery.required_assets.{asset_name}"
+        if not isinstance(rule.get("stage"), str) or not rule["stage"].strip():
+            raise ValueError(f"{prefix}.stage must be a non-empty string")
+        if rule.get("applicability") not in REQUIRED_ASSET_APPLICABILITY:
+            raise ValueError(f"{prefix}.applicability is unsupported")
+        if rule.get("required_readiness") not in DELIVERABLE_READINESS:
+            raise ValueError(f"{prefix}.required_readiness is not deliverable")
+        if rule.get("applicability") == "required" and rule.get(
+            "required_readiness"
+        ) == "not_applicable":
+            raise ValueError(f"{prefix} cannot be required and not_applicable")
+        if rule.get("applicability") == "not_applicable":
+            if rule.get("required_readiness") != "not_applicable":
+                raise ValueError(f"{prefix} not_applicable must require not_applicable readiness")
+            if not isinstance(rule.get("reason"), str) or not rule["reason"].strip():
+                raise ValueError(f"{prefix}.reason is required when not_applicable")
+        if rule.get("stage") != default_rule["stage"]:
+            raise ValueError(f"{prefix}.stage cannot be rebound")
+        if (
+            rule.get("applicability") != "not_applicable"
+            and rule.get("required_readiness") != default_rule["required_readiness"]
+        ):
+            raise ValueError(f"{prefix}.required_readiness cannot weaken asset delivery")
+        if asset_name in {"captions", "identity", "universal_video"}:
+            expected_policy = (
+                default_rule["stage"],
+                default_rule["applicability"],
+                default_rule["required_readiness"],
+            )
+            actual_policy = (
+                rule.get("stage"),
+                rule.get("applicability"),
+                rule.get("required_readiness"),
+            )
+            if actual_policy != expected_policy:
+                raise ValueError(f"{prefix} cannot weaken or rebind mandatory delivery policy")
     manual = delivery.setdefault("manual_finish", {})
     if not isinstance(manual, dict):
         raise ValueError("delivery.manual_finish must be a mapping")
@@ -256,6 +393,22 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         subject_tracking.setdefault("enabled", False), bool
     ):
         raise ValueError("analysis.subject_tracking.enabled must be a boolean")
+    protected_region_review = analysis.setdefault("protected_region_review", {})
+    if not isinstance(protected_region_review, dict):
+        raise ValueError("analysis.protected_region_review must be a mapping")
+    for key, value in PROTECTED_REGION_REVIEW_DEFAULTS.items():
+        protected_region_review.setdefault(key, value)
+    if not isinstance(protected_region_review.get("enabled"), bool):
+        raise ValueError("analysis.protected_region_review.enabled must be a boolean")
+    review_manifest = protected_region_review.get("manifest")
+    if review_manifest is not None and (
+        not isinstance(review_manifest, str) or not review_manifest.strip()
+    ):
+        raise ValueError("analysis.protected_region_review.manifest must be a path or null")
+    if protected_region_review["enabled"] and review_manifest is None:
+        raise ValueError(
+            "analysis.protected_region_review.manifest is required when enabled"
+        )
     semantic_confidence = analysis.setdefault("semantic_confidence", {})
     if not isinstance(semantic_confidence, dict):
         raise ValueError("analysis.semantic_confidence must be a mapping")
@@ -306,6 +459,16 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         value = extensions.setdefault(name, {"enabled": False})
         if not isinstance(value, dict) or not isinstance(value.setdefault("enabled", False), bool):
             raise ValueError(f"extensions.{name}.enabled must be a boolean")
+    optional_media = extensions.setdefault("optional_media_adapters", [])
+    if not isinstance(optional_media, list) or any(
+        not isinstance(value, dict) for value in optional_media
+    ):
+        raise ValueError("extensions.optional_media_adapters must be a list of mappings")
+    for index, value in enumerate(optional_media):
+        if not isinstance(value.setdefault("enabled", False), bool):
+            raise ValueError(
+                f"extensions.optional_media_adapters[{index}].enabled must be a boolean"
+            )
     renderer = migrated.setdefault("renderer", {})
     if not isinstance(renderer, dict):
         raise ValueError("renderer must be a mapping")
@@ -375,6 +538,30 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("audio.sfx.maximum_family_ratio must be in (0, 1]")
     sfx["maximum_family_ratio"] = float(maximum_family_ratio)
+    perceptual = sfx.setdefault("perceptual", {
+        "enabled": False,
+        "minimum_audible_ratio": 0.35,
+        "maximum_audible_ratio": 0.65,
+        "maximum_onset_error_ms": 80.0,
+    })
+    if not isinstance(perceptual, dict) or not isinstance(
+        perceptual.setdefault("enabled", False), bool
+    ):
+        raise ValueError("audio.sfx.perceptual.enabled must be a boolean")
+    for key, default in (
+        ("minimum_audible_ratio", 0.35),
+        ("maximum_audible_ratio", 0.65),
+        ("maximum_onset_error_ms", 80.0),
+    ):
+        value = perceptual.setdefault(key, default)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                or not math.isfinite(float(value)):
+            raise ValueError(f"audio.sfx.perceptual.{key} must be numeric")
+        perceptual[key] = float(value)
+    if not 0 <= perceptual["minimum_audible_ratio"] <= perceptual["maximum_audible_ratio"] <= 1:
+        raise ValueError("audio.sfx.perceptual audible ratios must satisfy 0 <= minimum <= maximum <= 1")
+    if perceptual["maximum_onset_error_ms"] <= 0:
+        raise ValueError("audio.sfx.perceptual.maximum_onset_error_ms must be positive")
     cover = migrated.setdefault("cover", {})
     if not isinstance(cover, dict):
         raise ValueError("cover must be a mapping")
@@ -467,6 +654,28 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         publishing_copy.setdefault("enabled", False), bool
     ):
         raise ValueError("publishing.copy.enabled must be a boolean")
+    editorial_intent = migrated.setdefault("editorial_intent", {})
+    if not isinstance(editorial_intent, dict):
+        raise ValueError("editorial_intent must be a mapping")
+    for key, value in EDITORIAL_INTENT_DEFAULTS.items():
+        editorial_intent.setdefault(key, deepcopy(value))
+    if not isinstance(editorial_intent.get("enabled"), bool):
+        raise ValueError("editorial_intent.enabled must be a boolean")
+    if editorial_intent.get("mode") not in {"neutral_education", "explicit"}:
+        raise ValueError("editorial_intent.mode must be neutral_education or explicit")
+    for key in ("proof_event_ids", "prohibited_claims"):
+        if not isinstance(editorial_intent.get(key), list) or any(
+            not isinstance(value, str) for value in editorial_intent[key]
+        ):
+            raise ValueError(f"editorial_intent.{key} must be a list of strings")
+    if editorial_intent.get("enabled") is True and editorial_intent.get("mode") == "explicit":
+        missing = [
+            key for key in ("audience", "viewer_job", "single_promise", "cta", "tone")
+            if not isinstance(editorial_intent.get(key), str)
+            or not editorial_intent[key].strip()
+        ]
+        if missing:
+            raise ValueError("explicit editorial_intent is missing: " + ", ".join(missing))
     preferences = migrated.setdefault("preferences", {"enabled": False})
     if not isinstance(preferences, dict) or not isinstance(
         preferences.setdefault("enabled", False), bool

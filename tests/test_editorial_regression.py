@@ -6,13 +6,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PIL import Image
+
 
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from correction_ledger import append_correction, new_ledger  # noqa: E402
 from editorial_regression import (  # noqa: E402
-    create_baseline, evaluate_regression, validate_baseline, validate_regression,
+    _runtime_signature, create_baseline, evaluate_regression, validate_baseline,
+    validate_regression,
 )
 
 
@@ -298,6 +301,187 @@ class EditorialRegressionTests(unittest.TestCase):
         self.assertTrue(validate_baseline(self.baseline))
         with self.assertRaises(ValueError):
             self._evaluate([_event("e1", "打开", "relation")])
+
+    def _renderer_evidence(
+        self, root: Path, *, x: float = 0.2, image_color: tuple[int, int, int] = (220, 230, 240),
+    ) -> tuple[Path, list[Path]]:
+        snapshot = root / "mid.png"
+        image = Image.new("RGB", (320, 180), image_color)
+        if image_color == (0, 0, 0):
+            for offset in range(0, 180, 12):
+                for px in range(320):
+                    if (px + offset) % 24 < 12:
+                        image.putpixel((px, offset), (255, 255, 255))
+        image.save(snapshot)
+        phases = []
+        for phase, visible in (
+            ("entrance", True), ("mid", True),
+            ("pre_exit", True), ("post_exit", False),
+        ):
+            phases.append({
+                "phase": phase, "animation_phase": phase, "visible": visible,
+                "overlay_bbox": (
+                    {"x": x, "y": 0.2, "width": 0.3, "height": 0.2}
+                    if visible else {"x": 0.0, "y": 0.0, "width": 0.0, "height": 0.0}
+                ),
+                "connectors": [], "target_observations": [],
+                "crop_status": "inside" if visible else "not_applicable",
+                "snapshot": {"path": str(snapshot), "sha256": __import__("hashlib").sha256(
+                    snapshot.read_bytes()
+                ).hexdigest()},
+            })
+        renderer = root / "renderer-export.json"
+        renderer.write_text(json.dumps({
+            "events": [{
+                "event_id": "e1", "recipe_id": "MQE-06",
+                "animation_targets": ["#relation", "#connector"],
+                "visible_text": ["概念关系"], "phases": phases,
+            }],
+        }, ensure_ascii=False), encoding="utf-8")
+        receipt = root / "e1-receipt.json"
+        receipt.write_text(json.dumps({
+            "event_id": "e1", "recipe_id": "MQE-06",
+            "phase_observations": phases,
+        }), encoding="utf-8")
+        return renderer, [receipt]
+
+    def test_current_golden_binds_actual_dom_layout_motion_and_geometry(self) -> None:
+        renderer, receipts = self._renderer_evidence(self.root)
+        baseline = create_baseline(
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            audio_plan_path=None, cover_plan_path=None, correction_ledger_path=None,
+            renderer_export_path=renderer, keyframe_receipt_paths=receipts,
+            motion_audio_decisions_path=None,
+            approved_by="hongr", output=self.baseline_path,
+        )
+
+        report = evaluate_regression(
+            baseline=baseline, baseline_path=self.baseline_path,
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            correction_ledger_path=None, renderer_export_path=renderer,
+            keyframe_receipt_paths=receipts,
+        )
+
+        self.assertEqual(baseline["schema_version"], 2)
+        self.assertEqual(report["status"], "pass")
+        runtime = baseline["runtime_signature"]["events"]["e1"]
+        self.assertEqual(len(runtime["dom_fingerprint_sha256"]), 64)
+        self.assertEqual(len(runtime["motion_fingerprint_sha256"]), 64)
+        self.assertEqual(len(runtime["geometry_fingerprint_sha256"]), 64)
+
+    def test_current_golden_rejects_actual_geometry_drift(self) -> None:
+        renderer, receipts = self._renderer_evidence(self.root)
+        baseline = create_baseline(
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            audio_plan_path=None, cover_plan_path=None, correction_ledger_path=None,
+            renderer_export_path=renderer, keyframe_receipt_paths=receipts,
+            motion_audio_decisions_path=None,
+            approved_by="hongr", output=self.baseline_path,
+        )
+        changed_root = self.root / "changed"
+        changed_root.mkdir()
+        changed_renderer, changed_receipts = self._renderer_evidence(changed_root, x=0.55)
+
+        report = evaluate_regression(
+            baseline=baseline, baseline_path=self.baseline_path,
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            correction_ledger_path=None, renderer_export_path=changed_renderer,
+            keyframe_receipt_paths=changed_receipts,
+        )
+
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("runtime_geometry_drift", {
+            finding["code"] for finding in report["findings"]
+        })
+
+    def test_current_golden_rejects_malformed_nested_motion_audio_evidence(self) -> None:
+        renderer, receipts = self._renderer_evidence(self.root)
+        manifest = self.root / "motion-audio.json"
+        for name, payload in (
+            ("decision", []),
+            ("cue", {"event_id": "e1", "decision": "cue", "cue": []}),
+            ("mix", {"event_id": "e1", "decision": "cue", "mix_evidence": []}),
+        ):
+            decision = self.root / f"{name}.json"
+            decision.write_text(json.dumps(payload), encoding="utf-8")
+            manifest.write_text(json.dumps({"decisions": [{
+                "path": str(decision.resolve()),
+                "sha256": __import__("hashlib").sha256(decision.read_bytes()).hexdigest(),
+            }]}), encoding="utf-8")
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                _runtime_signature(renderer, receipts, manifest)
+
+    def test_current_golden_rejects_missing_current_renderer_evidence(self) -> None:
+        renderer, receipts = self._renderer_evidence(self.root)
+        baseline = create_baseline(
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            audio_plan_path=None, cover_plan_path=None, correction_ledger_path=None,
+            renderer_export_path=renderer, keyframe_receipt_paths=receipts,
+            motion_audio_decisions_path=None,
+            approved_by="hongr", output=self.baseline_path,
+        )
+
+        report = evaluate_regression(
+            baseline=baseline, baseline_path=self.baseline_path,
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            correction_ledger_path=None,
+        )
+
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("runtime_evidence_missing", {
+            finding["code"] for finding in report["findings"]
+        })
+
+    def test_current_golden_rejects_missing_runtime_event_or_phase(self) -> None:
+        renderer, receipts = self._renderer_evidence(self.root)
+        baseline = create_baseline(
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            audio_plan_path=None, cover_plan_path=None, correction_ledger_path=None,
+            renderer_export_path=renderer, keyframe_receipt_paths=receipts,
+            motion_audio_decisions_path=None, approved_by="hongr",
+            output=self.baseline_path,
+        )
+        current_root = self.root / "missing-runtime"
+        current_root.mkdir()
+        current_renderer, _ = self._renderer_evidence(current_root)
+        payload = json.loads(current_renderer.read_text(encoding="utf-8"))
+        payload["events"] = []
+        current_renderer.write_text(json.dumps(payload), encoding="utf-8")
+        report = evaluate_regression(
+            baseline=baseline, baseline_path=self.baseline_path,
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            correction_ledger_path=None, renderer_export_path=current_renderer,
+            keyframe_receipt_paths=[],
+        )
+        self.assertIn("runtime_event_inventory_drift", {
+            finding["code"] for finding in report["findings"]
+        })
+
+    def test_current_golden_rejects_large_overlay_perceptual_drift(self) -> None:
+        renderer, receipts = self._renderer_evidence(self.root)
+        baseline = create_baseline(
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            audio_plan_path=None, cover_plan_path=None, correction_ledger_path=None,
+            renderer_export_path=renderer, keyframe_receipt_paths=receipts,
+            motion_audio_decisions_path=None,
+            approved_by="hongr", output=self.baseline_path,
+        )
+        changed_root = self.root / "changed-style"
+        changed_root.mkdir()
+        changed_renderer, changed_receipts = self._renderer_evidence(
+            changed_root, image_color=(0, 0, 0),
+        )
+
+        report = evaluate_regression(
+            baseline=baseline, baseline_path=self.baseline_path,
+            storyboard_path=self.storyboard, semantic_brief_path=self.brief,
+            correction_ledger_path=None, renderer_export_path=changed_renderer,
+            keyframe_receipt_paths=changed_receipts,
+        )
+
+        self.assertIn("runtime_perceptual_drift", {
+            finding["code"] for finding in report["findings"]
+        })
 
 
 if __name__ == "__main__":

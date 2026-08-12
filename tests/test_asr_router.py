@@ -178,6 +178,10 @@ class AsrRouterTests(unittest.TestCase):
         }, {"language": "zh", "hotwords": ["产品名"]})
         self.assertEqual(route["selected_backend"], "local_faster_whisper")
         self.assertIn("funasr_unavailable", route["fallbacks"])
+        self.assertEqual(
+            route["route_sha256"], route_sha256(route),
+            "fallback metadata must be included before the route is hash-bound",
+        )
 
     def test_normalizes_segment_words_without_changing_text_or_timing(self) -> None:
         raw = {

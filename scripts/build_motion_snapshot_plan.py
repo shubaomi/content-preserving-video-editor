@@ -41,6 +41,9 @@ def load_beats(storyboard: dict) -> list[dict]:
                 continue
             result.append({
                 "id": str(item.get("id") or f"{key}-{len(result) + 1}"),
+                "semantic_event_id": str(item.get("semantic_event_id") or item.get("id") or ""),
+                "motion_design_contract_id": str(item.get("motion_design_contract_id") or ""),
+                "recipe_id": str(item.get("recipe_id") or ""),
                 "selector": str(
                     target_contract.get("active_selector")
                     or item.get("editableLayer")
@@ -65,7 +68,9 @@ def load_beats(storyboard: dict) -> list[dict]:
     return sorted(result, key=lambda item: item["start"])
 
 
-def snapshot_points(beat: dict, composition_duration: float | None = None) -> dict:
+def snapshot_points(
+    beat: dict, composition_duration: float | None = None, *, recipe: dict | None = None,
+) -> dict:
     start, end = beat["start"], beat["end"]
     duration = end - start
     edge = min(0.18, max(0.06, duration * 0.025))
@@ -75,6 +80,24 @@ def snapshot_points(beat: dict, composition_duration: float | None = None) -> di
         # few frames longer than the extracted video stream, so sampling only
         # 20ms before composition end can still yield a black/stale video frame.
         post = min(post, max(0.0, composition_duration - 0.12))
+    if recipe is not None:
+        phases = recipe.get("phases") or []
+        ratios = {
+            str(row.get("name")): float(row.get("duration_ratio", 0.0))
+            for row in phases if isinstance(row, dict)
+        }
+        if list(ratios) != ["entrance", "explain", "hold", "exit"]:
+            raise ValueError("motion recipe must declare entrance, explain, hold, exit phases")
+        if not np.isclose(sum(ratios.values()), 1.0):
+            raise ValueError("motion recipe phase ratios must total 1.0")
+        return {
+            "entrance": round(start + duration * ratios["entrance"] / 2, 3),
+            "midpoint": round(
+                start + duration * (ratios["entrance"] + ratios["explain"] / 2), 3,
+            ),
+            "pre_exit": round(end - duration * ratios["exit"] / 2, 3),
+            "post_exit": round(post, 3),
+        }
     return {
         "entrance": round(start + edge, 3),
         "midpoint": round(start + duration / 2, 3),
@@ -83,24 +106,62 @@ def snapshot_points(beat: dict, composition_duration: float | None = None) -> di
     }
 
 
-def build_plan(storyboard: dict) -> dict:
+def build_plan(
+    storyboard: dict, *, motion_design_contract: dict | None = None,
+    recipe_registry: dict | None = None,
+) -> dict:
     composition = storyboard.get("composition") or {}
     duration = composition.get(
         "durationSeconds", composition.get("duration", storyboard.get("duration"))
     )
     all_beats = load_beats(storyboard)
-    # Capture every meso/macro phase, but sample micro beats by family. This
-    # preserves actual transition evidence without emitting a redundant sheet
-    # for every short keyword emphasis.
-    selected = [beat for beat in all_beats if beat["tier"] in {"meso", "macro", "unknown"}]
-    seen_micro_families = {beat["visual_family"] for beat in selected if beat["tier"] == "micro"}
-    for beat in all_beats:
-        if beat["tier"] == "micro" and beat["visual_family"] not in seen_micro_families:
+    mqe_enabled = motion_design_contract is not None
+    recipes: dict[str, dict] = {}
+    if mqe_enabled:
+        if not isinstance(recipe_registry, dict):
+            raise ValueError("MQE snapshot planning requires the recipe registry")
+        recipes = {
+            str(row.get("recipe_id")): row
+            for row in recipe_registry.get("recipes") or [] if isinstance(row, dict)
+        }
+        contract_id = str(motion_design_contract.get("contract_id") or "")
+        selected_ids = list(motion_design_contract.get("selected_event_ids") or [])
+        by_semantic_id = {
+            str(beat.get("semantic_event_id") or ""): beat for beat in all_beats
+        }
+        if set(by_semantic_id) != set(selected_ids) or len(by_semantic_id) != len(selected_ids):
+            raise ValueError("MQE snapshot plan must cover every compiler-selected event exactly once")
+        selected = []
+        for semantic_id in selected_ids:
+            beat = by_semantic_id.get(str(semantic_id))
+            if beat is None:
+                raise ValueError(f"MQE snapshot plan is missing selected event {semantic_id}")
+            if beat.get("motion_design_contract_id") != contract_id:
+                raise ValueError(f"MQE snapshot event {semantic_id} has a stale contract binding")
+            if str(beat.get("recipe_id") or "") not in recipes:
+                raise ValueError(f"MQE snapshot event {semantic_id} has an unknown recipe")
             selected.append(beat)
-            seen_micro_families.add(beat["visual_family"])
+    else:
+        # Legacy projects retain representative micro sampling. MQE projects
+        # require a receipt for every compiler-selected event above.
+        selected = [beat for beat in all_beats if beat["tier"] in {"meso", "macro", "unknown"}]
+        seen_micro_families = {
+            beat["visual_family"] for beat in selected if beat["tier"] == "micro"
+        }
+        for beat in all_beats:
+            if beat["tier"] == "micro" and beat["visual_family"] not in seen_micro_families:
+                selected.append(beat)
+                seen_micro_families.add(beat["visual_family"])
     beats = []
     for beat in sorted(selected, key=lambda item: item["start"]):
-        beats.append({**beat, "snapshots": snapshot_points(beat, float(duration) if duration else None)})
+        recipe = recipes.get(str(beat.get("recipe_id") or "")) if mqe_enabled else None
+        beats.append({
+            **beat,
+            "snapshots": snapshot_points(
+                beat, float(duration) if duration else None, recipe=recipe,
+            ),
+            "keyframe_receipt_required": mqe_enabled,
+        })
     return {
         "schema_version": 1,
         "composition": {
@@ -110,7 +171,15 @@ def build_plan(storyboard: dict) -> dict:
         "beats": beats,
         "snapshot_timestamps": [value for beat in beats for value in beat["snapshots"].values()],
         "required_phases": ["entrance", "midpoint", "pre_exit", "post_exit"],
-        "strategy": {"all_meso_macro": True, "micro": "one representative beat per visual family", "all_event_dom_checks": "HyperFrames check"},
+        "strategy": ({
+            "event_coverage": "all_compiler_selected_events",
+            "phase_timing": "motion_recipe_ratios",
+            "all_event_dom_checks": "renderer_export_plus_keyframe_receipts",
+        } if mqe_enabled else {
+            "all_meso_macro": True,
+            "micro": "one representative beat per visual family",
+            "all_event_dom_checks": "HyperFrames check",
+        }),
     }
 
 
@@ -238,12 +307,25 @@ def main() -> int:
     parser.add_argument("--contact-sheet")
     parser.add_argument("--motion-sidecar")
     parser.add_argument("--check-out")
+    parser.add_argument("--motion-design-contract")
+    parser.add_argument("--recipe-registry")
     parser.add_argument("--hyperframes-check", action="store_true")
     parser.add_argument("--capture", action="store_true")
     parser.add_argument("--reuse-snapshots", action="store_true")
     args = parser.parse_args()
     storyboard = json.loads(Path(args.storyboard).read_text(encoding="utf-8"))
-    plan = build_plan(storyboard)
+    motion_contract = (
+        json.loads(Path(args.motion_design_contract).read_text(encoding="utf-8"))
+        if args.motion_design_contract else None
+    )
+    recipe_registry = (
+        json.loads(Path(args.recipe_registry).read_text(encoding="utf-8"))
+        if args.recipe_registry else None
+    )
+    plan = build_plan(
+        storyboard, motion_design_contract=motion_contract,
+        recipe_registry=recipe_registry,
+    )
     output = Path(args.out).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

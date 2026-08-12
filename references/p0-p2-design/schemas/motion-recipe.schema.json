@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-preserving-video-editor.local/schemas/motion-recipe-1.0.0.json",
+  "title": "Motion Recipe",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "recipe_id", "recipe_version", "family", "semantic_roles", "runtime", "preconditions", "contraindications", "orientation_variants", "phases", "proof_requirements", "audio_profile", "cost_tier", "fallback_recipe_id"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "recipe_id": { "$ref": "#/$defs/id" },
+    "recipe_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "family": { "enum": ["mark", "focus", "causality", "compare", "process", "relation", "proof", "state_transform", "lens", "camera", "transition", "typography", "evidence", "ip_vignette", "architecture", "depth"] },
+    "semantic_roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["mark", "explain", "relate", "sequence", "prove", "resolve", "transition"] } },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "advanced_feature_flag_required", "seek_safe"],
+      "properties": {
+        "primary": { "enum": ["dom_gsap", "svg_gsap", "flip_gsap", "css_waapi", "lottie", "three_webgl", "typegpu"] },
+        "secondary": { "type": "array", "uniqueItems": true, "items": { "enum": ["dom", "svg", "css", "canvas", "video", "lottie", "three", "webgl", "typegpu"] } },
+        "advanced_feature_flag_required": { "type": "boolean" },
+        "seek_safe": { "const": true }
+      }
+    },
+    "preconditions": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/rule" } },
+    "contraindications": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/rule" } },
+    "orientation_variants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["landscape", "portrait"],
+      "properties": {
+        "landscape": { "$ref": "#/$defs/layout" },
+        "portrait": { "$ref": "#/$defs/layout" },
+        "square": { "$ref": "#/$defs/layout" }
+      }
+    },
+    "phases": {
+      "type": "array",
+      "prefixItems": [
+        { "$ref": "#/$defs/entrance" },
+        { "$ref": "#/$defs/explain" },
+        { "$ref": "#/$defs/hold" },
+        { "$ref": "#/$defs/exit" }
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "proof_requirements": { "type": "array", "minItems": 4, "uniqueItems": true, "items": { "enum": ["strict_check", "animation_map", "entrance_snapshot", "mid_snapshot", "pre_exit_snapshot", "post_exit_snapshot", "target_geometry", "connector_geometry", "composite_contrast", "preview_render_parity", "fallback_render"] } },
+    "audio_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preferred_motif_families", "silence_allowed"],
+      "properties": {
+        "preferred_motif_families": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "silence_allowed": { "const": true },
+        "preferred_phase": { "enum": ["entrance", "explain", "hold", "exit", "none"] }
+      }
+    },
+    "cost_tier": { "enum": ["low", "medium", "high"] },
+    "fallback_recipe_id": { "$ref": "#/$defs/id" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "rule": { "type": "string", "pattern": "^[a-z][a-z0-9_.-]{2,127}$" },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["placement_strategy", "max_width_ratio", "max_height_ratio"],
+      "properties": {
+        "placement_strategy": { "enum": ["target_relative", "verified_whitespace", "safe_side_rail", "full_frame_cutaway", "camera_crop"] },
+        "max_width_ratio": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "max_height_ratio": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      }
+    },
+    "phaseBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "duration_ratio", "easing", "poses"],
+      "properties": {
+        "name": { "type": "string" },
+        "duration_ratio": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "easing": { "type": "string", "minLength": 1 },
+        "poses": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/pose" } }
+      }
+    },
+    "pose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["element_role", "property", "value"],
+      "properties": {
+        "element_role": { "type": "string", "minLength": 1 },
+        "property": { "enum": ["opacity", "x", "y", "scale", "rotation", "mask_progress", "path_progress", "blur", "camera_x", "camera_y", "camera_scale", "z_index", "noop"] },
+        "value": {}
+      }
+    },
+    "entrance": { "allOf": [{ "$ref": "#/$defs/phaseBase" }, { "properties": { "name": { "const": "entrance" } } }] },
+    "explain": { "allOf": [{ "$ref": "#/$defs/phaseBase" }, { "properties": { "name": { "const": "explain" } } }] },
+    "hold": { "allOf": [{ "$ref": "#/$defs/phaseBase" }, { "properties": { "name": { "const": "hold" } } }] },
+    "exit": { "allOf": [{ "$ref": "#/$defs/phaseBase" }, { "properties": { "name": { "const": "exit" } } }] }
+  }
+}

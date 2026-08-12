@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -67,6 +68,23 @@ class AestheticQaTests(unittest.TestCase):
     def test_complete_evidence_backed_review_passes(self) -> None:
         self.assertEqual(validate(self.review, self.storyboard), [])
 
+    def test_decision_complete_review_does_not_invent_four_events(self) -> None:
+        event_id = "e0"
+        one_event_storyboard = {"events": [self.storyboard["events"][0]]}
+        one_event_review = json.loads(json.dumps(self.review))
+        one_event_review["reviewed_event_ids"] = [event_id]
+        one_event_review["snapshots"] = {
+            event_id: self.review["snapshots"][event_id],
+        }
+        one_event_review["composite_contrast"] = {
+            event_id: self.review["composite_contrast"][event_id],
+        }
+
+        self.assertEqual(
+            validate(one_event_review, one_event_storyboard, decision_complete=True),
+            [],
+        )
+
     def test_tests_cannot_replace_missing_aesthetic_criterion(self) -> None:
         del self.review["criteria"][REQUIRED_CRITERIA[0]]
         errors = validate(self.review, self.storyboard)
@@ -100,6 +118,44 @@ class AestheticQaTests(unittest.TestCase):
         del self.review["snapshots"]["e0"]["post_exit"]
         errors = validate(self.review, self.storyboard)
         self.assertTrue(any("post_exit snapshot" in error for error in errors))
+
+    def test_keyframe_receipt_snapshots_must_be_the_exact_images_reviewed(self) -> None:
+        receipt_paths = {}
+        for event in self.storyboard["events"]:
+            path = Path(self.temp.name) / f"{event['id']}-receipt.json"
+            path.write_text(json.dumps({
+                "event_id": event["id"],
+                "phase_observations": [
+                    {
+                        "phase": phase,
+                        "snapshot": {
+                            "path": self.review["snapshots"][event["id"]][
+                                "midpoint" if phase == "mid" else phase
+                            ],
+                            "sha256": sha256_file(Path(
+                                self.review["snapshots"][event["id"]][
+                                    "midpoint" if phase == "mid" else phase
+                                ]
+                            )),
+                        },
+                    }
+                    for phase in ("entrance", "mid", "pre_exit", "post_exit")
+                ],
+            }), encoding="utf-8")
+            receipt_paths[event["id"]] = path
+
+        self.assertEqual(
+            validate(self.review, self.storyboard, keyframe_receipt_paths=receipt_paths),
+            [],
+        )
+
+        replacement = Path(self.temp.name) / "replacement.png"
+        Image.new("RGB", (320, 180), "white").save(replacement)
+        self.review["snapshots"]["e0"]["midpoint"] = str(replacement)
+        errors = validate(
+            self.review, self.storyboard, keyframe_receipt_paths=receipt_paths,
+        )
+        self.assertTrue(any("keyframe receipt" in error and "midpoint" in error for error in errors), errors)
 
     def test_corrupt_or_tiny_snapshot_cannot_fake_visual_review(self) -> None:
         corrupt = Path(self.review["snapshots"]["e0"]["midpoint"])

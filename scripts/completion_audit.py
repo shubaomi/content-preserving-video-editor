@@ -26,6 +26,7 @@ from director_contracts import (
     write_json,
 )
 from correction_ledger import validate_ledger
+from creative_review import validate_review as validate_creative_review
 from clip_factory import validate_clip_manifest
 from editorial_regression import validate_baseline, validate_regression
 from localization_pipeline import validate_localization_manifest
@@ -34,6 +35,8 @@ from podcast_pipeline import validate_podcast_manifest
 from production_contract import validate_contract
 from provider_governance import validate_cost_ledger, validate_decision_report
 from fixture_acceptance import CHECK_NAMES, evaluate_suite
+from keyframe_receipt import validate_keyframe_receipt, validate_renderer_export
+from motion_contracts import DEFAULT_RECIPE_REGISTRY
 from preview_render_parity import validate as validate_preview_render_parity
 from six_media_acceptance import validate_manifest as validate_six_media_manifest
 from test_acceptance_report import validate_report as validate_test_suite_report
@@ -42,12 +45,29 @@ from validate_platform_export import validate_bound_report as validate_platform_
 from visual_dynamics_qa import validate_report as validate_visual_dynamics_report
 from current_golden_regression import validate_report as validate_current_golden_report
 from representative_short_media import validate as validate_representative_short_media
+from delivery_readiness import asset_is_required, validate_required_asset_readiness
 
 
 REQUIRED_FIXTURE_TYPES = {
     "landscape_screen_tutorial", "portrait_talking_head", "published_edit_polish",
     "two_person_interview", "noisy_audio_hotwords", "screen_camera_mixed",
 }
+
+
+def _required_asset_readiness_errors(
+    project: dict[str, Any], stages: dict[str, Any],
+) -> list[str]:
+    return validate_required_asset_readiness(project, stages)
+
+
+def _sample_structure_gate(
+    project: dict[str, Any], visual_events: list[dict[str, Any]],
+    signatures: set[tuple[str, ...]],
+) -> bool:
+    """Keep the legacy variety quota while MQE uses compiler decisions."""
+    if project.get("motion_quality", {}).get("enabled") is True:
+        return bool(visual_events)
+    return len(visual_events) >= 4 and len(signatures) >= 4
 
 
 def _stable_hash(value: Any) -> str:
@@ -60,6 +80,145 @@ def _safe_int(value: Any, default: int = -1) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _motion_render_evidence_errors(
+    *, root: Path, project: dict[str, Any], full_project: Path,
+) -> list[str]:
+    """Recompute the Motion Quality full-project renderer evidence gate."""
+    if project.get("motion_quality", {}).get("enabled") is not True:
+        return []
+    contract_path = root / "work" / "director" / "motion-design" / "full" / "motion-design-contract.json"
+    evidence_contract_path = full_project / "renderer-evidence-contract.json"
+    project_manifest_path = full_project / "renderer-project-manifest.json"
+    renderer_export_path = full_project / "renderer-export.json"
+    receipt_dir = full_project / "keyframe-receipts"
+    parity_path = root / "work" / "director" / "full-qa" / "preview-render-parity.json"
+    storyboard_path = full_project / "storyboard.json"
+    source_value = str((project.get("source") or {}).get("path") or "")
+    source_path = Path(source_value)
+    if source_value and not source_path.is_absolute():
+        source_path = root / source_path
+    required = [
+        contract_path, evidence_contract_path, project_manifest_path,
+        renderer_export_path, parity_path, storyboard_path, source_path,
+    ]
+    missing = [str(path) for path in required if not path.is_file()]
+    if not receipt_dir.is_dir():
+        missing.append(str(receipt_dir))
+    if missing:
+        return ["motion render evidence is missing: " + ", ".join(missing)]
+
+    errors: list[str] = []
+    try:
+        motion_contract = read_json(contract_path)
+        evidence_contract = read_json(evidence_contract_path)
+        renderer_export = read_json(renderer_export_path)
+        storyboard = read_json(storyboard_path)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return [f"motion render evidence JSON is invalid: {error}"]
+    if not all(isinstance(value, dict) for value in (
+        motion_contract, evidence_contract, renderer_export, storyboard,
+    )):
+        return ["motion render evidence JSON roots must be mappings"]
+
+    if evidence_contract.get("schema_version") != 1 or evidence_contract.get("owner") != "director":
+        errors.append("renderer evidence contract metadata is invalid")
+    expected_inputs = {
+        "project_entrypoint": full_project / "index.html",
+        "storyboard": storyboard_path,
+        "motion_design_contract": contract_path,
+        "source_media": source_path,
+    }
+    for name, expected_path in expected_inputs.items():
+        row = (evidence_contract.get(name) or {})
+        expected_path = expected_path.resolve()
+        if Path(str(row.get("path") or "")).resolve() != expected_path:
+            errors.append(f"renderer evidence contract {name} path is stale")
+        if not expected_path.is_file() or row.get("sha256") != (
+            sha256_file(expected_path) if expected_path.is_file() else None
+        ):
+            errors.append(f"renderer evidence contract {name} hash is stale")
+    expected_outputs = {
+        "renderer_export": renderer_export_path,
+        "renderer_project_manifest": project_manifest_path,
+        "keyframe_receipt_directory": receipt_dir,
+        "preview_render_parity": parity_path,
+    }
+    for name, expected_path in expected_outputs.items():
+        actual = Path(str((evidence_contract.get("outputs") or {}).get(name) or ""))
+        if actual.resolve() != expected_path.resolve():
+            errors.append(f"renderer evidence contract {name} output is stale")
+
+    errors.extend(validate_renderer_export(
+        renderer_export,
+        project_artifact=project_manifest_path,
+        motion_design_contract_path=contract_path,
+    ))
+    expected_ids = [str(value) for value in motion_contract.get("selected_event_ids") or []]
+    receipt_paths: dict[str, Path] = {}
+    for path in sorted(receipt_dir.glob("*.json")):
+        try:
+            event_id = str(read_json(path).get("event_id") or "")
+        except (OSError, ValueError, json.JSONDecodeError):
+            errors.append(f"invalid keyframe receipt JSON: {path}")
+            continue
+        if not event_id or event_id in receipt_paths:
+            errors.append(f"duplicate or missing keyframe receipt event_id: {path}")
+            continue
+        receipt_paths[event_id] = path.resolve()
+    if set(receipt_paths) != set(expected_ids):
+        errors.append("keyframe receipt event set differs from compiler-selected events")
+
+    bindings_by_id: dict[str, Path] = {}
+    binding_dir = root / "work" / "director" / "target-bindings" / "full"
+    for path in sorted(binding_dir.glob("*.json")):
+        try:
+            binding_id = str(read_json(path).get("binding_id") or "")
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if binding_id:
+            bindings_by_id[binding_id] = path.resolve()
+    opportunities = {
+        str(row.get("semantic_event_id")): row
+        for row in motion_contract.get("opportunities") or [] if isinstance(row, dict)
+    }
+    for event_id in expected_ids:
+        receipt_path = receipt_paths.get(event_id)
+        if receipt_path is None:
+            continue
+        opportunity = opportunities.get(event_id) or {}
+        binding_ids = [str(value) for value in opportunity.get("target_binding_ids") or []]
+        missing_bindings = [value for value in binding_ids if value not in bindings_by_id]
+        if missing_bindings:
+            errors.append(f"{event_id}: target bindings are missing: {', '.join(missing_bindings)}")
+            continue
+        errors.extend(
+            f"{event_id}: {error}" for error in validate_keyframe_receipt(
+                read_json(receipt_path),
+                motion_design_contract_path=contract_path,
+                recipe_registry_path=DEFAULT_RECIPE_REGISTRY,
+                target_binding_paths=[bindings_by_id[value] for value in binding_ids],
+                renderer_export_path=renderer_export_path,
+                parity_path=parity_path,
+                maximum_caption_overlap_ratio=0.0,
+                minimum_composite_contrast_ratio=4.5,
+                maximum_connector_error_pixels=4.0,
+            )
+        )
+    errors.extend(validate_preview_render_parity(
+        read_json(parity_path), storyboard,
+        configured_tolerances=(
+            (project.get("qa") or {}).get("preview_render_parity") or {}
+        ).get("tolerances") or {},
+        expected_bindings={
+            "project_artifact": project_manifest_path,
+            "motion_design_contract": contract_path,
+            "source_media": source_path,
+        },
+        keyframe_receipt_paths=receipt_paths,
+    ))
+    return errors
 
 
 def _cover_review_errors(review: dict[str, Any], cover_hash: str) -> list[str]:
@@ -260,6 +419,7 @@ def _full_hyperframes_errors(
         errors.append("HyperFrames strict-check execution receipt is missing or stale")
     errors.extend(validate_visual_vocabulary_audit(
         read_json(vocabulary_path), read_json(storyboard_path), full_video=True,
+        decision_complete=project.get("motion_quality", {}).get("enabled") is True,
     ))
     if check.get("ok") is not True:
         errors.append("full HyperFrames strict check is not passing")
@@ -283,16 +443,21 @@ def _full_hyperframes_errors(
     ):
         errors.append("full HyperFrames snapshot review is incomplete or stale")
     parity = read_json(parity_path)
-    try:
-        errors.extend(validate_preview_render_parity(
-            parity,
-            read_json(storyboard_path),
-            configured_tolerances=project.get("qa", {}).get(
-                "preview_render_parity", {}
-            ).get("tolerances", {"position_px": 4, "size_px": 4, "time_seconds": 0.05}),
+    if project.get("motion_quality", {}).get("enabled") is True:
+        errors.extend(_motion_render_evidence_errors(
+            root=root, project=project, full_project=full_project,
         ))
-    except (TypeError, ValueError) as error:
-        errors.append(f"preview/render parity report is malformed: {error}")
+    else:
+        try:
+            errors.extend(validate_preview_render_parity(
+                parity,
+                read_json(storyboard_path),
+                configured_tolerances=project.get("qa", {}).get(
+                    "preview_render_parity", {}
+                ).get("tolerances", {"position_px": 4, "size_px": 4, "time_seconds": 0.05}),
+            ))
+        except (TypeError, ValueError) as error:
+            errors.append(f"preview/render parity report is malformed: {error}")
     evidence = read_json(evidence_path)
     bindings = {
         "storyboard_sha256": storyboard_path,
@@ -345,7 +510,10 @@ def _sample_qa_errors(root: Path, sample_project: Path, project: dict[str, Any])
     if missing:
         return ["sample QA evidence is missing: " + ", ".join(map(str, missing))]
     storyboard = read_json(storyboard_path)
-    errors = validate_aesthetic_review(read_json(review_path), storyboard)
+    errors = validate_aesthetic_review(
+        read_json(review_path), storyboard,
+        decision_complete=project.get("motion_quality", {}).get("enabled") is True,
+    )
     errors.extend(validate_audio_plan(
         read_json(audio_plan_path), storyboard, project, base_dir=sample_project,
     ))
@@ -379,6 +547,36 @@ def _sample_qa_errors(root: Path, sample_project: Path, project: dict[str, Any])
             )
         ):
             errors.append("sample approval is stale: golden editorial baseline")
+    if project.get("motion_quality", {}).get("enabled") is True:
+        creative_review_path = root / "sample-qa" / "creative-review.json"
+        motion_contract_path = root / "motion-design" / "sample" / "motion-design-contract.json"
+        receipt_paths: dict[str, Path] = {}
+        for path in sorted((sample_project / "keyframe-receipts").glob("*.json")):
+            try:
+                event_id = str(read_json(path).get("event_id") or "")
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            if event_id:
+                receipt_paths[event_id] = path.resolve()
+        if not creative_review_path.is_file():
+            errors.append("paired creative review is missing")
+        else:
+            creative_review = read_json(creative_review_path)
+            errors.extend(validate_creative_review(
+                creative_review,
+                motion_design_contract_path=motion_contract_path,
+                storyboard_path=storyboard_path,
+                keyframe_receipt_paths=receipt_paths,
+                motion_audio_decisions_path=audio_plan_path,
+                authorized_user_reviewers={str(approval.get("approved_by") or "")},
+            ))
+            if (
+                creative_review.get("status") != "approved"
+                or (creative_review.get("user_review") or {}).get("decision") != "approved"
+            ):
+                errors.append("paired creative review lacks explicit user approval")
+            if approval.get("creative_review_sha256") != sha256_file(creative_review_path):
+                errors.append("sample approval is stale: creative_review_sha256")
     return errors
 
 
@@ -592,10 +790,19 @@ def build(
          sync_path, final_correctness_path, caption_delivery_plan],
     )
     criteria["6_sample_has_distinct_structures"] = _row(
-        "pass" if len(visual_events) >= 4 and len(signatures) >= 4 else "pending",
-        f"Sample contains {len(visual_events)} visual events and {len(signatures)} distinct five-field structures.",
+        "pass" if _sample_structure_gate(project, visual_events, signatures) else "pending",
+        (
+            f"Motion Quality sample contains {len(visual_events)} compiler-selected render "
+            "event(s); no filler event or family quota is applied."
+            if project.get("motion_quality", {}).get("enabled") is True else
+            f"Sample contains {len(visual_events)} visual events and {len(signatures)} "
+            "distinct five-field structures."
+        ),
         [sample_storyboard_path, sample_project / "visual-vocabulary-audit.json"],
     )
+    preview_artifacts = [root / "preview-approval.json"]
+    if project.get("motion_quality", {}).get("enabled") is True:
+        preview_artifacts.append(root / "sample-qa" / "creative-review.json")
     criteria["7_sample_content_and_layout_gate"] = _row(
         "pass" if not sample_qa_errors
         and _stage_binds_artifacts(stages, "sample_qa", [
@@ -603,13 +810,14 @@ def build(
             root / "sample-qa" / "aesthetic-review.json",
             sample_project / "audio-plan.json", sample_gate_path,
         ])
-        and _stage_binds_artifacts(stages, "preview_approval", [root / "preview-approval.json"])
+        and _stage_binds_artifacts(stages, "preview_approval", preview_artifacts)
         else "pending",
         "Sample aesthetics, audio, gate hashes, and explicit preview approval were revalidated."
         if not sample_qa_errors else
         f"Sample QA or approval has {len(sample_qa_errors)} missing, failed, or stale item(s).",
         [sample_gate_path, root / "sample-qa" / "aesthetic-review.json",
-         sample_project / "audio-plan.json", root / "preview-approval.json"],
+         sample_project / "audio-plan.json", *preview_artifacts,
+         root / "review" / "creative-review.html"],
     )
     single_output_config = state.get("single_universal_output") is True and project.get("delivery", {}).get("mode") in {
         None, "single_universal_export", "autonomous_pre_publish"
@@ -620,6 +828,8 @@ def build(
     if not cover_path.is_absolute():
         cover_path = (context.root / cover_path).resolve()
     cover_hash = sha256_file(cover_path) if cover_path.is_file() else None
+    cover_required = asset_is_required(project, "cover")
+    cover_applicable = cover_required or cover_path.is_file()
     platform_same_file = bool(output_hash) and all(
         path.is_file()
         and read_json(path).get("status") == "pass"
@@ -646,6 +856,7 @@ def build(
         [handoff_path, Path(__file__).resolve(), sample_storyboard_path],
     )
     final_delivery_errors: list[str] = []
+    final_delivery_errors.extend(_required_asset_readiness_errors(project, stages))
     full_storyboard_path = full_project / "storyboard.json"
     audio_plan_path = full_project / "audio-plan.json"
     media_report_path = (
@@ -660,14 +871,15 @@ def build(
         final_delivery_errors.append("final aesthetic review is missing")
     if not audio_plan_path.is_file():
         final_delivery_errors.append("final audio plan is missing")
-    if not cover_path.is_file():
+    if cover_required and not cover_path.is_file():
         final_delivery_errors.append("delivery cover is missing")
-    if not cover_review_path.is_file():
+    if cover_applicable and not cover_review_path.is_file():
         final_delivery_errors.append("cover review is missing")
     if delivery_output.is_file() and full_storyboard_path.is_file() and final_aesthetic_path.is_file():
         final_review = read_json(final_aesthetic_path)
         final_delivery_errors.extend(validate_aesthetic_review(
             final_review, read_json(full_storyboard_path),
+            decision_complete=project.get("motion_quality", {}).get("enabled") is True,
         ))
         if final_review.get("reviewed_output_sha256") != output_hash:
             final_delivery_errors.append("final aesthetic review output hash is stale")
@@ -676,7 +888,7 @@ def build(
             read_json(audio_plan_path), read_json(full_storyboard_path), project,
             base_dir=full_project,
         ))
-    if cover_review_path.is_file() and cover_path.is_file():
+    if cover_applicable and cover_review_path.is_file() and cover_path.is_file():
         cover_review = read_json(cover_review_path)
         final_delivery_errors.extend(_cover_review_errors(cover_review, cover_hash))
     final_delivery_errors.extend(_technical_report_errors(media_report_path, delivery_output))
@@ -689,7 +901,7 @@ def build(
     delivery_contract_path = root / "delivery-contract.json"
     if not delivery_contract_path.is_file():
         final_delivery_errors.append("delivery contract is missing")
-    elif delivery_output.is_file() and cover_path.is_file():
+    elif delivery_output.is_file() and (not cover_applicable or cover_path.is_file()):
         contract = read_json(delivery_contract_path)
         if (
             contract.get("file_sha256") != output_hash
@@ -698,14 +910,26 @@ def build(
             or contract.get("duplicate_platform_mp4s") is not False
         ):
             final_delivery_errors.append("delivery contract is incomplete or stale")
+        expected_cover_path = str(cover_path) if cover_applicable else None
+        if contract.get("cover") != expected_cover_path:
+            final_delivery_errors.append("delivery contract cover applicability is stale")
+        if not cover_applicable and contract.get("cover_applicability") != "optional_unavailable":
+            final_delivery_errors.append("delivery contract does not record optional unavailable cover")
+    final_review_evidence = (
+        _review_evidence_files(read_json(final_aesthetic_path))
+        if final_aesthetic_path.is_file() else []
+    )
+    delivery_stage_artifacts = [
+        delivery_output, delivery_contract_path, final_aesthetic_path,
+        final_correctness_path, media_report_path, *platform_paths.values(),
+        *final_review_evidence,
+    ]
+    if cover_applicable:
+        delivery_stage_artifacts.extend([cover_path, cover_review_path])
     delivery_complete = (
         stages.get("delivery_qa", {}).get("status") == "complete"
         and not final_delivery_errors
-        and _stage_binds_artifacts(stages, "delivery_qa", [
-            delivery_output, cover_path, delivery_contract_path, final_aesthetic_path,
-            cover_review_path, final_correctness_path, media_report_path,
-            *platform_paths.values(), *_review_evidence_files(read_json(final_aesthetic_path)),
-        ])
+        and _stage_binds_artifacts(stages, "delivery_qa", delivery_stage_artifacts)
     )
     criteria["10_blocking_final_delivery_qa"] = _row(
         "pass" if delivery_complete else "pending",
@@ -854,6 +1078,8 @@ def build(
         "interactive_review", "event_render_cache", "cover_reference_pack",
         "preference_learning", "feedback_learning_loop", "portable_audit_bundle",
         "release_delivery_pack",
+        "adaptive_layout", "stateful_target_binding", "motion_quality_engine",
+        "hyperframes_keyframe_evidence", "paired_creative_review",
     }
     maturity_floor = CAPABILITY_LEVELS.index("director_integrated")
     capability_contract_pass = (

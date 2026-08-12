@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-preserving-video-editor.local/schemas/target-binding-1.0.0.json",
+  "title": "Target Binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "binding_id", "semantic_event_id", "created_at", "producer", "target_kind", "tracking_mode", "target_ids", "source_window", "output_window", "active_windows", "observations", "invalidation_policy", "status", "input_hashes"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "binding_id": { "$ref": "#/$defs/id" },
+    "semantic_event_id": { "$ref": "#/$defs/id" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "producer": { "type": "string", "minLength": 1 },
+    "target_kind": { "enum": ["ui_element", "text_region", "chart_region", "face", "hand", "object", "source_crop", "connector_nodes", "protected_region"] },
+    "tracking_mode": { "enum": ["static", "scene_bounded", "keyframed"] },
+    "target_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "source_window": { "$ref": "#/$defs/window" },
+    "output_window": { "$ref": "#/$defs/window" },
+    "active_windows": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/window" } },
+    "observations": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/observation" } },
+    "state_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["timestamp_seconds", "kind", "before_state_sha256", "after_state_sha256"],
+        "properties": {
+          "timestamp_seconds": { "type": "number", "minimum": 0 },
+          "kind": { "enum": ["scene", "route", "modal", "scroll", "zoom", "layout", "visibility", "rotation"] },
+          "before_state_sha256": { "$ref": "#/$defs/sha256" },
+          "after_state_sha256": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "invalidation_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["on_state_change", "on_target_lost", "minimum_confidence"],
+      "properties": {
+        "on_state_change": { "enum": ["exit", "rebind", "action_required"] },
+        "on_target_lost": { "enum": ["exit", "fallback", "action_required"] },
+        "minimum_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "fallback_recipe_id": { "$ref": "#/$defs/id" }
+      }
+    },
+    "status": { "enum": ["resolved", "unresolved", "invalidated"] },
+    "input_hashes": {
+      "type": "object",
+      "minProperties": 2,
+      "additionalProperties": { "$ref": "#/$defs/sha256" },
+      "propertyNames": { "pattern": "^[a-z][a-z0-9_]*_sha256$" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_seconds", "end_seconds"],
+      "properties": {
+        "start_seconds": { "type": "number", "minimum": 0 },
+        "end_seconds": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "bbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 1 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1 },
+        "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp_seconds", "target_id", "source_state_sha256", "visible", "confidence", "evidence"],
+      "properties": {
+        "timestamp_seconds": { "type": "number", "minimum": 0 },
+        "target_id": { "$ref": "#/$defs/id" },
+        "bbox": { "$ref": "#/$defs/bbox" },
+        "source_state_sha256": { "$ref": "#/$defs/sha256" },
+        "visible": { "type": "boolean" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "useful_content_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256", "source"],
+          "properties": {
+            "path": { "type": "string", "pattern": "^(?:[A-Za-z]:\\\\|\\\\\\\\)" },
+            "sha256": { "$ref": "#/$defs/sha256" },
+            "source": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "visible": { "const": true } }, "required": ["visible"] },
+          "then": { "required": ["bbox"] }
+        }
+      ]
+    }
+  }
+}

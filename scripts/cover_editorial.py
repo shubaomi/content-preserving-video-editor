@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from director_contracts import sha256_file, write_json
+from editorial_promise import validate_promise_bindings
 
 
 COVER_ROUTES = {
@@ -239,6 +240,19 @@ def build_cover_editorial_plan(
     if errors:
         raise CoverEditorialError(errors)
 
+    promise_ledger_path = project_root / "work" / "director" / "editorial-promise-ledger.json"
+    promise_binding = None
+    if promise_ledger_path.is_file():
+        ledger = json.loads(promise_ledger_path.read_text(encoding="utf-8"))
+        promise_binding = {
+            "surface": "cover", "copy": headline,
+            "promise_id": str(ledger.get("promise_id") or ""),
+            "proof_event_ids": evidence_ids,
+        }
+        binding_errors = validate_promise_bindings(ledger, [promise_binding])
+        if binding_errors:
+            raise CoverEditorialError(binding_errors)
+
     variant_config = cover.get("variants") or {}
     template_a, template_b = _template_pair(
         allowed, tone=str(direction.get("tone") or "cinematic"), route=route,
@@ -302,6 +316,12 @@ def build_cover_editorial_plan(
         },
         "output": str(output.resolve()),
     }
+    if promise_binding is not None:
+        plan["editorial_promise"] = {
+            "ledger": str(promise_ledger_path.resolve()),
+            "ledger_sha256": sha256_file(promise_ledger_path),
+            "binding": promise_binding,
+        }
     output.parent.mkdir(parents=True, exist_ok=True)
     write_json(output, plan)
     return plan

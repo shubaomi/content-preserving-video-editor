@@ -17,6 +17,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from completion_audit import (  # noqa: E402
     _cover_review_errors,
     _final_caption_delivery_errors,
+    _motion_render_evidence_errors,
+    _required_asset_readiness_errors,
+    _sample_structure_gate,
     build,
 )
 from capability_registry import build_capability_inventory, build_toolchain_report  # noqa: E402
@@ -39,6 +42,105 @@ from validate_platform_export import (  # noqa: E402
 
 
 class CompletionAuditTests(unittest.TestCase):
+    def test_motion_quality_sample_structure_is_decision_complete_not_quota_driven(self) -> None:
+        event = {"id": "semantic-1"}
+        self.assertTrue(_sample_structure_gate(
+            {"motion_quality": {"enabled": True}}, [event], set(),
+        ))
+        self.assertFalse(_sample_structure_gate(
+            {"motion_quality": {"enabled": False}}, [event], {("one",)},
+        ))
+
+    def test_motion_quality_completion_requires_real_renderer_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            full_project = root / "hyperframes-full"
+            full_project.mkdir()
+            source = root / "source.mp4"
+            source.write_bytes(b"source")
+            errors = _motion_render_evidence_errors(
+                root=root,
+                project={
+                    "motion_quality": {"enabled": True},
+                    "source": {"path": str(source)},
+                    "qa": {"preview_render_parity": {"tolerances": {
+                        "position_px": 4.0, "size_px": 4.0, "time_seconds": 0.05,
+                    }}},
+                },
+                full_project=full_project,
+            )
+            self.assertTrue(any("motion render evidence is missing" in error for error in errors))
+
+    def test_required_asset_readiness_rejects_contract_only_completion(self) -> None:
+        project = migrate_project_config({
+            "schema_version": 10,
+            "version": 10,
+            "delivery": {"required_assets": {
+                "audio": {
+                    "stage": "audio",
+                    "applicability": "required",
+                    "required_readiness": "asset_ready",
+                },
+            }},
+        })
+        stages = {
+            "audio": {"status": "complete", "readiness": "contract_ready"},
+            "video_use_timeline": {"status": "complete", "readiness": "ready"},
+            "production_contract": {"status": "complete", "readiness": "ready"},
+            "final_compose": {"status": "complete", "readiness": "ready"},
+        }
+
+        errors = _required_asset_readiness_errors(project, stages)
+
+        self.assertTrue(any("audio" in error and "contract_ready" in error for error in errors), errors)
+
+    def test_optional_contract_only_asset_does_not_block_delivery(self) -> None:
+        project = migrate_project_config({"schema_version": 10, "version": 10})
+        stages = {
+            "audio": {"status": "complete", "readiness": "contract_ready"},
+            "video_use_timeline": {"status": "complete", "readiness": "ready"},
+            "production_contract": {"status": "complete", "readiness": "ready"},
+            "final_compose": {"status": "complete", "readiness": "ready"},
+        }
+
+        self.assertEqual(_required_asset_readiness_errors(project, stages), [])
+
+    def test_explicit_caption_not_applicable_accepts_completed_timeline_stage(self) -> None:
+        project = migrate_project_config({
+            "schema_version": 10,
+            "version": 10,
+            "editing": {"caption_delivery": "none"},
+        })
+        stages = {
+            "video_use_timeline": {"status": "complete", "readiness": "ready"},
+            "production_contract": {"status": "complete", "readiness": "ready"},
+            "final_compose": {"status": "complete", "readiness": "ready"},
+        }
+
+        self.assertEqual(_required_asset_readiness_errors(project, stages), [])
+
+    def test_not_applicable_policy_cannot_hide_contract_only_stage(self) -> None:
+        project = migrate_project_config({
+            "schema_version": 10,
+            "version": 10,
+            "delivery": {"required_assets": {"audio": {
+                "stage": "audio",
+                "applicability": "not_applicable",
+                "required_readiness": "not_applicable",
+                "reason": "source intentionally has no sound design",
+            }}},
+        })
+        stages = {
+            "audio": {"status": "complete", "readiness": "contract_ready"},
+            "video_use_timeline": {"status": "complete", "readiness": "ready"},
+            "production_contract": {"status": "complete", "readiness": "ready"},
+            "final_compose": {"status": "complete", "readiness": "ready"},
+        }
+
+        errors = _required_asset_readiness_errors(project, stages)
+
+        self.assertTrue(any("audio" in error and "contract_ready" in error for error in errors), errors)
+
     def test_source_first_caption_delivery_requires_bound_srt_and_filter(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -549,7 +651,9 @@ class CompletionAuditTests(unittest.TestCase):
                     json.dumps(platform_report), encoding="utf-8")
             (director_root / "delivery-contract.json").write_text(json.dumps({
                 "universal_video": str(output), "file_sha256": output_hash,
-                "cover_sha256": sha256_file(cover), "duplicate_platform_mp4s": False,
+                "cover": str(cover), "cover_sha256": sha256_file(cover),
+                "cover_applicability": "optional_present",
+                "duplicate_platform_mp4s": False,
                 "production_contract_sha256": sha256_file(production_path),
                 "provider_decision_sha256": sha256_file(provider_path),
                 "cost_ledger_sha256": sha256_file(cost_path),

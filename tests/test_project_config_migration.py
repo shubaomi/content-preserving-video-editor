@@ -43,6 +43,20 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         self.assertFalse(migrated["assets"]["media_catalog"]["enabled"])
         self.assertFalse(migrated["analysis"]["hook_pacing"]["enabled"])
         self.assertFalse(migrated["publishing"]["copy"]["enabled"])
+        self.assertEqual(migrated["editorial_intent"], {
+            "enabled": False,
+            "mode": "neutral_education",
+            "audience": None,
+            "viewer_job": None,
+            "single_promise": None,
+            "proof_event_ids": [],
+            "cta": None,
+            "tone": "neutral_educational",
+            "prohibited_claims": [],
+        })
+        self.assertFalse(migrated["motion_quality"]["enabled"])
+        self.assertFalse(migrated["motion_quality"]["advanced_runtimes"]["enabled"])
+        self.assertEqual(migrated["identity"]["mode"], "generic")
         self.assertNotIn("audio", original)
 
     def test_v1_fixture_migrates_in_memory_without_rewriting_yaml(self) -> None:
@@ -69,7 +83,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "size_px": 4.0,
             "time_seconds": 0.05,
         })
-        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 9)
+        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 10)
         self.assertTrue(migrated["workflow"]["production_contract"]["enabled"])
         self.assertEqual(migrated["provider_governance"]["max_evidence_age_days"], 30)
         self.assertTrue(migrated["qa"]["visual_dynamics"]["enabled"])
@@ -84,9 +98,14 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         self.assertFalse(migrated["analysis"]["adapters"]["pyscenedetect"]["enabled"])
         self.assertFalse(migrated["timeline"]["otio"]["enabled"])
         self.assertFalse(migrated["extensions"]["b_roll"]["enabled"])
+        self.assertEqual(migrated["extensions"]["optional_media_adapters"], [])
         self.assertFalse(migrated["renderer"]["remotion"]["enabled"])
         self.assertFalse(migrated["feedback"]["metrics_import"]["enabled"])
         self.assertFalse(migrated["analysis"]["semantic_confidence"]["enabled"])
+        self.assertEqual(migrated["analysis"]["protected_region_review"], {
+            "enabled": False,
+            "manifest": None,
+        })
         self.assertFalse(migrated["render"]["cache"]["event_level"]["enabled"])
         self.assertFalse(migrated["review"]["interactive"]["enabled"])
         self.assertFalse(migrated["cover"]["reference_pack"]["enabled"])
@@ -95,7 +114,40 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         self.assertFalse(migrated["delivery"]["audit_bundle"]["enabled"])
         self.assertFalse(migrated["delivery"]["release_pack"]["enabled"])
         self.assertEqual(migrated["audio"]["sfx"]["maximum_family_ratio"], 0.5)
+        self.assertEqual(migrated["audio"]["sfx"]["perceptual"], {
+            "enabled": False,
+            "minimum_audible_ratio": 0.35,
+            "maximum_audible_ratio": 0.65,
+            "maximum_onset_error_ms": 80.0,
+        })
         self.assertEqual(migrated["editing"]["caption_delivery"], "auto")
+        self.assertEqual(migrated["delivery"]["required_assets"], {
+            "captions": {
+                "stage": "video_use_timeline",
+                "applicability": "required",
+                "required_readiness": "ready",
+            },
+            "audio": {
+                "stage": "audio",
+                "applicability": "optional",
+                "required_readiness": "asset_ready",
+            },
+            "cover": {
+                "stage": "cover",
+                "applicability": "optional",
+                "required_readiness": "asset_ready",
+            },
+            "identity": {
+                "stage": "production_contract",
+                "applicability": "required",
+                "required_readiness": "ready",
+            },
+            "universal_video": {
+                "stage": "final_compose",
+                "applicability": "required",
+                "required_readiness": "ready",
+            },
+        })
 
     def test_invalid_caption_delivery_policy_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "editing.caption_delivery"):
@@ -143,7 +195,23 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "manual_finish.backend"):
             migrate_project_config(project)
 
-    def test_v7_migrates_to_v9_without_mutating_the_source_mapping(self) -> None:
+    def test_all_v1_through_v9_configs_migrate_to_v10_without_mutation(self) -> None:
+        for version in range(1, 10):
+            original = {
+                "schema_version": version,
+                "version": version,
+                "video_id": f"legacy-{version}",
+            }
+            before = copy.deepcopy(original)
+            with self.subTest(version=version):
+                migrated = migrate_project_config(original)
+                self.assertEqual(original, before)
+                self.assertEqual(migrated["schema_version"], 10)
+                self.assertEqual(migrated["version"], 10)
+                self.assertEqual(migrated["identity"]["mode"], "generic")
+                self.assertFalse(migrated["motion_quality"]["enabled"])
+
+    def test_v7_migrates_to_v10_without_mutating_the_source_mapping(self) -> None:
         original = {
             "schema_version": 7,
             "version": 7,
@@ -154,17 +222,17 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         migrated = migrate_project_config(original)
 
         self.assertEqual(original, before)
-        self.assertEqual(migrated["schema_version"], 9)
+        self.assertEqual(migrated["schema_version"], 10)
         self.assertTrue(migrated["assets"]["media_catalog"]["enabled"])
         self.assertFalse(migrated["assets"]["local_semantic_corpus"]["enabled"])
         self.assertEqual(migrated["delivery"]["openmontage_handoff"]["backend"], "openmontage")
 
-    def test_v8_migrates_to_v9_without_rewriting_user_configuration(self) -> None:
+    def test_v8_migrates_to_v10_without_rewriting_user_configuration(self) -> None:
         original = {"schema_version": 8, "version": 8, "render": {"cache": {"enabled": True}}}
         before = copy.deepcopy(original)
         migrated = migrate_project_config(original)
         self.assertEqual(original, before)
-        self.assertEqual(migrated["schema_version"], 9)
+        self.assertEqual(migrated["schema_version"], 10)
         self.assertTrue(migrated["render"]["cache"]["enabled"])
         self.assertFalse(migrated["render"]["cache"]["event_level"]["enabled"])
 
@@ -200,6 +268,112 @@ class ProjectConfigMigrationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "max_evidence_age_days"):
             migrate_project_config(project)
+
+    def test_v10_preserves_explicit_identity_and_motion_quality_configuration(self) -> None:
+        project = {
+            "schema_version": 10,
+            "version": 10,
+            "identity": {"mode": "third_party"},
+            "motion_quality": {"enabled": True, "advanced_runtimes": {"enabled": False}},
+        }
+
+        migrated = migrate_project_config(project)
+
+        self.assertEqual(migrated["identity"]["mode"], "third_party")
+        self.assertTrue(migrated["motion_quality"]["enabled"])
+        self.assertFalse(migrated["motion_quality"]["advanced_runtimes"]["enabled"])
+
+    def test_invalid_identity_mode_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "identity.mode"):
+            migrate_project_config({
+                "schema_version": 10,
+                "version": 10,
+                "identity": {"mode": "workspace_owner"},
+            })
+
+    def test_optional_source_content_type_is_validated_without_forcing_a_default(self) -> None:
+        migrated = migrate_project_config({
+            "schema_version": 10,
+            "version": 10,
+            "source": {"content_type": "talking_head"},
+        })
+        self.assertEqual(migrated["source"]["content_type"], "talking_head")
+
+        with self.assertRaisesRegex(ValueError, "source.content_type"):
+            migrate_project_config({
+                "schema_version": 10,
+                "version": 10,
+                "source": {"content_type": "marketing_magic"},
+            })
+
+    def test_protected_region_review_requires_manifest_when_enabled(self) -> None:
+        with self.assertRaisesRegex(ValueError, "protected_region_review.manifest"):
+            migrate_project_config({
+                "schema_version": 10,
+                "version": 10,
+                "analysis": {"protected_region_review": {"enabled": True}},
+            })
+
+        migrated = migrate_project_config({
+            "schema_version": 10,
+            "version": 10,
+            "analysis": {"protected_region_review": {
+                "enabled": True,
+                "manifest": "edit/protected-region-review/review.json",
+            }},
+        })
+        self.assertTrue(migrated["analysis"]["protected_region_review"]["enabled"])
+
+    def test_required_asset_contract_rejects_invalid_or_unsafe_readiness(self) -> None:
+        invalid_rows = (
+            {"stage": "audio", "applicability": "required", "required_readiness": "contract_ready"},
+            {"stage": "audio", "applicability": "required", "required_readiness": "ready"},
+            {"stage": "audio", "applicability": "sometimes", "required_readiness": "asset_ready"},
+            {"stage": "", "applicability": "required", "required_readiness": "asset_ready"},
+        )
+        for row in invalid_rows:
+            with self.subTest(row=row), self.assertRaisesRegex(
+                ValueError, "delivery.required_assets.audio"
+            ):
+                migrate_project_config({
+                    "schema_version": 10,
+                    "version": 10,
+                    "delivery": {"required_assets": {"audio": row}},
+                })
+
+    def test_explicit_caption_none_migrates_to_evidenced_not_applicable_policy(self) -> None:
+        migrated = migrate_project_config({
+            "schema_version": 9,
+            "version": 9,
+            "editing": {"caption_delivery": "none"},
+        })
+        self.assertEqual(migrated["delivery"]["required_assets"]["captions"], {
+            "stage": "video_use_timeline",
+            "applicability": "not_applicable",
+            "required_readiness": "not_applicable",
+            "reason": "editing.caption_delivery is explicitly none",
+        })
+
+    def test_mandatory_asset_policies_cannot_be_weakened_or_rebound(self) -> None:
+        unsafe = (
+            ("captions", {"stage": "video_use_timeline", "applicability": "optional",
+                           "required_readiness": "ready"}),
+            ("captions", {"stage": "audio", "applicability": "required",
+                           "required_readiness": "ready"}),
+            ("identity", {"stage": "production_contract", "applicability": "optional",
+                           "required_readiness": "ready"}),
+            ("universal_video", {"stage": "final_compose", "applicability": "required",
+                                  "required_readiness": "asset_ready"}),
+        )
+        for asset, rule in unsafe:
+            with self.subTest(asset=asset, rule=rule), self.assertRaisesRegex(
+                ValueError, f"delivery.required_assets.{asset}"
+            ):
+                migrate_project_config({
+                    "schema_version": 10,
+                    "version": 10,
+                    "delivery": {"required_assets": {asset: rule}},
+                })
 
 
 if __name__ == "__main__":

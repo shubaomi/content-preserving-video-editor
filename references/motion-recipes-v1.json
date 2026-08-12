@@ -1,0 +1,1722 @@
+{
+  "schema_version": "1.0.0",
+  "registry_id": "motion-recipes-v1",
+  "producer": "content-preserving-video-editor",
+  "selection_policy": "semantic_role_and_structured_form_only",
+  "recipes": [
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-01",
+      "recipe_version": "1.0.0",
+      "family": "mark",
+      "semantic_roles": [
+        "mark"
+      ],
+      "runtime": {
+        "primary": "svg_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "approved_copy.present"
+      ],
+      "contraindications": [
+        "layout.unsafe"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "mark",
+              "property": "scale",
+              "value": 0.92
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "mark",
+              "property": "opacity",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "mark",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "mark",
+              "property": "scale",
+              "value": 0.96
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "tick"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-action-required"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-02",
+      "recipe_version": "1.0.0",
+      "family": "focus",
+      "semantic_roles": [
+        "explain",
+        "mark"
+      ],
+      "runtime": {
+        "primary": "dom_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "target_binding.resolved"
+      ],
+      "contraindications": [
+        "target_binding.lost"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "focus",
+              "property": "opacity",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "focus",
+              "property": "mask_progress",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "focus",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "focus",
+              "property": "opacity",
+              "value": 0
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "target_geometry",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "soft-focus"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-12"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-03",
+      "recipe_version": "1.0.0",
+      "family": "causality",
+      "semantic_roles": [
+        "sequence",
+        "relate"
+      ],
+      "runtime": {
+        "primary": "svg_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "target_binding.resolved",
+        "state_pair.present"
+      ],
+      "contraindications": [
+        "source.action_unverified"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "causality",
+              "property": "path_progress",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "causality",
+              "property": "scale",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "causality",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "causality",
+              "property": "path_progress",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "action-result"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-12"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-04",
+      "recipe_version": "1.0.0",
+      "family": "compare",
+      "semantic_roles": [
+        "relate"
+      ],
+      "runtime": {
+        "primary": "dom_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "evidence.comparison"
+      ],
+      "contraindications": [
+        "evidence.single_side"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "compare",
+              "property": "x",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "compare",
+              "property": "opacity",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "compare",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "compare",
+              "property": "x",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "two-note-contrast"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-12"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-05",
+      "recipe_version": "1.0.0",
+      "family": "process",
+      "semantic_roles": [
+        "sequence"
+      ],
+      "runtime": {
+        "primary": "svg_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "evidence.sequence"
+      ],
+      "contraindications": [
+        "order.unverified"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "safe_side_rail",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "safe_side_rail",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "process",
+              "property": "path_progress",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "process",
+              "property": "scale",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "process",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "process",
+              "property": "path_progress",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "progression"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-12"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-06",
+      "recipe_version": "1.0.0",
+      "family": "relation",
+      "semantic_roles": [
+        "relate"
+      ],
+      "runtime": {
+        "primary": "svg_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "evidence.relation"
+      ],
+      "contraindications": [
+        "topology.unverified"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "relation",
+              "property": "path_progress",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "relation",
+              "property": "opacity",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "relation",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "relation",
+              "property": "path_progress",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "connector_geometry",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "connected-notes"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-12"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-07",
+      "recipe_version": "1.0.0",
+      "family": "proof",
+      "semantic_roles": [
+        "prove"
+      ],
+      "runtime": {
+        "primary": "svg_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "evidence.chart",
+        "target_binding.resolved"
+      ],
+      "contraindications": [
+        "value.unverified"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "proof",
+              "property": "path_progress",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "proof",
+              "property": "scale",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "proof",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "proof",
+              "property": "path_progress",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "target_geometry",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "metric-contour"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-09"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-08",
+      "recipe_version": "1.0.0",
+      "family": "state_transform",
+      "semantic_roles": [
+        "relate",
+        "transition"
+      ],
+      "runtime": {
+        "primary": "flip_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "state_pair.present"
+      ],
+      "contraindications": [
+        "identity.unstable"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "camera_crop",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "safe_side_rail",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "state_transform",
+              "property": "x",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "state_transform",
+              "property": "scale",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "state_transform",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "state_transform",
+              "property": "x",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "transition-sweep"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-12"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-09",
+      "recipe_version": "1.0.0",
+      "family": "lens",
+      "semantic_roles": [
+        "explain",
+        "prove"
+      ],
+      "runtime": {
+        "primary": "dom_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "target_binding.resolved"
+      ],
+      "contraindications": [
+        "crop.unverified"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "target_relative",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "lens",
+              "property": "mask_progress",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "lens",
+              "property": "scale",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "lens",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "lens",
+              "property": "mask_progress",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "target_geometry",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "lens-open"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-10"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-10",
+      "recipe_version": "1.0.0",
+      "family": "camera",
+      "semantic_roles": [
+        "explain",
+        "transition"
+      ],
+      "runtime": {
+        "primary": "dom_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "safe_layout.available"
+      ],
+      "contraindications": [
+        "source.cursor_moving"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "camera_crop",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "safe_side_rail",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "camera",
+              "property": "camera_scale",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "camera",
+              "property": "camera_x",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "camera",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "camera",
+              "property": "camera_scale",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "low-transition"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-12"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-11",
+      "recipe_version": "1.0.0",
+      "family": "transition",
+      "semantic_roles": [
+        "transition"
+      ],
+      "runtime": {
+        "primary": "svg_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "evidence.chapter_boundary"
+      ],
+      "contraindications": [
+        "boundary.unverified"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "full_frame_cutaway",
+          "max_width_ratio": 1,
+          "max_height_ratio": 1
+        },
+        "portrait": {
+          "placement_strategy": "full_frame_cutaway",
+          "max_width_ratio": 1,
+          "max_height_ratio": 1
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "transition",
+              "property": "mask_progress",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "transition",
+              "property": "x",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "transition",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "transition",
+              "property": "mask_progress",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "chapter-phrase"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-12"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-12",
+      "recipe_version": "1.0.0",
+      "family": "typography",
+      "semantic_roles": [
+        "mark",
+        "explain",
+        "resolve"
+      ],
+      "runtime": {
+        "primary": "dom_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "approved_copy.present"
+      ],
+      "contraindications": [
+        "copy.unapproved"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "typography",
+              "property": "y",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "typography",
+              "property": "opacity",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "typography",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "typography",
+              "property": "y",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "phrase"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-action-required"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-13",
+      "recipe_version": "1.0.0",
+      "family": "evidence",
+      "semantic_roles": [
+        "prove"
+      ],
+      "runtime": {
+        "primary": "dom_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "evidence.media"
+      ],
+      "contraindications": [
+        "rights.unverified"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "safe_side_rail",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "safe_side_rail",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "evidence",
+              "property": "scale",
+              "value": 0.92
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "evidence",
+              "property": "opacity",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "evidence",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "evidence",
+              "property": "scale",
+              "value": 0.96
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "silent-proof"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "none"
+      },
+      "cost_tier": "low",
+      "fallback_recipe_id": "MQE-12"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-14",
+      "recipe_version": "1.0.0",
+      "family": "ip_vignette",
+      "semantic_roles": [
+        "explain",
+        "resolve"
+      ],
+      "runtime": {
+        "primary": "lottie",
+        "secondary": [
+          "lottie",
+          "dom"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "identity.self"
+      ],
+      "contraindications": [
+        "identity.third_party"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "ip_vignette",
+              "property": "x",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "ip_vignette",
+              "property": "rotation",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "ip_vignette",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "ip_vignette",
+              "property": "x",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "character-object"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "medium",
+      "fallback_recipe_id": "MQE-15"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-15",
+      "recipe_version": "1.0.0",
+      "family": "architecture",
+      "semantic_roles": [
+        "explain",
+        "relate",
+        "sequence"
+      ],
+      "runtime": {
+        "primary": "svg_gsap",
+        "secondary": [
+          "dom",
+          "svg",
+          "css"
+        ],
+        "advanced_feature_flag_required": false,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "approved_copy.present"
+      ],
+      "contraindications": [
+        "topology.unverified"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.62,
+          "max_height_ratio": 0.58
+        },
+        "portrait": {
+          "placement_strategy": "verified_whitespace",
+          "max_width_ratio": 0.86,
+          "max_height_ratio": 0.48
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "architecture",
+              "property": "z_index",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "architecture",
+              "property": "camera_scale",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "architecture",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "architecture",
+              "property": "z_index",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "connector_geometry",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "layer-build"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "medium",
+      "fallback_recipe_id": "MQE-05"
+    },
+    {
+      "schema_version": "1.0.0",
+      "recipe_id": "MQE-16",
+      "recipe_version": "1.0.0",
+      "family": "depth",
+      "semantic_roles": [
+        "explain",
+        "transition"
+      ],
+      "runtime": {
+        "primary": "three_webgl",
+        "secondary": [
+          "three",
+          "webgl",
+          "dom"
+        ],
+        "advanced_feature_flag_required": true,
+        "seek_safe": true
+      },
+      "preconditions": [
+        "advanced_runtime.enabled",
+        "evidence.depth"
+      ],
+      "contraindications": [
+        "device.unsupported"
+      ],
+      "orientation_variants": {
+        "landscape": {
+          "placement_strategy": "full_frame_cutaway",
+          "max_width_ratio": 1,
+          "max_height_ratio": 1
+        },
+        "portrait": {
+          "placement_strategy": "full_frame_cutaway",
+          "max_width_ratio": 1,
+          "max_height_ratio": 1
+        }
+      },
+      "phases": [
+        {
+          "name": "entrance",
+          "duration_ratio": 0.18,
+          "easing": "power2.out",
+          "poses": [
+            {
+              "element_role": "depth",
+              "property": "rotation",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "explain",
+          "duration_ratio": 0.32,
+          "easing": "power1.inOut",
+          "poses": [
+            {
+              "element_role": "depth",
+              "property": "camera_scale",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "name": "hold",
+          "duration_ratio": 0.36,
+          "easing": "none",
+          "poses": [
+            {
+              "element_role": "depth",
+              "property": "noop",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "name": "exit",
+          "duration_ratio": 0.14,
+          "easing": "power2.in",
+          "poses": [
+            {
+              "element_role": "depth",
+              "property": "rotation",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "proof_requirements": [
+        "strict_check",
+        "animation_map",
+        "entrance_snapshot",
+        "mid_snapshot",
+        "pre_exit_snapshot",
+        "post_exit_snapshot",
+        "composite_contrast",
+        "preview_render_parity"
+      ],
+      "audio_profile": {
+        "preferred_motif_families": [
+          "designed-sequence"
+        ],
+        "silence_allowed": true,
+        "preferred_phase": "explain"
+      },
+      "cost_tier": "high",
+      "fallback_recipe_id": "MQE-15"
+    }
+  ]
+}

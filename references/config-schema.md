@@ -4,9 +4,9 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 9. New projects write both
-`schema_version: 9` and `version: 9`. Legacy projects that only contain
-`version: 1` or `version: 2` are deep-copied and migrated in memory before
+The current project schema is version 10. New projects write both
+`schema_version: 10` and `version: 10`. Legacy projects from v1 through v9 are
+deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
 Schema versions must be real integers, not booleans or numeric strings. Audio
@@ -28,6 +28,11 @@ Accept only `preserve`, `balanced`, or `tight`. Default to `preserve`. Resolve `
 
 Allow `profile: null` for generic videos and skip IP-specific steps.
 
+Require `identity.mode: self|third_party|generic` after in-memory migration.
+Unknown legacy identity defaults to `generic`; the workspace path is never
+identity evidence. A `third_party` Production Contract forbids HongRun assets,
+personal intro/outro, and first-person brand expression.
+
 Allow `workflow.input_mode: source_first` or `polish_existing`. Use `polish_existing` for already edited or published masters. In that mode, preserve the supplied timeline and require explicit reasons for replacing existing captions, BGM, cover, or cuts.
 
 Allow `editing.caption_punctuation: spoken_clean`, `source`, or `none`. Default
@@ -38,9 +43,10 @@ project choice and removes all displayed punctuation without changing word
 timings or sentence segmentation.
 
 Allow `editing.caption_delivery: auto` or `none`; migration defaults to `auto`.
-`auto` requires output-timeline `video-use/master.srt` for source-first work
-without a verified existing caption layer and burns that exact hash-bound file
-during `final_compose`. `none` is the only valid opt-out and must be recorded as
+`auto` requires output-timeline `video-use/master.srt` whenever the source lacks
+an independently verified subtitle stream or burned-caption layer, including
+`polish_existing`, and burns that exact hash-bound file during `final_compose`.
+`none` is the only valid opt-out and must be recorded as
 `disabled_by_project` in the composition plan.
 
 ## Audio
@@ -50,8 +56,9 @@ Allow project-level `audio.sfx` and `audio.bgm` settings. Recommended defaults:
 - `sfx.enabled: true`, volume `0.2–0.35`, a default ceiling of 6 selected visual
   events per minute, and `max_event_ratio: 1.0` because the ratio applies only
   after the semantic planner has accepted an event;
-- `sfx.target_event_coverage: 1.0`; require a cue decision for every non-quiet
-  event, with `intentionally_silent` reserved for evidenced exceptions;
+- require a `cue` or `intentionally_silent` decision for 100% of non-quiet
+  events; audible cue coverage is adaptive rather than globally forced and the
+  perceptual mode defaults to a 0.35–0.65 corridor;
 - `sfx.minimum_unique_asset_ratio: 0.8`,
   `maximum_family_ratio: 0.5`,
   `minimum_cue_duration_seconds: 0.8`,
@@ -90,7 +97,7 @@ selected non-quiet event is blocking unless that event has an evidenced
 
 Declare or document separate selectors for `layout_host`, `motion_wrapper`, and `editable_surface`. Studio edits belong to the layout host or editable surface. Animation timelines may transform only the motion wrapper.
 
-Set `editable_motion.profile` to `calm`, `balanced`, or `adaptive_dynamic`. The adaptive profile records advisory ranges (`screen_tutorial: [4,10]`, `polish_existing: [3,7]`) whose upper values are blocking ceilings, plus `maximum_visual_quiet_gap_seconds: 12`, `anchor_repeat_cooldown_seconds: 40`, and distinct semantic/layout/SFX checks. Audio SFX accepts `max_cues_per_minute`, `max_event_ratio`, `target_event_coverage`, `minimum_unique_asset_ratio`, `minimum_cue_duration_seconds`, `maximum_family_ratio`, and `same_file_cooldown_seconds`. Different filenames or pitch transpositions do not excuse a family that exceeds the configured share. Default cue coverage to every selected non-quiet event; reduce event count at the semantic planner instead of leaving approved motion silent. BGM remains independently optional.
+Set `editable_motion.profile` to `calm`, `balanced`, or `adaptive_dynamic`. The adaptive profile records legacy schema-v1/v2 advisory ranges (`screen_tutorial: [4,10]`, `polish_existing: [3,7]`) whose upper values are blocking ceilings, plus `maximum_visual_quiet_gap_seconds: 12`, `anchor_repeat_cooldown_seconds: 40`, and distinct semantic/layout/SFX checks. These numerical cadence/family checks do not gate the schema-v3 decision-complete model. Audio SFX accepts `max_cues_per_minute`, `max_event_ratio`, `target_event_coverage`, `minimum_unique_asset_ratio`, `minimum_cue_duration_seconds`, `maximum_family_ratio`, and `same_file_cooldown_seconds`. Different filenames or pitch transpositions do not excuse a family that exceeds the configured share. Require a decision for every selected event, but let perceptual evidence select an adaptive audible subset; silence is a deliberate decision rather than missing work. BGM remains independently optional.
 
 For route-, branch-, dependency-, and flow-based visuals, add
 `geometry_contract.connector_contract` with `required_connector_count`,
@@ -401,6 +408,205 @@ Completed stages normally report `ready`; audio and cover may instead report
 not evidence that its media asset exists. `director.py next` reduces this state
 to the single current owner, instruction, expected output, and resume command.
 
+## Schema v10 identity, motion-quality opt-in, and required assets
+
+Schema v10 adds these conservative in-memory defaults:
+
+```yaml
+identity:
+  mode: generic
+motion_quality:
+  enabled: false
+  advanced_runtimes:
+    enabled: false
+    evidence: {}
+editing:
+  caption_sync_closure: {enabled: false}
+editorial_intent:
+  enabled: false
+  mode: neutral_education
+extensions:
+  optional_media_adapters: []
+renderer:
+  remotion: {enabled: false}
+delivery:
+  required_assets:
+    captions: {stage: video_use_timeline, applicability: required, required_readiness: ready}
+    audio: {stage: audio, applicability: optional, required_readiness: asset_ready}
+    cover: {stage: cover, applicability: optional, required_readiness: asset_ready}
+    identity: {stage: production_contract, applicability: required, required_readiness: ready}
+    universal_video: {stage: final_compose, applicability: required, required_readiness: ready}
+```
+
+Enabling `motion_quality` opts semantic planning into schema v3
+(`opportunity_model: decision_complete_v1`). Every opportunity must contain an
+ordered source/output window, evidence, one editorial decision, and a rationale.
+Only `render` decisions appear in the HyperFrames Storyboard, in the same relative
+order. A render decision requires an explicit unique `approved_visible_copy`
+string list; all non-render opportunities remain auditable in the brief. Fixed
+cadence, minimum event/family counts, and family-ratio pass/fail gates are not
+part of this model. `action_required` stops the semantic stage. With
+`motion_quality.enabled=false`, existing schema-v1/v2 briefs and one-to-one
+Storyboard behavior remain compatible.
+
+When `motion_quality.enabled=true`, evidence acquisition writes
+`work/director/evidence/adaptive-layout-constraints.json`. An optional
+`source.content_type` may be `screen_tutorial` or `talking_head`; absent an
+explicit value, portrait sources take the conservative talking-head route and
+landscape sources take the screen-tutorial route. The contract records the
+normalized display space, protected-region evidence, identity mode, and a safe
+fallback. It does not manufacture coordinates when face/hand/critical-UI
+evidence is missing.
+
+Sample and full Storyboards then declare for every render event:
+
+```yaml
+target_binding_required: true
+target_binding_ids: [binding-chart-primary]
+```
+
+Targetless typography or transition recipes declare `false` and `[]`. Binding
+files live under separate `work/director/target-bindings/sample/` and `full/`
+directories and follow the frozen `target-binding` schema. The Director checks
+the binding ID/filename, semantic parent, source/output window, resolved status,
+active window, observations, state changes, evidence paths and SHA-256 values.
+This capability is `fixture_validated`; real-project promotion waits for both
+the landscape and portrait canaries and user review.
+
+The same opt-in activates the Director-owned Motion Quality Engine. Its recipe
+registry is fixed at `references/motion-recipes-v1.json`; projects do not supply
+random weights, keyword maps, cadence targets, family quotas, or SFX-based
+selection. A render opportunity may provide a supported `semantic_role` and a
+structured `form` such as `semantic_mark`, `ui_focus`, `compare`, `process`,
+`relation`, `metric_proof`, `product_lens`, `chapter_bridge`, `kinetic_phrase`,
+`evidence_pip`, `ip_vignette`, `architecture`, or `depth_stage`. Preconditions
+are evaluated against current evidence, identity, adaptive layout, target
+bindings, and `motion_quality.advanced_runtimes.enabled`. A failed precondition
+uses the recipe's declared deterministic fallback; an exhausted chain becomes
+`action_required`. The compiler writes separate sample/full contracts inside
+`work/director/motion-design/` without rewriting `project.yaml`.
+
+The compiler selects a format grammar from source evidence. `screen_tutorial`
+uses verified source targets and product-explainer structures. `talking_head`
+uses face-safe expressive typography, word emphasis, side rails, light/depth
+accents, semantic cutaways, and chapter transitions, while rejecting detached
+dashboard cards. Neither grammar introduces a fixed cadence or random rotation.
+The portrait grammar remains fixture-validated until a future real candidate
+passes both technical review and the separate user brand-taste gate.
+
+Advanced runtimes require six absolute file/hash evidence records under
+`motion_quality.advanced_runtimes.evidence`: `seek_safe`,
+`deterministic_2d_fallback`, `preview_render_parity`, `device_support`, `license`,
+and `cost`. Every record must be current and pass where applicable. Its bound
+proof artifact is parsed by kind: seek samples and error bounds, a decodable 2D
+fallback, decodable byte-matching parity frames, an exact passing device list,
+a non-empty hash-bound license document, or finite cost calculation inputs.
+Hash-bound arbitrary bytes and self-declared `pass` fields are not evidence.
+Missing or stale evidence selects the declared deterministic 2D fallback rather
+than an advanced recipe.
+
+P1 opt-ins are `editing.caption_sync_closure.enabled`,
+`audio.sfx.perceptual.enabled`, `editorial_intent.enabled`, and
+`editorial_regression.enabled`. They respectively bind delivered caption timing,
+per-event audio decisions and actual mix identity/audibility, a shared proof
+ledger across hook/title/cover/description/CTA/motion copy, and Current Golden
+schema v2 runtime fingerprints. Golden v2 hashes normalized DOM, motion,
+geometry, cropped overlay perceptual evidence, and sample audio contracts; a
+full comparison never reuses a sample audio manifest as full-timeline proof.
+
+P2 adapters remain default off. Remotion requires `react_components`,
+`parity_evidence`, and `license_evidence` as absolute path/SHA-256 records;
+legacy path strings and boolean parity are rejected. Each parity event binds a
+decodable reference and rendered image, and the Director recomputes image delta
+within the strict tolerance. A no-audio measurement is valid only when the
+event/component/hash-bound component manifest declares a `visual_only` output
+with `audio_policy: forbidden`; otherwise it requires hash-bound byte-identical
+reference/render audio evidence. An unmeasured numeric zero is rejected.
+Optional media adapters
+live in `extensions.optional_media_adapters`; enabling one without a real
+provider result creates `action_required`. A manual NLE handoff may add a typed,
+EDL-hash-bound package, but still claims no OpenCut/Jianying API or headless
+rendering.
+
+It also activates strict project-side HyperFrames render evidence. No additional
+project YAML keys are required. The Director derives the following paths for
+sample and full scopes independently:
+
+```text
+<hyperframes-project>/renderer-evidence-contract.json
+<hyperframes-project>/renderer-project-manifest.json
+<hyperframes-project>/renderer-export.json
+<hyperframes-project>/keyframe-receipts/<event-id>.json
+<project>/sample-qa|full-qa/preview-render-parity.json
+```
+
+Build the manifest only after the editable project source is final. It contains
+the absolute project root, sorted relative source inventory, sizes, hashes, and
+an integrity hash; runtime snapshots, receipts, renderer export, render output,
+and cache folders are excluded. Any later source edit or addition makes the
+manifest stale. The actual project runtime, not a Director request file, must
+export painted visible text, the unique DOM selectors owned by each event root,
+and four-phase DOM/geometry measurements for every compiled event. HyperFrames
+keyframe diagnostics must match both the event window and one of those owned
+selectors; an unrelated tween at the same time does not count. The receipt
+phase sequence is `entrance`, `mid`, `pre_exit`, `post_exit`; the snapshot plan's
+historical `midpoint` output maps to `mid`.
+
+The generated renderer-evidence request contains the absolute runtime-capture
+script and scope-specific arguments for project, Storyboard, motion contract,
+project manifest, target-binding directory, output, and runtime snapshots. The
+script requires the Python Playwright package and resolves its executable with
+`npx hyperframes browser path`; no project YAML browser path is needed. It opens
+only local project assets, verifies actual media seek state, and fails as
+`action_required` when execution is unavailable. The logical `animation_map`
+receipt is generated from `npx hyperframes keyframes <project> --json`; there is
+no claimed upstream `animation-map` command.
+The same request includes a receipt-builder script and scope-specific arguments.
+It runs only after the configured parity artifact exists, binds strict-check and
+keyframe diagnostics to the current project/contract/export hashes, and writes
+the event receipts into the derived keyframe-receipt directory.
+
+Project-level parity tolerances come from `qa.preview_render_parity`; composite
+contrast must remain at least 4.5:1. A receipt may tighten but not relax these
+limits. Missing or invalid runtime export, any absent event or phase, stale
+hashes, or parity failure becomes `action_required`. These artifacts are
+currently `fixture_validated`; they do not by themselves promote a project to
+`real_project_validated`.
+
+The same opt-in also requires a paired creative review before preview approval.
+No additional project key is required. The Director derives:
+
+```text
+<project>/edit/video-use/base-preview.mp4
+<sample-hyperframes-project>/sample-preview.mp4
+<project>/work/director/review-media/candidate-with-sfx.mp4  # only when cues exist
+<project>/work/director/sample-qa/sample-review-mix.json     # hash-bound mix receipt
+<project>/work/director/sample-qa/review-audio/<event-id>-sfx-off|on.<audio>
+<project>/work/director/sample-qa/review-audio/<event-id>-bgm-off|on.<audio>  # optional pair
+<project>/work/director/sample-qa/mix-audibility.json
+<project>/work/director/sample-qa/creative-review.json
+<project>/work/director/review/creative-review.html
+```
+
+Both media files must be distinct, aligned continuous 60–90 second samples. The
+review remains pending until a named human records publish willingness and a
+baseline/candidate/tie preference plus a non-empty reason. Any bound hash drift resets approval.
+When one or more SFX decisions are `cue`, the review candidate is the complete
+`work/director/review-media/candidate-with-sfx.mp4`, not the raw HyperFrames
+render. Its receipt must
+match the current audio-plan cue order, event IDs, absolute asset paths, SHA-256
+values, output bytes, FFmpeg mix command, and full decode. Plans containing only
+`intentionally_silent` decisions keep `sample-preview.mp4`. Required captions
+are applied to the chosen candidate afterward so subtitle delivery remains last.
+
+`editing.caption_delivery: none` changes only the caption asset to an evidenced
+`not_applicable` rule. Mandatory caption, identity, and universal-video policies
+cannot be rebound or weakened. Optional audio/cover may be promoted to required
+per project, but `contract_ready` never satisfies a required `asset_ready`
+policy. Enabling `delivery.release_pack` makes the cover effectively required
+because that publish package cannot be complete without it. Migration does not
+rewrite `project.yaml`.
+
 ## Schema v9 optional capabilities
 
 These blocks default off and are added only in memory for legacy projects:
@@ -452,6 +658,11 @@ delivery:
     require_publication_authorization: true
 ```
 
+Interactive review serves only a loopback proposal API. Static dashboards enter
+Bearer and CSRF tokens at submission time; tokens are not embedded in HTML. The
+server permits `Origin: null` only for this explicitly enabled mode, only for the
+proposal endpoint, and still enforces project containment and current SHA-256.
+
 Only loopback review hosts are valid. Booleans must be real booleans; ports,
 body limits, sample counts, and view counts are positive integers. Thresholds
 must be finite and bounded. Unknown future schemas are rejected, and migration
@@ -461,3 +672,7 @@ of `paths.root`; the project root itself and external absolute directories are
 rejected. When `delivery.release_pack.enabled` is true, privacy review, exact
 video/cover/copy rights coverage, and separate publication authorization remain
 mandatory and cannot be disabled by the three `require_*` flags.
+The same setting promotes cover readiness to a blocking delivery requirement;
+with release packaging disabled, an absent optional cover is recorded as
+`optional_unavailable` and platform reports validate the universal MP4 without
+inventing cover-crop evidence.

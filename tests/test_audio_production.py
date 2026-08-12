@@ -1,20 +1,48 @@
 from __future__ import annotations
 
 import json
+import math
+import struct
+import subprocess
 import sys
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 
 
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from audio_production import build_audio_plan, resolve_bgm  # noqa: E402
+from audio_production import (  # noqa: E402
+    build_audio_plan,
+    materialize_motion_audio_decisions,
+    perceptual_motif_fingerprint,
+    materialize_sample_audio_evidence,
+    materialize_sample_review_mix,
+    produce_audio_assets,
+    resolve_bgm,
+    validate_sample_review_mix_receipt,
+)
+from motion_contracts import validate_contract_schema  # noqa: E402
+from audio_qa import validate as validate_audio_plan  # noqa: E402
 from director_adapters import AdapterRunner  # noqa: E402
 
 
 class AudioProductionTests(unittest.TestCase):
+    @staticmethod
+    def _write_tone(path: Path, *, duration: float, frequency: float, amplitude: float) -> None:
+        sample_rate = 48_000
+        frames = int(duration * sample_rate)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(path), "wb") as target:
+            target.setnchannels(2)
+            target.setsampwidth(2)
+            target.setframerate(sample_rate)
+            for index in range(frames):
+                value = int(32767 * amplitude * math.sin(2 * math.pi * frequency * index / sample_rate))
+                target.writeframesraw(struct.pack("<hh", value, value))
+
     def test_approved_local_asset_wins_without_spending_provider_quota(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -31,6 +59,26 @@ class AudioProductionTests(unittest.TestCase):
             self.assertEqual(result["mode"], "authorized_asset")
             self.assertEqual(result["provider"], "approved_local")
             self.assertFalse((root / "state.json").exists())
+
+    def test_perceptual_motif_fingerprint_is_content_based_not_path_based(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first = root / "first.wav"
+            copy = root / "renamed.wav"
+            different = root / "different.wav"
+            self._write_tone(first, duration=1.0, frequency=720.0, amplitude=0.2)
+            copy.write_bytes(first.read_bytes())
+            self._write_tone(different, duration=1.0, frequency=900.0, amplitude=0.2)
+
+            first_result = perceptual_motif_fingerprint(first)
+            copy_result = perceptual_motif_fingerprint(copy)
+            different_result = perceptual_motif_fingerprint(different)
+
+            self.assertEqual(first_result["sha256"], copy_result["sha256"])
+            self.assertNotEqual(first_result["sha256"], different_result["sha256"])
+            self.assertEqual(first_result["sample_rate"], 48_000)
+            self.assertGreater(first_result["duration_seconds"], 0.9)
+            self.assertTrue(first_result["spectral_centroid_hz"] > 0)
 
     def test_provider_chain_stops_after_first_success(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -74,6 +122,452 @@ class AudioProductionTests(unittest.TestCase):
         self.assertEqual(plan["motion_sfx"]["mix_audibility_check"]["status"],
                          "pending_render_measurement")
         self.assertEqual(plan["background_music"]["mode"], "disabled")
+
+    def test_enabled_bgm_without_a_working_provider_is_unavailable_not_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result = resolve_bgm({
+                "enabled_by_default": True,
+                "provider_chain": [{"name": "minimax", "enabled": True}],
+            }, root=root, output_dir=root / "audio", runner=AdapterRunner(root / "state.json"))
+
+            self.assertEqual(result["mode"], "unavailable")
+            self.assertTrue(result["reason"])
+            self.assertEqual(result["attempts"][0]["status"], "unavailable")
+
+            plan = build_audio_plan(
+                {"event_decisions": []}, source_audio="source.mp4",
+                bgm=result, preview_volume=0.1,
+            )
+            self.assertEqual(plan["background_music"]["mode"], "unavailable")
+            self.assertEqual(plan["background_music"]["attempts"], result["attempts"])
+
+    def test_audio_production_inherits_semantic_audio_decisions_by_event_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            storyboard = root / "storyboard.json"
+            storyboard.write_text(json.dumps({"events": [{
+                "id": "render-1", "semantic_event_id": "semantic-1",
+                "start": 1.0, "end": 3.0,
+                "visual_structure": {"layout_archetype": "generic-mark"},
+            }]}), encoding="utf-8")
+            semantic = root / "semantic-brief.json"
+            semantic.write_text(json.dumps({"events": [{
+                "id": "semantic-1",
+                "audio_decision": {"type": "cue", "family": "two-note-contrast"},
+            }]}), encoding="utf-8")
+            source = root / "source.wav"
+            self._write_tone(source, duration=4.0, frequency=180.0, amplitude=0.04)
+
+            produce_audio_assets(
+                storyboard=storyboard,
+                semantic_brief=semantic,
+                project={"audio": {"sfx": {"enabled": True}, "bgm": {"enabled": False}}},
+                project_root=root,
+                output_dir=root / "audio",
+                source_audio=source,
+                runner=AdapterRunner(root / "adapter-state.json"),
+            )
+
+            plan = json.loads((root / "audio-plan.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                plan["motion_sfx"]["event_decisions"][0]["family"],
+                "two_note_contrast",
+            )
+
+    def test_materializes_hash_bound_sfx_auditions_and_real_mix_measurement(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "sample-preview.wav"
+            cue = root / "assets" / "sfx" / "cue.wav"
+            self._write_tone(candidate, duration=4.0, frequency=180.0, amplitude=0.04)
+            self._write_tone(cue, duration=1.0, frequency=720.0, amplitude=0.60)
+            storyboard = root / "storyboard.json"
+            storyboard.write_text(json.dumps({"events": [{
+                "id": "render-event-1",
+                "semantic_event_id": "semantic-event-1",
+                "start": 0.5,
+                "end": 3.5,
+                "treatment": "comparison_panel",
+            }]}), encoding="utf-8")
+            audio_plan = root / "audio-plan.json"
+            audio_plan.write_text(json.dumps({
+                "schema_version": 3,
+                "speech_track": {"source": str(candidate), "dominant": True, "immutable": True},
+                "motion_sfx": {
+                    "event_decisions": [{
+                        "event_id": "render-event-1",
+                        "decision": "cue",
+                        "start": 1.25,
+                        "family": "comparison_panel",
+                        "asset": "assets/sfx/cue.wav",
+                        "volume": 0.40,
+                        "duration_seconds": 1.0,
+                        "post_gain_mean_dbfs": -29.0,
+                    }],
+                    "mix_audibility_check": {"status": "pending_render_measurement"},
+                },
+                "background_music": {
+                    "mode": "disabled",
+                    "enabled": False,
+                    "reason": "test explicitly disables BGM",
+                    "explicitly_disabled": True,
+                },
+                "provenance": {"source_audio": str(candidate)},
+            }), encoding="utf-8")
+
+            artifacts = materialize_sample_audio_evidence(
+                storyboard=storyboard,
+                audio_plan=audio_plan,
+                candidate_media=candidate,
+                output_dir=root / "sample-qa" / "review-audio",
+            )
+
+            off = root / "sample-qa" / "review-audio" / "semantic-event-1-sfx-off.wav"
+            on = root / "sample-qa" / "review-audio" / "semantic-event-1-sfx-on.wav"
+            evidence = root / "sample-qa" / "mix-audibility.json"
+            self.assertTrue(off.is_file())
+            self.assertTrue(on.is_file())
+            self.assertTrue(evidence.is_file())
+            self.assertNotEqual(off.read_bytes(), on.read_bytes())
+            self.assertEqual(set(artifacts), {off.resolve(), on.resolve(), evidence.resolve(), audio_plan.resolve()})
+            measurements = json.loads(evidence.read_text(encoding="utf-8"))
+            self.assertEqual(measurements["status"], "pass")
+            self.assertEqual(measurements["events"][0]["semantic_event_id"], "semantic-event-1")
+            self.assertGreater(measurements["events"][0]["residual_mean_dbfs"], -60.0)
+            perceptual = measurements["events"][0]["perceptual"]
+            self.assertEqual(perceptual["motif_fingerprint"]["method"], "pcm-perceptual-v1")
+            self.assertLessEqual(perceptual["onset_error_ms"], 80.0)
+            self.assertIn(perceptual["audibility_status"], {
+                "audible_without_masking", "masked", "dialogue_harmed",
+            })
+            self.assertIsInstance(perceptual["dialogue_window_lufs"], float)
+            self.assertIsInstance(perceptual["cue_window_lufs"], float)
+            self.assertEqual(perceptual["measurement_method"], "ffmpeg-loudnorm-window-plus-fullband-identity-v1")
+            plan = json.loads(audio_plan.read_text(encoding="utf-8"))
+            self.assertEqual(plan["motion_sfx"]["mix_audibility_check"]["status"], "pass")
+            self.assertEqual(
+                Path(plan["motion_sfx"]["mix_audibility_check"]["evidence"]),
+                evidence.resolve(),
+            )
+            self.assertLess(plan["motion_sfx"]["event_decisions"][0]["volume"], 0.40)
+            self.assertEqual(validate_audio_plan(
+                plan,
+                json.loads(storyboard.read_text(encoding="utf-8")),
+                {"audio": {"sfx": {"perceptual": {
+                    "enabled": True,
+                    "minimum_audible_ratio": 0.35,
+                    "maximum_audible_ratio": 0.65,
+                    "maximum_onset_error_ms": 80.0,
+                }}, "bgm": {"enabled": False}}},
+                base_dir=root,
+            ), [])
+
+    def test_materializes_frozen_motion_audio_contracts_from_real_mix_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "sample.mp4"
+            cue = root / "assets" / "sfx" / "cue.wav"
+            self._write_tone(cue, duration=1.0, frequency=720.0, amplitude=0.25)
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=320x180:r=25:d=3",
+                "-f", "lavfi", "-i", "sine=frequency=180:sample_rate=48000:duration=3",
+                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264",
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(candidate),
+            ], check=True)
+            contract = root / "motion-design-contract.json"
+            contract.write_text(json.dumps({"opportunities": [{
+                "semantic_event_id": "e1", "decision": "render", "semantic_role": "mark",
+                "audio_decision_id": "audio-e1", "output_window": {"start_seconds": .5, "end_seconds": 2.0},
+            }]}), encoding="utf-8")
+            plan = root / "audio-plan.json"
+            plan.write_text(json.dumps({"motion_sfx": {"event_decisions": [{
+                "event_id": "e1", "decision": "cue", "asset": "assets/sfx/cue.wav",
+                "family": "mark", "start": .8, "duration_seconds": 1.0,
+                "volume": .05, "reason": "semantic mark",
+            }]}}), encoding="utf-8")
+            evidence = root / "mix-audibility.json"
+            off = root / "off.wav"; on = root / "on.wav"
+            self._write_tone(off, duration=3.0, frequency=180.0, amplitude=0.1)
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-i", str(off), "-i", str(cue),
+                "-filter_complex", "[1:a]volume=0.05,adelay=800:all=1[cue];[0:a][cue]amix=inputs=2:duration=first:normalize=0[out]",
+                "-map", "[out]", "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", str(on),
+            ], check=True)
+            decision = json.loads(plan.read_text(encoding="utf-8"))["motion_sfx"]["event_decisions"][0]
+            from audio_production import _decision_binding
+            measured = __import__("audio_production")._perceptual_mix_metrics(
+                off_path=off, on_path=on, cue_path=cue, planned_delay_seconds=0.8,
+            )
+            final_mix = root / "final-mix.wav"
+            final_mix.write_bytes(on.read_bytes())
+            evidence.write_text(json.dumps({
+                "candidate_media": {"path": str(final_mix.resolve()), "sha256": __import__("hashlib").sha256(final_mix.read_bytes()).hexdigest()},
+                "status": "pass", "events": [{
+                "event_id": "e1", "decision": "cue", "status": "pass",
+                "decision_binding": _decision_binding(decision, plan),
+                "sfx_off": {"path": str(off.resolve()), "sha256": __import__("hashlib").sha256(off.read_bytes()).hexdigest()},
+                "sfx_on": {"path": str(on.resolve()), "sha256": __import__("hashlib").sha256(on.read_bytes()).hexdigest()},
+                "excerpt_start_seconds": 0.0,
+                "perceptual": measured,
+            }]}), encoding="utf-8")
+            license_receipt = root / "audio-sfx-manifest.json"
+            license_receipt.write_text(json.dumps({"assets": [{
+                "event_id": "e1", "frozen_path": str(cue.resolve()),
+                "sha256": __import__("hashlib").sha256(cue.read_bytes()).hexdigest(),
+                "license": "project-owned generated asset",
+            }]}), encoding="utf-8")
+
+            outputs = materialize_motion_audio_decisions(
+                motion_design_contract=contract, audio_plan=plan, source_audio=candidate,
+                final_mix=final_mix, perceptual_evidence=evidence,
+                license_evidence=license_receipt, audio_policy={"maximum_onset_error_ms": 80},
+                output_dir=root / "motion-audio-decisions",
+            )
+
+            self.assertEqual(len(outputs), 2)
+            payload = json.loads((root / "motion-audio-decisions" / "audio-e1.json").read_text(encoding="utf-8"))
+            self.assertEqual(validate_contract_schema("motion-audio-decision", payload), [])
+            self.assertEqual(payload["status"], "mixed_and_validated")
+            self.assertEqual(payload["mix_evidence"]["final_mix_sha256"], __import__("hashlib").sha256(final_mix.read_bytes()).hexdigest())
+
+    def test_materializes_hash_bound_full_sample_review_mix_with_planned_sfx(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "sample-preview.mp4"
+            cue = root / "assets" / "sfx" / "cue.wav"
+            self._write_tone(cue, duration=1.0, frequency=720.0, amplitude=0.35)
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=320x180:r=25:d=3",
+                "-f", "lavfi", "-i", "sine=frequency=180:sample_rate=48000:duration=3",
+                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264",
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(candidate),
+            ], check=True)
+            plan_path = root / "audio-plan.json"
+            plan_path.write_text(json.dumps({
+                "schema_version": 3,
+                "motion_sfx": {
+                    "event_decisions": [{
+                        "event_id": "e1", "decision": "cue", "asset": "assets/sfx/cue.wav",
+                        "start": 0.8, "duration_seconds": 1.0, "volume": 0.25,
+                    }],
+                    "mix_audibility_check": {"status": "pass"},
+                },
+                "background_music": {"mode": "disabled", "enabled": False},
+            }), encoding="utf-8")
+            output = root / "sample-preview-with-sfx.mp4"
+            receipt_path = root / "sample-review-mix.json"
+
+            receipt = materialize_sample_review_mix(
+                candidate_media=candidate,
+                audio_plan=plan_path,
+                output=output,
+                receipt_path=receipt_path,
+            )
+
+            self.assertTrue(output.is_file())
+            self.assertTrue(receipt_path.is_file())
+            self.assertEqual(receipt["status"], "pass")
+            self.assertEqual(receipt["cue_count"], 1)
+            self.assertEqual(
+                validate_sample_review_mix_receipt(
+                    receipt, candidate_media=candidate, audio_plan=plan_path, output=output,
+                ),
+                [],
+            )
+            self.assertNotEqual(candidate.read_bytes(), output.read_bytes())
+
+            cue.write_bytes(cue.read_bytes() + b"tampered")
+            errors = validate_sample_review_mix_receipt(
+                receipt, candidate_media=candidate, audio_plan=plan_path, output=output,
+            )
+            self.assertTrue(any("cue asset hash is stale" in error for error in errors), errors)
+
+    def test_sample_review_mix_rejects_aliased_wrong_cues_even_when_residual_is_audible(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "candidate.mp4"
+            authorized = root / "assets" / "sfx" / "authorized.wav"
+            self._write_tone(authorized, duration=1.0, frequency=720.0, amplitude=0.35)
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=320x180:r=25:d=3",
+                "-f", "lavfi", "-i", "sine=frequency=180:sample_rate=48000:duration=3",
+                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264",
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(candidate),
+            ], check=True)
+            plan = root / "audio-plan.json"
+            plan.write_text(json.dumps({"motion_sfx": {"event_decisions": [{
+                "event_id": "e1", "decision": "cue", "asset": "assets/sfx/authorized.wav",
+                "start": 0.8, "duration_seconds": 1.0, "volume": 0.25,
+            }]}}), encoding="utf-8")
+            for frequency in (280.0, 1720.0, 5280.0):
+                wrong = root / f"wrong-{int(frequency)}.wav"
+                output = root / f"wrong-mix-{int(frequency)}.mp4"
+                self._write_tone(wrong, duration=1.0, frequency=frequency, amplitude=0.35)
+                subprocess.run([
+                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                    "-i", str(candidate), "-i", str(wrong), "-filter_complex",
+                    "[1:a]volume=0.25,adelay=800:all=1[cue];"
+                    "[0:a][cue]amix=inputs=2:duration=first:normalize=0[aout]",
+                    "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac",
+                    str(output),
+                ], check=True)
+                receipt = {
+                    "schema_version": 1, "status": "pass",
+                    "mode": "planned_sfx_over_hyperframes_candidate",
+                    "candidate_input": {"path": str(candidate), "sha256": self._sha(candidate)},
+                    "audio_plan": {"path": str(plan), "sha256": self._sha(plan)},
+                    "output": {"path": str(output), "sha256": self._sha(output)},
+                    "cue_count": 1,
+                    "cue_assets": [{"event_id": "e1", "path": str(authorized),
+                                    "sha256": self._sha(authorized)}],
+                    "argv": ["ffmpeg", "-filter_complex", "amix=inputs=2", str(output)],
+                    "full_decode": True,
+                }
+
+                errors = validate_sample_review_mix_receipt(
+                    receipt, candidate_media=candidate, audio_plan=plan, output=output,
+                )
+
+                self.assertTrue(
+                    any("authorized cue identity" in error for error in errors),
+                    (frequency, errors),
+                )
+
+    def test_sample_review_mix_receipt_rejects_wrong_cue_binding_and_malformed_count(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "candidate.mp4"
+            output = root / "mixed.mp4"
+            cue = root / "cue.wav"
+            other = root / "other.wav"
+            for path, payload in ((candidate, b"candidate"), (output, b"mixed"),
+                                  (cue, b"cue"), (other, b"other")):
+                path.write_bytes(payload)
+            plan_path = root / "audio-plan.json"
+            plan_path.write_text(json.dumps({
+                "motion_sfx": {"event_decisions": [{
+                    "event_id": "e1", "decision": "cue", "asset": str(cue),
+                }]},
+            }), encoding="utf-8")
+            base = {
+                "schema_version": 1, "status": "pass",
+                "mode": "planned_sfx_over_hyperframes_candidate",
+                "candidate_input": {"path": str(candidate), "sha256": self._sha(candidate)},
+                "audio_plan": {"path": str(plan_path), "sha256": self._sha(plan_path)},
+                "output": {"path": str(output), "sha256": self._sha(output)},
+                "cue_count": 1,
+                "cue_assets": [{
+                    "event_id": "e1", "path": str(other), "sha256": self._sha(other),
+                }],
+                "argv": ["ffmpeg", "-filter_complex", "amix=inputs=2", str(output)],
+                "full_decode": True,
+            }
+
+            errors = validate_sample_review_mix_receipt(
+                base, candidate_media=candidate, audio_plan=plan_path, output=output,
+            )
+            self.assertTrue(any("does not match the audio plan" in error for error in errors), errors)
+
+            base["cue_count"] = "not-a-number"
+            errors = validate_sample_review_mix_receipt(
+                base, candidate_media=candidate, audio_plan=plan_path, output=output,
+            )
+            self.assertTrue(any("cue_count is invalid" in error for error in errors), errors)
+
+    def test_sample_review_mix_rejects_cue_outside_authorized_asset_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "candidate.mp4"
+            candidate.write_bytes(b"candidate")
+            outside = root / "private.wav"
+            outside.write_bytes(b"private")
+            plan_dir = root / "project"
+            plan_dir.mkdir()
+            plan = plan_dir / "audio-plan.json"
+            plan.write_text(json.dumps({
+                "motion_sfx": {"event_decisions": [{
+                    "event_id": "e1", "decision": "cue",
+                    "asset": "../private.wav", "start": 0.1,
+                    "duration_seconds": 1.0, "volume": 0.2,
+                }]},
+            }), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "authorized SFX root"):
+                materialize_sample_review_mix(
+                    candidate_media=candidate, audio_plan=plan,
+                    output=root / "mixed.mp4", receipt_path=root / "receipt.json",
+                )
+
+    def test_audio_audition_rejects_cue_outside_authorized_asset_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "candidate.wav"
+            outside = root / "private.wav"
+            self._write_tone(candidate, duration=3.0, frequency=180.0, amplitude=0.04)
+            self._write_tone(outside, duration=1.0, frequency=720.0, amplitude=0.3)
+            project = root / "project"
+            project.mkdir()
+            storyboard = project / "storyboard.json"
+            storyboard.write_text(json.dumps({"events": [{
+                "id": "e1", "semantic_event_id": "semantic-1",
+                "start": 0.5, "end": 2.5, "treatment": "structure",
+            }]}), encoding="utf-8")
+            plan = project / "audio-plan.json"
+            plan.write_text(json.dumps({
+                "motion_sfx": {"event_decisions": [{
+                    "event_id": "e1", "decision": "cue", "asset": "../private.wav",
+                    "start": 0.8, "duration_seconds": 1.0, "volume": 0.2,
+                }]},
+            }), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "authorized SFX root"):
+                materialize_sample_audio_evidence(
+                    storyboard=storyboard, audio_plan=plan, candidate_media=candidate,
+                    output_dir=root / "review-audio",
+                )
+
+    def test_receipt_validator_fails_closed_for_malformed_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "candidate.mp4"
+            output = root / "output.mp4"
+            plan = root / "audio-plan.json"
+            for path in (candidate, output):
+                path.write_bytes(b"not-media")
+            plan.write_text(json.dumps({"motion_sfx": {"event_decisions": []}}), encoding="utf-8")
+            errors = validate_sample_review_mix_receipt(
+                {"schema_version": 1, "status": "pass",
+                 "mode": "planned_sfx_over_hyperframes_candidate",
+                 "candidate_input": "bad", "audio_plan": [], "output": None,
+                 "cue_count": 0, "cue_assets": [], "argv": [], "full_decode": True},
+                candidate_media=candidate, audio_plan=plan, output=output,
+            )
+            self.assertTrue(errors)
+
+            for malformed in ([], "bad", None):
+                errors = validate_sample_review_mix_receipt(
+                    malformed, candidate_media=candidate, audio_plan=plan, output=output,
+                )
+                self.assertTrue(errors)
+
+    def test_semantic_id_with_colon_uses_safe_audition_filename(self) -> None:
+        from audio_production import _event_stem
+
+        stem = _event_stem("chapter:1")
+
+        self.assertNotIn(":", stem)
+        self.assertEqual(stem, _event_stem("chapter:1"))
+        self.assertNotEqual(stem, _event_stem("chapter_1"))
+
+    @staticmethod
+    def _sha(path: Path) -> str:
+        import hashlib
+        return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 if __name__ == "__main__":

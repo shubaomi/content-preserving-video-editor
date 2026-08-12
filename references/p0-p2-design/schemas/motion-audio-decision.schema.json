@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-preserving-video-editor.local/schemas/motion-audio-decision-1.0.0.json",
+  "title": "Motion Audio Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "decision_id", "event_id", "created_at", "producer", "decision", "rationale", "semantic_importance", "chapter_energy", "masking_risk", "input_hashes", "status"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "decision_id": { "$ref": "#/$defs/id" },
+    "event_id": { "$ref": "#/$defs/id" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "producer": { "type": "string", "minLength": 1 },
+    "decision": { "enum": ["cue", "intentionally_silent"] },
+    "rationale": { "type": "string", "minLength": 1 },
+    "semantic_importance": { "enum": ["supporting", "important", "critical"] },
+    "chapter_energy": { "type": "number", "minimum": 0, "maximum": 1 },
+    "masking_risk": { "enum": ["low", "medium", "high"] },
+    "cue": { "$ref": "#/$defs/cue" },
+    "mix_evidence": { "$ref": "#/$defs/mixEvidence" },
+    "input_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["motion_design_contract_sha256", "source_audio_sha256", "audio_policy_sha256"],
+      "properties": {
+        "motion_design_contract_sha256": { "$ref": "#/$defs/sha256" },
+        "source_audio_sha256": { "$ref": "#/$defs/sha256" },
+        "audio_policy_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "status": { "enum": ["planned", "asset_ready", "mixed_and_validated", "action_required"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "decision": { "const": "cue" } }, "required": ["decision"] },
+      "then": { "required": ["cue"] },
+      "else": { "not": { "required": ["cue"] } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "mixed_and_validated" } }, "required": ["status"] },
+      "then": { "required": ["mix_evidence"] }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "duration_seconds"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^(?:[A-Za-z]:\\\\|\\\\\\\\)" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "duration_seconds": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "cue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset", "family", "motif_fingerprint_sha256", "onset_seconds", "duration_seconds", "gain_db", "phase", "license_evidence"],
+      "properties": {
+        "asset": { "$ref": "#/$defs/artifact" },
+        "family": { "type": "string", "minLength": 1 },
+        "motif_fingerprint_sha256": { "$ref": "#/$defs/sha256" },
+        "onset_seconds": { "type": "number", "minimum": 0 },
+        "duration_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "gain_db": { "type": "number", "minimum": -60, "maximum": 12 },
+        "phase": { "enum": ["entrance", "explain", "hold", "exit"] },
+        "license_evidence": { "$ref": "#/$defs/licenseEvidence" }
+      }
+    },
+    "licenseEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "rights_basis"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^(?:[A-Za-z]:\\\\|\\\\\\\\)" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "rights_basis": { "type": "string", "minLength": 1 }
+      }
+    },
+    "mixEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["final_mix_sha256", "dialogue_window_lufs", "cue_window_lufs", "dialogue_cue_delta_lu", "integrated_lufs", "true_peak_dbtp", "onset_error_ms", "audibility_status"],
+      "properties": {
+        "final_mix_sha256": { "$ref": "#/$defs/sha256" },
+        "dialogue_window_lufs": { "type": "number" },
+        "cue_window_lufs": { "type": "number" },
+        "dialogue_cue_delta_lu": { "type": "number" },
+        "integrated_lufs": { "type": "number" },
+        "true_peak_dbtp": { "type": "number" },
+        "onset_error_ms": { "type": "number", "minimum": 0 },
+        "audibility_status": { "enum": ["audible_without_masking", "masked", "dialogue_harmed"] }
+      }
+    }
+  }
+}

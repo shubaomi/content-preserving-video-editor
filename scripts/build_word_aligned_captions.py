@@ -48,6 +48,9 @@ def apply_replacements(words: list[dict], replacements: list[dict]) -> tuple[lis
             continue
         index = 0
         while index < len(output):
+            if not _key(str(output[index].get("text", ""))):
+                index += 1
+                continue
             combined = ""
             matched_end = None
             for right in range(index, min(len(output), index + 40)):

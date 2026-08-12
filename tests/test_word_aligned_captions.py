@@ -50,6 +50,26 @@ class WordAlignedCaptionTests(unittest.TestCase):
         self.assertLessEqual(report["max_caption_duration"], 3.8)
         self.assertTrue(report["passed"])
 
+    def test_sequential_correction_does_not_absorb_previous_punctuation_token(self):
+        words = [
+            {"text": char, "start": index * 0.25, "end": (index + 1) * 0.25}
+            for index, char in enumerate("第一句话")
+        ] + [
+            {"text": char, "start": 3.0 + index * 0.25, "end": 3.0 + (index + 1) * 0.25}
+            for index, char in enumerate("希望未来")
+        ]
+        corrected, applied = CAPTIONS.apply_replacements(words, [
+            {"from": "第一句话", "to": "第一句话。", "evidence": "sentence boundary"},
+            {"from": "希望未来", "to": "希望未来。", "evidence": "sentence boundary"},
+        ])
+
+        second = next(row for row in applied if row["from"] == "希望未来")
+        self.assertEqual(second["start"], 3.0)
+        self.assertEqual(
+            next(row["start"] for row in corrected if row["text"] == "希"),
+            3.0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

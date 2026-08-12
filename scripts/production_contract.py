@@ -75,6 +75,8 @@ def build_contract(
     editing = project.get("editing", {})
     audio = project.get("audio", {})
     cover = project.get("cover", {})
+    identity_mode = str(project.get("identity", {}).get("mode") or "generic")
+    personal_identity_allowed = identity_mode == "self"
     implementation = Path(__file__).resolve()
     contract = {
         "schema_version": 1,
@@ -86,6 +88,12 @@ def build_contract(
         },
         "inputs": inputs,
         "project_mode": input_mode,
+        "identity": {
+            "mode": identity_mode,
+            "hongrun_assets_allowed": personal_identity_allowed,
+            "personal_intro_outro_allowed": personal_identity_allowed,
+            "first_person_brand_expression_allowed": personal_identity_allowed,
+        },
         "delivery_promise": {
             "type": _promise_type(project, input_mode),
             "quality_floor": "publishable_after_human_review",
@@ -203,6 +211,18 @@ def validate_contract(
             errors.append(f"production contract {name} hash is stale")
     if contract.get("project_mode") != input_mode:
         errors.append("production contract project mode is stale")
+    identity = contract.get("identity") or {}
+    expected_identity_mode = str(project.get("identity", {}).get("mode") or "generic")
+    if identity.get("mode") != expected_identity_mode:
+        errors.append("production contract identity mode is stale")
+    personal_identity_allowed = expected_identity_mode == "self"
+    for field in (
+        "hongrun_assets_allowed",
+        "personal_intro_outro_allowed",
+        "first_person_brand_expression_allowed",
+    ):
+        if identity.get(field) is not personal_identity_allowed:
+            errors.append(f"production contract identity.{field} is unsafe")
     promise = contract.get("delivery_promise") or {}
     if promise.get("type") not in PROMISE_TYPES:
         errors.append("production contract has an unsupported delivery promise")

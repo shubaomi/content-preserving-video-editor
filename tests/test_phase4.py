@@ -73,6 +73,20 @@ class Phase4Tests(unittest.TestCase):
             self.assertTrue(all(claim["evidence"]["type"] == "transcript" for claim in platform["claims"]))
             self.assertIn("no performance", platform["claim_policy"].lower())
 
+    def test_publishing_copy_binds_to_promise_without_forcing_identical_wording(self):
+        transcript = {"segments": [
+            {"start": 1.0, "end": 4.0, "text": "这个方法能够减少重复工作"},
+        ]}
+        ledger = {
+            "promise_id": "promise-1",
+            "single_promise": {"proof_event_ids": ["semantic-1"]},
+        }
+        result = COPY.build("减少重复工作的方法", transcript, ["工作流"], ledger)
+        binding = result["promise_binding"]
+        self.assertEqual(binding["promise_id"], "promise-1")
+        self.assertTrue(all(row["proof_event_ids"] == ["semantic-1"] for row in binding["surfaces"]))
+        self.assertGreater(len({row["copy"] for row in binding["surfaces"]}), 1)
+
     def test_cover_ab_reports_distinct_strategies_without_performance_claim(self):
         text = (ROOT / "scripts" / "build_cover_ab.py").read_text(encoding="utf-8")
         self.assertIn("communication_strategies_are_distinct", text)

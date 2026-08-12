@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
+
+from PIL import Image, UnidentifiedImageError
 
 from director_contracts import read_json, sha256_file, write_json
 
@@ -25,10 +27,13 @@ def validate(
     storyboard: dict[str, Any],
     *,
     configured_tolerances: dict[str, Any] | None = None,
+    expected_bindings: Mapping[str, Path] | None = None,
+    keyframe_receipt_paths: Mapping[str, Path] | None = None,
 ) -> list[str]:
     errors: list[str] = []
-    if report.get("schema_version") != 1:
-        errors.append("preview/render parity schema_version must be 1")
+    expected_schema = 2 if expected_bindings is not None else 1
+    if report.get("schema_version") != expected_schema:
+        errors.append(f"preview/render parity schema_version must be {expected_schema}")
     if report.get("status") != "pass":
         errors.append("preview/render parity status must be pass")
     tolerances = report.get("tolerances") or {}
@@ -48,19 +53,40 @@ def validate(
                 errors.append(f"configured preview/render parity {name} tolerance is invalid")
             elif report_value > configured_value:
                 errors.append(f"preview/render parity report exceeds configured {name} tolerance")
-    event_ids = {str(event.get("id", "")) for event in (storyboard.get("events") or [])}
+    if expected_bindings is not None:
+        inputs = report.get("inputs") or {}
+        for name in ("project_artifact", "motion_design_contract", "source_media"):
+            expected_path = Path(expected_bindings.get(name, Path(""))).resolve()
+            row = inputs.get(name) or {}
+            path = Path(str(row.get("path") or ""))
+            if path.resolve() != expected_path:
+                errors.append(f"preview/render parity {name} path is stale")
+            if not expected_path.is_file() or row.get("sha256") != (
+                sha256_file(expected_path) if expected_path.is_file() else None
+            ):
+                errors.append(f"preview/render parity {name} hash is stale")
+    event_ids = {
+        str(event.get("semantic_event_id") or event.get("id", ""))
+        for event in (storyboard.get("events") or []) if isinstance(event, dict)
+    }
     samples = report.get("samples") or []
     if not samples:
         return [*errors, "preview/render parity requires representative event samples"]
-    seen: set[str] = set()
+    seen: set[str | tuple[str, str]] = set()
+    samples_by_event: dict[str, list[dict[str, Any]]] = {}
     for index, sample in enumerate(samples):
         prefix = f"samples[{index}]"
         event_id = str(sample.get("event_id", ""))
         if event_id not in event_ids:
             errors.append(f"{prefix} references unknown event: {event_id}")
-        if event_id in seen:
+        phase_name = str(sample.get("phase") or "")
+        seen_key: str | tuple[str, str] = (
+            (event_id, phase_name) if expected_bindings is not None else event_id
+        )
+        if seen_key in seen:
             errors.append(f"{prefix} duplicates an event parity sample: {event_id}")
-        seen.add(event_id)
+        seen.add(seen_key)
+        samples_by_event.setdefault(event_id, []).append(sample)
         shared_time = _number(sample.get("time_seconds"), -1)
         if shared_time < 0:
             errors.append(f"{prefix} requires a non-negative shared time_seconds")
@@ -80,6 +106,12 @@ def validate(
                 errors.append(f"{prefix} {field} is missing")
             elif sample.get(f"{field}_sha256") != sha256_file(path):
                 errors.append(f"{prefix} {field} hash is missing or stale")
+            elif expected_bindings is not None:
+                try:
+                    with Image.open(path) as image:
+                        image.load()
+                except (OSError, UnidentifiedImageError):
+                    errors.append(f"{prefix} {field} is not a decodable image")
         phase = sample.get("animation_phase") or {}
         if not phase.get("studio") or phase.get("studio") != phase.get("render"):
             errors.append(f"{prefix} animation phase parity failed")
@@ -120,6 +152,50 @@ def validate(
         captions = sample.get("caption_occlusion") or {}
         if captions.get("studio") is True or captions.get("render") is True:
             errors.append(f"{prefix} caption occlusion parity failed")
+    if expected_bindings is not None:
+        receipt_paths = keyframe_receipt_paths or {}
+        if set(receipt_paths) != event_ids:
+            errors.append("preview/render parity keyframe receipt set differs from Storyboard events")
+        for event_id in sorted(event_ids):
+            path = Path(receipt_paths.get(event_id, Path(""))).resolve()
+            if not path.is_file():
+                errors.append(f"preview/render parity keyframe receipt is missing for {event_id}")
+                continue
+            try:
+                receipt = read_json(path)
+            except (OSError, ValueError):
+                errors.append(f"preview/render parity keyframe receipt is invalid for {event_id}")
+                continue
+            event_samples = samples_by_event.get(event_id) or []
+            phases = [str(row.get("phase") or "") for row in event_samples]
+            if phases != ["entrance", "mid", "pre_exit", "post_exit"]:
+                errors.append(f"preview/render parity requires all four phases for {event_id}")
+            observations = receipt.get("phase_observations") or []
+            if [row.get("phase") for row in observations if isinstance(row, dict)] != [
+                "entrance", "mid", "pre_exit", "post_exit",
+            ]:
+                errors.append(f"preview/render parity keyframe receipt lacks four phases for {event_id}")
+                continue
+            for sample, observation in zip(event_samples, observations):
+                artifact = sample.get("keyframe_receipt") or {}
+                if Path(str(artifact.get("path") or "")).resolve() != path:
+                    errors.append(f"preview/render parity keyframe receipt path is stale for {event_id}")
+                if artifact.get("sha256") != sha256_file(path):
+                    errors.append(f"preview/render parity keyframe receipt hash is stale for {event_id}")
+                if sample.get("phase") != observation.get("phase"):
+                    errors.append(f"preview/render parity phase differs from keyframe receipt for {event_id}")
+                sample_time = _number(sample.get("time_seconds"), -1)
+                receipt_time = _number(observation.get("timestamp_seconds"), -1)
+                if min(sample_time, receipt_time) < 0 or abs(sample_time - receipt_time) > time_tolerance:
+                    errors.append(f"preview/render parity time differs from keyframe receipt for {event_id}")
+            project = (receipt.get("project_artifact") or {})
+            contract_hash = (receipt.get("input_hashes") or {}).get(
+                "motion_design_contract_sha256",
+            )
+            if project.get("sha256") != sha256_file(expected_bindings["project_artifact"]):
+                errors.append(f"preview/render parity receipt project binding is stale for {event_id}")
+            if contract_hash != sha256_file(expected_bindings["motion_design_contract"]):
+                errors.append(f"preview/render parity receipt contract binding is stale for {event_id}")
     return errors
 
 

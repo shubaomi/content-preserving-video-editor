@@ -8,6 +8,7 @@ does not imply that a utility is part of the one-shot director until its
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import platform
 import shutil
@@ -19,14 +20,82 @@ from typing import Any
 
 
 CAPABILITY_LEVELS = (
-    "policy_only",
     "documented",
-    "utility_implemented",
     "director_integrated",
     "fixture_validated",
     "real_project_validated",
     "production_default",
 )
+
+
+def validate_maturity_transition(
+    current: str, requested: str, *, evidence: dict[str, Any],
+) -> list[str]:
+    """Validate one evidence-backed capability maturity promotion."""
+    errors: list[str] = []
+    if current not in CAPABILITY_LEVELS or requested not in CAPABILITY_LEVELS:
+        return ["capability maturity state is unsupported"]
+    current_index = CAPABILITY_LEVELS.index(current)
+    requested_index = CAPABILITY_LEVELS.index(requested)
+    if requested_index < current_index:
+        return ["capability maturity downgrade requires a separate rollback record"]
+    if requested_index == current_index:
+        return []
+    if requested_index != current_index + 1:
+        return [f"capability maturity jump from {current} to {requested} is forbidden"]
+    if requested == "director_integrated":
+        integration = evidence.get("director_integration") or {}
+        required = ("route", "state", "invalidation", "failure_contract")
+        if not all(integration.get(field) is True for field in required):
+            errors.append(
+                "director integration requires route, state, invalidation, and failure-contract evidence"
+            )
+    elif requested == "fixture_validated":
+        receipt = evidence.get("fixture_validation") or {}
+        source_hash = str(receipt.get("source_tree_sha256") or "")
+        test_count = receipt.get("test_count")
+        if (
+            receipt.get("status") != "pass"
+            or isinstance(test_count, bool)
+            or not isinstance(test_count, int)
+            or test_count < 1
+            or receipt.get("failures") != 0
+            or receipt.get("skipped") != 0
+            or len(source_hash) != 64
+            or any(character not in "0123456789abcdef" for character in source_hash.lower())
+        ):
+            errors.append("fixture maturity requires a zero-failure, zero-skip, hash-bound test receipt")
+    elif requested == "real_project_validated":
+        validations = evidence.get("real_project_validations") or []
+        passing = [
+            row for row in validations
+            if isinstance(row, dict) and row.get("status") == "pass"
+            and row.get("user_review_status") == "approved"
+        ]
+        roles = {
+            row.get("canary_role") for row in passing
+        }
+        hashes = {
+            str(row.get("implementation_sha256") or "") for row in passing
+        }
+        if len(passing) != 2 or roles != {"landscape_screen", "portrait_talking_head"}:
+            errors.append("real-project maturity requires both passing canaries and user review")
+        implementation_hash = next(iter(hashes), "")
+        if (
+            len(hashes) != 1
+            or len(implementation_hash) != 64
+            or any(character not in "0123456789abcdef" for character in implementation_hash.lower())
+        ):
+            errors.append("real-project canaries must bind the same implementation hash")
+    elif requested == "production_default":
+        promotion = evidence.get("production_promotion") or {}
+        if (
+            promotion.get("approved") is not True
+            or not str(promotion.get("approved_by") or "").strip()
+            or not str(promotion.get("approved_at") or "").strip()
+        ):
+            errors.append("production default requires a separate explicit promotion approval")
+    return errors
 
 
 def _implementation_binding() -> dict[str, str]:
@@ -105,7 +174,7 @@ _REGISTRY = (
                 maturity="director_integrated"),
     _capability("semantic_visual_plan", "director_with_llm", dependencies=["word_transcript", "evidence_bundle"],
                 inputs=["word_transcript", "evidence_bundle"], outputs=["semantic-brief.json"],
-                optional=False, maturity="director_integrated", failure_fallback="action_required"),
+                optional=False, maturity="fixture_validated", failure_fallback="action_required"),
     _capability("semantic_confidence", "director", dependencies=["semantic_visual_plan"],
                 inputs=["word_ids", "screen_evidence", "counterexamples", "asr_confidence"],
                 outputs=["semantic-confidence.json"], maturity="fixture_validated",
@@ -126,10 +195,77 @@ _REGISTRY = (
                 inputs=["design_tokens", "profile", "semantic_brief", "orientation"],
                 outputs=["brand-motion-playbook.json", "brand-motion-tokens.css", "DESIGN.md"],
                 optional=False, maturity="director_integrated", failure_fallback="action_required"),
+    _capability("adaptive_layout", "director", dependencies=["evidence_acquisition"],
+                inputs=["display_metadata", "protected_regions", "identity_mode"],
+                outputs=["adaptive-layout-constraints.json"], maturity="fixture_validated",
+                failure_fallback="caption_only_or_action_required"),
+    _capability("stateful_target_binding", "director", dependencies=["adaptive_layout"],
+                inputs=["semantic_render_event", "source_state_evidence", "adaptive_layout"],
+                outputs=["target-bindings/*.json", "target-binding-geometry-qa.json"],
+                maturity="fixture_validated", failure_fallback="do_not_render_or_action_required"),
+    _capability("motion_quality_engine", "director",
+                dependencies=["semantic_brief", "production_contract", "adaptive_layout"],
+                inputs=["decision_complete_opportunities", "evidence_hashes", "target_bindings"],
+                outputs=["motion-design-contract.json", "hyperframes-choreography.json"],
+                maturity="fixture_validated", failure_fallback="declared_recipe_fallback_or_action_required"),
+    _capability("hyperframes_keyframe_evidence", "director",
+                dependencies=["motion_quality_engine", "HyperFrames"],
+                inputs=["renderer_project_manifest", "motion_design_contract", "renderer_export"],
+                outputs=["keyframe-receipts/*.json", "preview-render-parity.json"],
+                maturity="fixture_validated", failure_fallback="action_required_and_block_render"),
+    _capability("paired_creative_review", "director",
+                dependencies=["motion_quality_engine", "hyperframes_keyframe_evidence"],
+                inputs=["baseline_media", "candidate_media", "four_phase_receipts",
+                        "motion_audio_decisions", "automated_gate_reports"],
+                outputs=["creative-review.json", "creative-review.html", "pending-proposals"],
+                maturity="fixture_validated", failure_fallback="action_required_and_block_render"),
+    _capability("content_format_motion_grammar", "director",
+                dependencies=["motion_quality_engine", "adaptive_layout"],
+                inputs=["content_type", "semantic_role", "protected_regions"],
+                outputs=["motion-design-contract.json", "hyperframes-choreography.json"],
+                maturity="fixture_validated", failure_fallback="caption_only_or_action_required"),
+    _capability("perceptual_motion_audio", "director",
+                dependencies=["motion_quality_engine", "ffmpeg", "ffprobe"],
+                inputs=["motion_design_contract", "authorized_sfx", "delivered_sample_mix"],
+                outputs=["motion-audio-decisions/manifest.json", "mix-audibility.json"],
+                maturity="fixture_validated", failure_fallback="intentionally_silent_or_action_required"),
+    _capability("caption_sync_closure", "director",
+                dependencies=["video-use", "ffmpeg", "ffprobe"],
+                inputs=["word_transcript", "edl", "master_srt", "final_universal_mp4"],
+                outputs=["caption-sync-closure.json"],
+                maturity="fixture_validated", failure_fallback="action_required_and_block_delivery"),
+    _capability("editorial_promise_closure", "director",
+                dependencies=["semantic_visual_plan"],
+                inputs=["editorial_intent", "proof_ids", "hook", "title", "cover",
+                        "description", "cta", "motion_copy"],
+                outputs=["editorial-promise-ledger.json", "editorial-promise-closure.json"],
+                maturity="fixture_validated", failure_fallback="action_required_and_block_delivery"),
+    _capability("current_golden_runtime_evidence", "director",
+                dependencies=["approved_sample", "hyperframes_keyframe_evidence"],
+                inputs=["renderer_export", "keyframe_receipts", "cropped_overlay_snapshots"],
+                outputs=["golden-baseline.json", "editorial-regression.json"],
+                maturity="fixture_validated", failure_fallback="block_render"),
+    _capability("advanced_runtime_gate", "director",
+                dependencies=["motion_quality_engine", "HyperFrames"],
+                inputs=["seek_safe", "deterministic_2d_fallback", "preview_render_parity",
+                        "device_support", "license", "cost"],
+                outputs=["motion-design-contract.json"],
+                maturity="fixture_validated", failure_fallback="deterministic_2d_fallback"),
+    _capability("typed_nle_handoff", "human-editor",
+                dependencies=["video_use_timeline"],
+                inputs=["authoritative_edl", "immutable_automatic_master", "correction_ledger"],
+                outputs=["typed-nle-handoff.json", "handoff-manifest.json"],
+                maturity="fixture_validated", failure_fallback="action_required"),
+    _capability("optional_media_adapters", "director",
+                dependencies=["provider_governance"],
+                inputs=["provider", "rights", "privacy", "provenance", "budget",
+                        "human_review_contract"],
+                outputs=["optional-media-adapters.json"],
+                maturity="fixture_validated", failure_fallback="unavailable_or_action_required"),
     _capability("visual_dynamics_qa", "director", dependencies=["semantic_brief", "storyboard"],
                 inputs=["semantic_brief", "storyboard", "production_contract"],
                 outputs=["visual-dynamics-qa.json"], optional=False,
-                maturity="director_integrated", failure_fallback="block_render"),
+                maturity="fixture_validated", failure_fallback="block_render"),
     _capability("editorial_regression", "director", dependencies=["approved_sample"],
                 inputs=["golden_baseline", "storyboard", "correction_ledger"],
                 outputs=["editorial-regression.json"], maturity="director_integrated",
@@ -273,6 +409,19 @@ _CANONICAL_CONFIG_PATHS = {
     "local_semantic_corpus": ("assets", "local_semantic_corpus"),
     "provider_governance": ("provider_governance",),
     "brand_motion_playbook": ("brand", "motion_playbook"),
+    "adaptive_layout": ("motion_quality",),
+    "stateful_target_binding": ("motion_quality",),
+    "motion_quality_engine": ("motion_quality",),
+    "hyperframes_keyframe_evidence": ("motion_quality",),
+    "paired_creative_review": ("motion_quality",),
+    "content_format_motion_grammar": ("motion_quality",),
+    "perceptual_motion_audio": ("audio", "sfx", "perceptual"),
+    "caption_sync_closure": ("editing", "caption_sync_closure"),
+    "editorial_promise_closure": ("editorial_intent",),
+    "current_golden_runtime_evidence": ("editorial_regression",),
+    "advanced_runtime_gate": ("motion_quality", "advanced_runtimes"),
+    "typed_nle_handoff": ("delivery", "manual_finish"),
+    "optional_media_adapters": ("extensions", "optional_media_adapters"),
     "visual_dynamics_qa": ("qa", "visual_dynamics"),
     "editorial_regression": ("editorial_regression",),
     "review_dashboard": ("review", "dashboard"),
@@ -297,6 +446,11 @@ def capability_config(project: dict[str, Any], name: str) -> dict[str, Any]:
         configured: Any = project
         for part in path:
             configured = configured.get(part, {}) if isinstance(configured, dict) else {}
+        if name == "optional_media_adapters" and isinstance(configured, list):
+            return {"enabled": any(
+                isinstance(row, dict) and row.get("enabled") is True
+                for row in configured
+            )}
         if isinstance(configured, bool):
             return {"enabled": configured}
         if isinstance(configured, dict):
@@ -312,9 +466,29 @@ def capability_config(project: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def build_capability_inventory(project: dict[str, Any]) -> dict[str, Any]:
+    fixture_receipt = Path(__file__).parents[1] / "references" / "validation" / "test-suite-report.json"
+    fixture_evidence: dict[str, Any] | None = None
+    if fixture_receipt.is_file():
+        try:
+            candidate = json.loads(fixture_receipt.read_text(encoding="utf-8"))
+            from test_acceptance_report import validate_report
+            if not validate_report(candidate, Path(__file__).parents[1], fixture_receipt):
+                fixture_evidence = candidate
+        except (OSError, ValueError, json.JSONDecodeError):
+            fixture_evidence = None
     capabilities: list[dict[str, Any]] = []
     for declared in _REGISTRY:
         row = deepcopy(declared)
+        row["declared_maturity"] = row["maturity"]
+        if row["maturity"] == "fixture_validated" and fixture_evidence is None:
+            row["maturity"] = "director_integrated"
+            row["maturity_reason"] = "current zero-skip fixture receipt is missing or stale"
+        elif row["maturity"] == "fixture_validated":
+            row["maturity_evidence"] = {
+                "path": str(fixture_receipt.resolve()),
+                "sha256": hashlib.sha256(fixture_receipt.read_bytes()).hexdigest(),
+                "source_tree_sha256": fixture_evidence.get("source_tree_sha256"),
+            }
         config = capability_config(project, row["name"])
         route = _CANONICAL_CONFIG_PATHS.get(
             row["name"], ("workflow", "capabilities", row["name"]),

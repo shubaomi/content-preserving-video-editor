@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,6 +44,36 @@ class ValidatePlatformExportTests(unittest.TestCase):
             self.assertEqual(report["cover_sha256"], __import__("hashlib").sha256(
                 b"cover bytes"
             ).hexdigest())
+
+    def test_bound_platform_report_allows_an_explicitly_optional_missing_cover(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            media = root / "universal.mp4"
+            media.write_bytes(b"one universal file")
+            safe = root / "safe.jpg"
+            safe.write_bytes(b"safe")
+            checks = {
+                name: True for name in (
+                    "container_mp4", "video_codec", "pixel_format", "minimum_short_edge",
+                    "ratio", "audio_present", "full_decode", "true_peak_recommendation",
+                )
+            }
+            report = {
+                "schema_version": 1,
+                "status": "pass",
+                "passed": True,
+                "universal_output": True,
+                "file_sha256": hashlib.sha256(media.read_bytes()).hexdigest(),
+                "cover_sha256": None,
+                "preset_version": "fixture",
+                "preset_verified_on": "2026-08-11",
+                "platform": "fixture",
+                "checks": checks,
+                "safe_zone_snapshot": str(safe),
+                "safe_zone_snapshot_sha256": hashlib.sha256(safe.read_bytes()).hexdigest(),
+            }
+
+            self.assertEqual(MODULE.validate_bound_report(report, media, None), [])
 
     def test_unsafe_true_peak_is_blocking(self) -> None:
         media = Path("universal.mp4")

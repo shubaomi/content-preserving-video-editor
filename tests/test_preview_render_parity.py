@@ -3,7 +3,10 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import json
 from pathlib import Path
+
+from PIL import Image
 
 
 ROOT = Path(__file__).parents[1]
@@ -107,6 +110,114 @@ class PreviewRenderParityTests(unittest.TestCase):
                 configured_tolerances={"position_px": 4, "size_px": 4, "time_seconds": 0.05},
             )
             self.assertTrue(any("exceeds configured position_px" in error for error in errors))
+
+    def test_mqe_parity_binds_project_contract_source_and_all_receipt_phases(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            project = root / "index.html"
+            contract = root / "motion.json"
+            source = root / "source.mp4"
+            project.write_text("project", encoding="utf-8")
+            contract.write_text("{}", encoding="utf-8")
+            source.write_bytes(b"media")
+            receipt = root / "event-1-keyframe.json"
+            phases = []
+            samples = []
+            for index, (phase, timestamp) in enumerate((
+                ("entrance", 1.2), ("mid", 2.0), ("pre_exit", 2.8), ("post_exit", 3.1),
+            )):
+                studio = root / f"studio-{phase}.png"
+                rendered = root / f"render-{phase}.png"
+                Image.new("RGB", (640, 360), (240 - index, 245, 250)).save(studio)
+                Image.new("RGB", (640, 360), (240 - index, 245, 250)).save(rendered)
+                phases.append({"phase": phase, "timestamp_seconds": timestamp})
+                samples.append({
+                    "event_id": "event-1", "phase": phase,
+                    "time_seconds": timestamp, "studio_time_seconds": timestamp,
+                    "render_time_seconds": timestamp + 0.01,
+                    "studio_snapshot": str(studio), "render_snapshot": str(rendered),
+                    "studio_snapshot_sha256": sha256_file(studio),
+                    "render_snapshot_sha256": sha256_file(rendered),
+                    "animation_phase": {"studio": phase, "render": phase},
+                    "elements": [{
+                        "selector": "#event-1",
+                        "studio": {"x": 10, "y": 20, "width": 200, "height": 100, "visible": phase != "post_exit"},
+                        "render": {"x": 11, "y": 20, "width": 200, "height": 100, "visible": phase != "post_exit"},
+                    }],
+                    "connectors": {"expected_count": 0, "studio_count": 0, "render_count": 0,
+                                   "all_endpoints_attached": True, "clipped": False},
+                    "cropping": {"studio_clipped": False, "render_clipped": False},
+                    "caption_occlusion": {"studio": False, "render": False},
+                    "keyframe_receipt": {"path": str(receipt), "sha256": "pending"},
+                })
+            receipt.write_text(json.dumps({
+                "event_id": "event-1", "project_artifact": {
+                    "path": str(project), "sha256": sha256_file(project),
+                },
+                "input_hashes": {"motion_design_contract_sha256": sha256_file(contract)},
+                "phase_observations": phases,
+            }), encoding="utf-8")
+            for sample in samples:
+                sample["keyframe_receipt"]["sha256"] = sha256_file(receipt)
+            report = {
+                "schema_version": 2, "status": "pass",
+                "tolerances": {"position_px": 4, "size_px": 4, "time_seconds": 0.05},
+                "inputs": {
+                    "project_artifact": {"path": str(project), "sha256": sha256_file(project)},
+                    "motion_design_contract": {"path": str(contract), "sha256": sha256_file(contract)},
+                    "source_media": {"path": str(source), "sha256": sha256_file(source)},
+                },
+                "samples": samples,
+            }
+
+            errors = validate(
+                report, {"events": [{"id": "event-1"}]},
+                expected_bindings={
+                    "project_artifact": project,
+                    "motion_design_contract": contract,
+                    "source_media": source,
+                },
+                keyframe_receipt_paths={"event-1": receipt},
+            )
+
+            self.assertEqual(errors, [])
+
+    def test_mqe_parity_rejects_mid_only_stale_receipt_and_wrong_dimensions(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            report = parity_report(root)
+            project = root / "index.html"
+            contract = root / "motion.json"
+            source = root / "source.mp4"
+            receipt = root / "receipt.json"
+            for path in (project, contract, source):
+                path.write_bytes(b"input")
+            receipt.write_text(json.dumps({
+                "event_id": "event-1",
+                "project_artifact": {"path": str(project), "sha256": sha256_file(project)},
+                "input_hashes": {"motion_design_contract_sha256": sha256_file(contract)},
+                "phase_observations": [{"phase": "mid", "timestamp_seconds": 12.5}],
+            }), encoding="utf-8")
+            report["schema_version"] = 2
+            report["inputs"] = {
+                "project_artifact": {"path": str(project), "sha256": sha256_file(project)},
+                "motion_design_contract": {"path": str(contract), "sha256": sha256_file(contract)},
+                "source_media": {"path": str(source), "sha256": sha256_file(source)},
+            }
+            report["samples"][0]["phase"] = "mid"
+            report["samples"][0]["keyframe_receipt"] = {
+                "path": str(receipt), "sha256": sha256_file(receipt),
+            }
+            errors = validate(
+                report, {"events": [{"id": "event-1"}]},
+                expected_bindings={
+                    "project_artifact": project, "motion_design_contract": contract,
+                    "source_media": source,
+                },
+                keyframe_receipt_paths={"event-1": receipt},
+            )
+            self.assertTrue(any("four phases" in error for error in errors), errors)
+            self.assertTrue(any("decodable image" in error for error in errors), errors)
 
 
 if __name__ == "__main__":

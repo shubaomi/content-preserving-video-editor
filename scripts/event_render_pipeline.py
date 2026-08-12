@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
@@ -53,12 +54,63 @@ def _run_command(
 
 def _validate_equivalence(row: dict[str, Any], label: str) -> None:
     evidence = row.get("equivalence_evidence") or {}
+    if not isinstance(evidence, dict):
+        raise EventRenderUnavailable(f"{label} equivalence evidence is invalid")
     required = ("frame_accurate", "audio_sample_accurate", "visual_equivalent")
     missing = [name for name in required if evidence.get(name) is not True]
     if missing:
         raise EventRenderUnavailable(
             f"{label} lacks equivalence evidence: {', '.join(missing)}"
         )
+    receipt_path = Path(str(evidence.get("path") or ""))
+    if not receipt_path.is_absolute() or not receipt_path.is_file() \
+            or evidence.get("sha256") != sha256_file(receipt_path):
+        raise EventRenderUnavailable(f"{label} equivalence receipt is missing or stale")
+    try:
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise EventRenderUnavailable(f"{label} equivalence receipt is unreadable") from error
+    if (
+        not isinstance(receipt, dict)
+        or receipt.get("schema_version") != 1
+        or receipt.get("status") != "pass"
+        or receipt.get("kind") != "hyperframes_event_equivalence"
+        or receipt.get("scope") != evidence.get("scope")
+        or not all(receipt.get(name) is True for name in required)
+    ):
+        raise EventRenderUnavailable(f"{label} equivalence receipt is invalid")
+    if evidence.get("scope") == "assembly" and receipt.get("ordered_segment_hash_binding") is not True:
+        raise EventRenderUnavailable("event assembly lacks ordered segment hash binding")
+    reference = Path(str(receipt.get("reference_artifact") or ""))
+    observed = Path(str(receipt.get("observed_artifact") or ""))
+    expected_artifact = Path(str(row.get("expected_artifact") or "")).resolve()
+    if (
+        not reference.is_absolute() or not observed.is_absolute()
+        or not reference.is_file() or not observed.is_file()
+        or observed.resolve() != expected_artifact
+        or receipt.get("reference_sha256") != sha256_file(reference)
+        or receipt.get("observed_sha256") != sha256_file(observed)
+        or receipt.get("reference_sha256") != receipt.get("observed_sha256")
+        or receipt.get("full_decode") is not True
+    ):
+        raise EventRenderUnavailable(f"{label} equivalence media binding is invalid")
+    for media in (reference, observed):
+        decoded = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", str(media), "-map", "0:v:0", "-f", "null", "-"],
+            capture_output=True, text=True, check=False,
+        )
+        if decoded.returncode != 0:
+            raise EventRenderUnavailable(f"{label} equivalence media does not fully decode")
+
+
+def _validate_equivalence_after_render(row: dict[str, Any], label: str) -> None:
+    evidence = row.get("equivalence_evidence") or {}
+    receipt = json.loads(Path(str(evidence["path"])).read_text(encoding="utf-8"))
+    observed = Path(str(receipt["observed_artifact"]))
+    reference = Path(str(receipt["reference_artifact"]))
+    if not observed.is_file() or sha256_file(observed) != receipt.get("observed_sha256") \
+            or sha256_file(observed) != sha256_file(reference):
+        raise EventRenderUnavailable(f"{label} rendered bytes differ from equivalence reference")
 
 
 def _snapshot_hashes(paths: dict[str, Path | None]) -> dict[str, str]:
@@ -87,9 +139,6 @@ def execute_event_render_pipeline(
         raise EventRenderUnavailable("HyperFrames event render/assembly commands are not declared")
     if assembly.get("owner") != "hyperframes":
         raise EventRenderUnavailable("event assembly owner must be hyperframes")
-    _validate_equivalence(assembly, "event assembly")
-    if (assembly.get("equivalence_evidence") or {}).get("ordered_segment_hash_binding") is not True:
-        raise EventRenderUnavailable("event assembly lacks ordered segment hash binding")
 
     try:
         storyboard_bytes = storyboard_path.read_bytes()
@@ -148,7 +197,8 @@ def execute_event_render_pipeline(
         record = records[event_id]
         if record.get("owner") != "hyperframes":
             raise EventRenderUnavailable(f"event {event_id} owner must be hyperframes")
-        _validate_equivalence(record, f"event {event_id}")
+        # Structural receipt validation is deferred until the command has produced
+        # the exact observed artifact; this prevents a sidecar file proving a bystander.
         expected = Path(str(record.get("expected_artifact") or "")).resolve()
         cwd = Path(str(record.get("cwd") or "")).resolve()
         argv = record.get("argv")
@@ -189,6 +239,7 @@ def execute_event_render_pipeline(
     segment_by_id: dict[str, dict[str, Any]] = {}
     cache_hits: list[str] = []
     executed: list[str] = []
+    render_wall_seconds = 0.0
     for event_id in render_order:
         record = records[event_id]
         expected = Path(str(record["expected_artifact"])).resolve()
@@ -198,12 +249,18 @@ def execute_event_render_pipeline(
             source = Path(str(cached["outputs"][0]["cache_path"]))
             expected.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, expected)
+            _validate_equivalence(record, f"event {event_id}")
+            _validate_equivalence_after_render(record, f"event {event_id}")
             cache_hits.append(event_id)
         else:
+            started = time.monotonic()
             _run_command(
                 [str(value) for value in record["argv"]],
                 cwd=Path(str(record["cwd"])).resolve(), expected=expected, runner=runner,
             )
+            _validate_equivalence(record, f"event {event_id}")
+            _validate_equivalence_after_render(record, f"event {event_id}")
+            render_wall_seconds += time.monotonic() - started
             _assert_snapshot_unchanged(common_sources, common_snapshot, "shared render input")
             _assert_snapshot_unchanged(
                 event_sources[event_id], event_snapshots[event_id], f"event {event_id} asset",
@@ -239,15 +296,27 @@ def execute_event_render_pipeline(
     if cached_assembly is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(Path(str(cached_assembly["outputs"][0]["cache_path"])), output)
+        _validate_equivalence(assembly, "event assembly")
+        _validate_equivalence_after_render(assembly, "event assembly")
     else:
+        assembly_started = time.monotonic()
         _run_command(
             [str(value) for value in assembly.get("argv") or []],
             cwd=Path(str(assembly.get("cwd") or "")).resolve(),
             expected=output.resolve(), runner=runner,
         )
+        _validate_equivalence(assembly, "event assembly")
+        _validate_equivalence_after_render(assembly, "event assembly")
+        render_wall_seconds += time.monotonic() - assembly_started
         _assert_snapshot_unchanged(common_sources, common_snapshot, "shared render input")
         cache.store(assembly_key, {output.name: output})
     _assert_snapshot_unchanged(common_sources, common_snapshot, "shared render input")
+    estimated_by_event = {
+        event_id: max(0.0, float(records[event_id].get("estimated_render_seconds") or 0.0))
+        for event_id in expected_ids
+    }
+    provider_reservations = list(command_record.get("provider_reservations") or [])
+    provider_actuals = list(command_record.get("provider_actuals") or [])
     return {
         "schema_version": 1,
         "mode": "hyperframes_event_cache",
@@ -258,6 +327,22 @@ def execute_event_render_pipeline(
         "executed_events": executed,
         "assembly_key": assembly_key,
         "assembly_reused": assembly_reused,
+        "cost_accounting": {
+            "executed_event_count": len(executed),
+            "cache_hit_count": len(cache_hits),
+            "retry_count": 0,
+            "render_wall_seconds": round(render_wall_seconds, 6),
+            "cache_saved_event_seconds": round(sum(
+                estimated_by_event[event_id] for event_id in cache_hits
+            ), 6),
+            "provider_reservations": provider_reservations,
+            "provider_actuals": provider_actuals,
+            "provider_actual_cost": round(sum(
+                float(row.get("actual_cost") or 0.0)
+                for row in provider_actuals if isinstance(row, dict)
+            ), 6),
+            "unknown_costs_invented": False,
+        },
         "output": str(output.resolve()),
         "output_sha256": sha256_file(output.resolve()),
         "equivalence": "explicit HyperFrames evidence required; no FFmpeg/PIL substitute",

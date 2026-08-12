@@ -25,28 +25,56 @@ class EventRenderPipelineTests(unittest.TestCase):
         for path in files.values():
             path.write_text("{}", encoding="utf-8")
         segment_a, segment_b, output = root / "a.mov", root / "b.mov", root / "out.mp4"
-        evidence = {"frame_accurate": True, "audio_sample_accurate": True,
-                    "visual_equivalent": True}
-        def write_command(path: Path, value: str) -> list[str]:
-            return [sys.executable, "-c",
-                    f"import sys;from pathlib import Path;Path(sys.argv[1]).write_bytes({value!r}.encode())",
-                    str(path)]
+        observed_by_scope = {"a": segment_a, "b": segment_b, "assembly": output}
+        def equivalence(scope: str) -> dict:
+            path = root / f"equivalence-{scope}.json"
+            reference = root / f"equivalence-{scope}.reference.mp4"
+            observed = observed_by_scope[scope]
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", f"color=c=black:s=64x64:r=5:d=0.2",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", str(reference),
+            ], check=True)
+            command_script = (
+                "import sys;from pathlib import Path;"
+                f"Path(sys.argv[1]).write_bytes(Path(r'{reference}').read_bytes())"
+            )
+            observed.write_bytes(reference.read_bytes())
+            payload = {
+                "schema_version": 1, "kind": "hyperframes_event_equivalence",
+                "status": "pass", "scope": scope, "frame_accurate": True,
+                "audio_sample_accurate": True, "visual_equivalent": True,
+                "ordered_segment_hash_binding": scope == "assembly",
+                "reference_artifact": str(reference.resolve()),
+                "reference_sha256": __import__("hashlib").sha256(reference.read_bytes()).hexdigest(),
+                "observed_artifact": str(observed.resolve()),
+                "observed_sha256": __import__("hashlib").sha256(observed.read_bytes()).hexdigest(),
+                "full_decode": True,
+            }
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            return {
+                "path": str(path.resolve()), "sha256": __import__("hashlib").sha256(path.read_bytes()).hexdigest(),
+                "scope": scope, "frame_accurate": True, "audio_sample_accurate": True,
+                "visual_equivalent": True,
+                "_command_script": command_script,
+            }
+        evidence_a = equivalence("a")
+        evidence_b = equivalence("b")
+        evidence_assembly = equivalence("assembly")
         record = {
             "event_motion_renders": [
                 {"event_id": "a", "owner": "hyperframes", "cwd": str(root),
-                 "expected_artifact": str(segment_a), "argv": write_command(segment_a, "A"),
-                 "renderer_version": "fixture", "equivalence_evidence": evidence},
+                 "expected_artifact": str(segment_a), "argv": [sys.executable, "-c", evidence_a.pop("_command_script"), str(segment_a)],
+                 "renderer_version": "fixture", "equivalence_evidence": evidence_a},
                 {"event_id": "b", "owner": "hyperframes", "cwd": str(root),
-                 "expected_artifact": str(segment_b), "argv": write_command(segment_b, "B"),
-                 "renderer_version": "fixture", "equivalence_evidence": evidence},
+                 "expected_artifact": str(segment_b), "argv": [sys.executable, "-c", evidence_b.pop("_command_script"), str(segment_b)],
+                 "renderer_version": "fixture", "equivalence_evidence": evidence_b},
             ],
             "event_motion_assembly": {
                 "owner": "hyperframes", "cwd": str(root), "expected_artifact": str(output),
-                "argv": [sys.executable, "-c",
-                         f"import sys;from pathlib import Path;Path(sys.argv[1]).write_bytes(Path(r'{segment_a}').read_bytes()+Path(r'{segment_b}').read_bytes())",
-                         str(output)],
+                "argv": [sys.executable, "-c", evidence_assembly.pop("_command_script"), str(output)],
                 "renderer_version": "fixture",
-                "equivalence_evidence": {**evidence, "ordered_segment_hash_binding": True},
+                "equivalence_evidence": evidence_assembly,
             },
         }
         return record, {"storyboard": storyboard, **files, "output": output}
@@ -73,7 +101,29 @@ class EventRenderPipelineTests(unittest.TestCase):
             second = self._run(root, record, files, first["fingerprints"])
             self.assertEqual(second["cache_hits"], ["a", "b"])
             self.assertTrue(second["assembly_reused"])
-            self.assertEqual(files["output"].read_bytes(), b"AB")
+            self.assertTrue(files["output"].is_file())
+            self.assertGreater(files["output"].stat().st_size, 0)
+            self.assertEqual(second["cost_accounting"]["executed_event_count"], 0)
+            self.assertEqual(second["cost_accounting"]["cache_hit_count"], 2)
+            self.assertEqual(second["cost_accounting"]["retry_count"], 0)
+            self.assertGreaterEqual(second["cost_accounting"]["cache_saved_event_seconds"], 0.0)
+            self.assertEqual(second["cost_accounting"]["provider_actual_cost"], 0.0)
+
+    def test_cost_accounting_uses_declared_estimates_without_inventing_provider_cost(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record, files = self._fixture(root)
+            record["event_motion_renders"][0]["estimated_render_seconds"] = 4.5
+            record["event_motion_renders"][1]["estimated_render_seconds"] = 3.0
+            first = self._run(root, record, files)
+            files["output"].unlink()
+            for row in record["event_motion_renders"]:
+                Path(row["expected_artifact"]).unlink()
+            second = self._run(root, record, files, first["fingerprints"])
+
+            self.assertEqual(second["cost_accounting"]["cache_saved_event_seconds"], 7.5)
+            self.assertEqual(second["cost_accounting"]["provider_reservations"], [])
+            self.assertEqual(second["cost_accounting"]["provider_actuals"], [])
 
     def test_changed_event_invalidates_only_it_while_assembly_is_rebuilt(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -108,7 +158,7 @@ class EventRenderPipelineTests(unittest.TestCase):
             record, files = self._fixture(root)
 
             def mutating_runner(command, **kwargs):
-                Path(command[-1]).write_bytes(b"render")
+                subprocess.run(command, check=True, capture_output=True, text=True)
                 files["captions"].write_text('{"changed":true}', encoding="utf-8")
                 return subprocess.CompletedProcess(command, 0, "", "")
 
@@ -127,7 +177,7 @@ class EventRenderPipelineTests(unittest.TestCase):
             record, files = self._fixture(root)
 
             def mutating_runner(command, **kwargs):
-                Path(command[-1]).write_bytes(b"render")
+                subprocess.run(command, check=True, capture_output=True, text=True)
                 files["storyboard"].write_text('{"events":[]}', encoding="utf-8")
                 return subprocess.CompletedProcess(command, 0, "", "")
 

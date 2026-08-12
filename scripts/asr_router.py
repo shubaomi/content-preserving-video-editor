@@ -249,7 +249,9 @@ def choose_backend(config: dict[str, Any], evidence: dict[str, Any]) -> dict[str
         fallbacks.append("funasr_unavailable")
     if selected != "local_faster_whisper" and not _available(config, "local_faster_whisper"):
         fallbacks.append("local_faster_whisper_unavailable")
-    return {**route, "fallbacks": fallbacks}
+    result = {**route, "fallbacks": fallbacks}
+    result["route_sha256"] = route_sha256(result)
+    return result
 
 
 def _word_rows(raw: dict[str, Any]) -> list[tuple[dict[str, Any], Any]]:

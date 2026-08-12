@@ -48,6 +48,13 @@ their asset hashes, provenance, and rights are accepted. OpenCut remains
 human-only. Remotion remains a named-event adapter; HyperFrames owns the full
 composition.
 
+Capability maturity uses exactly five ordered states: `documented`,
+`director_integrated`, `fixture_validated`, `real_project_validated`, and
+`production_default`. Promotions are one step at a time. Real-project promotion
+requires the same implementation hash on both current landscape and portrait
+canaries plus explicit user review; production default requires a separate
+explicit promotion approval.
+
 ## State machine
 
 Before the state machine leaves `inspect`, resolve input mode from explicit
@@ -102,6 +109,22 @@ records the approver and SHA-256 values for the current Storyboard, aesthetic
 review, and sample gate. `stage_preview_approval` rejects a stale approval if
 any of those artifacts has changed. Creating `preview-approval.json` manually
 is not a supported path.
+
+With Motion Quality enabled, the same transition also requires a paired
+`sample-qa/creative-review.json`. The Director compares distinct, duration-
+aligned 60–90 second baseline and candidate media at the same semantic events,
+shows four receipt phases and SFX/BGM auditions, and binds the compiler,
+Storyboard, audio decisions, automated gates, media, and receipts by SHA-256.
+For a cue-bearing sample, FFmpeg first materializes a complete SFX-mixed
+candidate and `sample-review-mix.json`; this is a Director-owned review/final-
+mix responsibility, not a second motion render. The receipt validates the
+ordered cue assets against the current audio plan and fails closed on path,
+hash, inventory, command, or output drift. Caption delivery then runs last on
+that mixed candidate and on the clean baseline using the same `master.srt`.
+The review defaults to `pending_user_review`; drift marks it stale and resets the
+decision. `approve-sample` requires a named human, publish willingness, and a
+baseline/candidate/tie preference plus a non-empty reason. Agent or multimodal review may recommend but
+cannot author user approval.
 
 `action_required` is a real owner handoff, not a documentation pause. The agent
 must load the named specialized Skill, produce the expected artifact, then run
@@ -170,6 +193,15 @@ Require:
 - a five-field visual-structure intent;
 - stored frame evidence for long intentional quiet intervals.
 
+When schema v10 has `motion_quality.enabled=true`, the brief uses semantic
+schema v3 with `opportunity_model=decision_complete_v1`. Every opportunity has
+one decision and a rationale, its source/output start preserves narrative order,
+and only `render` decisions require the full visual/motion intent and an explicit
+unique visible-copy list. `caption_only`, `reuse_source`, `quiet_source`, and
+`annotation` remain accounted-for non-render decisions; `action_required` pauses
+the Director for a material editorial choice. The legacy schema-v1/v2 validator
+is unchanged while motion quality is disabled.
+
 The deterministic validator rejects low-information anchors, repeated anchors,
 subtitle-length duplication, missing evidence, and duplicate visual contracts.
 It never invents the semantic plan.
@@ -190,9 +222,12 @@ Require `renderer=hyperframes`, all five HyperFrames capability Skills, and
 `motion_output=hyperframes_render`. Every event's five-field signature must be
 unique when it claims to be a distinct variant.
 
-When a semantic brief is supplied, Storyboard events must map one-to-one in
-approved order. The mapping binds semantic event ID, anchor, transcript word
-IDs, source/output timing, viewer takeaway, and any approved visible copy.
+For a decision-complete brief, Storyboard events must equal the ordered subset
+of opportunities whose decision is `render`; exact count equality with all
+brief opportunities is forbidden. The mapping binds semantic event ID, anchor,
+transcript word IDs, source/output timing, frame evidence, relevance rationale,
+visual mechanism, viewer takeaway, and the approved visible-copy list. Legacy
+schema-v1/v2 briefs retain their one-to-one compatibility behavior.
 Storyboard-authored semantic fallback is forbidden. Each event carries an exact
 derived `visible_copy_manifest`; common headline/text/label/component payloads
 outside it are rejected. Any other string must be approved copy or an explicit
@@ -217,6 +252,59 @@ connector attachment distances and target useful-content occupancy from
 hash-bound browser/DOM measurement receipts, and recomputes panel/text contrast
 over the actual source crop from midpoint/post-exit evidence.
 
+The stateful target-binding layer supersedes a single static target-region box
+when Motion Quality is enabled. Evidence acquisition emits an adaptive layout
+contract with different protected-region policy for landscape UI and portrait
+people footage. Sample and full scopes use separate binding directories. Every
+render event explicitly declares whether it is targetless; source-bound events
+must reference resolved binding files whose semantic parent, source/output
+windows, active windows, state signatures, visibility/loss observations, and
+evidence hashes validate. Static bindings cannot cross scene, route, modal,
+scroll, zoom, layout, visibility, or rotation changes. Scene-bounded bindings
+exit before the mapped state boundary; keyframed bindings require observations
+on both sides of every state change. Missing detectors or lost targets yield a
+declared fallback or `action_required`, never guessed coordinates. Four-phase
+renderer geometry is recomputed by `target_binding_qa.py` and bound into the
+HyperFrames keyframe gate. Current maturity is `fixture_validated`, not
+real-project validated.
+
+`build_real_project_validation.py` is the sole materializer for a real-canary
+receipt. It probes source/baseline/candidate media, recomputes file and config
+hashes, binds the current Git commit and scripts/tests source tree, then invokes
+`validate_real_project_validation` before writing JSON. Caller-provided hashes
+or dimensions are not trusted. Landscape and portrait receipts remain separate;
+cross-canary maturity is not promoted until both pass under the same
+implementation binding.
+
+When Motion Quality is enabled, the Director compiles a separate sample/full
+`motion-design-contract.json` and `hyperframes-choreography.json` from the
+decision-complete brief, Production Contract, evidence bundle, Brand Motion
+Playbook, adaptive layout, and any already resolved target bindings. The
+versioned `motion-recipes-v1.json` registry contains exactly MQE-01 through
+MQE-16. `motion_contracts.py` validates all seven frozen schemas and the
+motion/recipe cross-contract invariants; `motion_quality_engine.py` selects only
+from structured semantic role/form and follows declared fallback chains. The
+renderer route exposes `typed_choreography_only`: HyperFrames cannot reselect
+meaning, visible copy, recipe, or target geometry. Storyboard validation binds
+the exact contract ID, recipe ID, choreography fingerprint, semantic ordering,
+and target-binding IDs. This compiler is fixture-validated; it does not promote
+visual quality until both current real canaries and user review pass.
+
+The compiler also emits a content-format grammar. Screen/product work prioritizes
+verified UI targets and explanatory relations. Portrait talking-head work uses
+face-safe kinetic type, rhythmic emphasis, side rails, depth/light accents,
+semantic cutaways, and chapter energy changes, and excludes floating dashboard
+cards. Technical canary approval and user publish willingness do not silently
+approve brand taste: the current portrait canary is evidence that the delivery
+chain works, while its product-demo-like visual vocabulary remains an explicit
+rejected taste observation for future creative iteration.
+
+Advanced runtime selection is a separate fail-closed gate. The Director accepts
+only current absolute file/hash records for seek safety, deterministic 2D
+fallback, preview/render parity, device support, licensing, and cost. Without
+all six records, the MQE selects its declared 2D fallback. HyperFrames does not
+self-authorize advanced execution.
+
 Use HyperFrames Core and Creative rules before HTML. Run HyperFrames check and
 multi-phase snapshots. Studio is the editable review surface. An actual
 sample command set remains stored in `hyperframes-commands.json`. After approval,
@@ -225,10 +313,56 @@ create a different full-duration project and store its render authority in
 project as `cwd`; the 60–90 second sample can never become the final render by
 path reuse.
 
-`quiet_source` intervals remain in the Storyboard and visual-dynamics evidence,
-but the motion snapshot planner excludes them from DOM selectors, motion-sidecar
-assertions, and four-phase motion captures because they intentionally have no
-rendered overlay element.
+For a Motion Quality project, the Director writes a hash-bound
+`renderer-evidence-contract.json` after Storyboard validation. Once the actual
+project source is complete, `renderer_project_manifest.py` inventories and
+hashes every project source file while excluding only named runtime evidence
+outputs. The Director request includes the executable
+`capture_hyperframes_runtime_evidence.py` route. It uses Playwright with the
+browser returned by `npx hyperframes browser path`, opens the pinned local
+project through `file://`, verifies exact media seek/current-time state, and
+exports `renderer-export.json` from the painted DOM. Missing Playwright or a
+usable browser is `action_required`; request metadata cannot replace execution.
+The project then produces one `keyframe-receipt` per compiled event. Each receipt has
+exactly four ordered observations: `entrance`, `mid`, `pre_exit`, and
+`post_exit`. The snapshot planner's `midpoint` label maps to receipt phase
+`mid`; it is not an additional fifth phase.
+
+`keyframe_receipt.py` validates the exact manifest, motion contract, recipe,
+source media, target bindings, strict-check and animation-map receipts,
+renderer export, phase images, and parity artifact. It rejects extra or stale
+project sources, unapproved painted text, guessed/missing targets, connector
+drift, clipping, caption overlap, low composite contrast, and any post-exit
+remnant. `preview_render_parity.py` compares Studio and final-render snapshots
+for every compiled event and all four phases in this mode. Request packets and
+authored pass flags cannot satisfy these gates. Missing renderer evidence yields
+`action_required`; no upstream HyperFrames API or CLI is inferred.
+
+`animation_map` is the contract name, not an assumed CLI command. Its evidence
+must come from the installed HyperFrames operation
+`npx hyperframes keyframes <project> --json`, whose diagnostics cover GSAP, CSS,
+Anime.js, and path keyframes. A fabricated `animation-map` command is rejected.
+`build_keyframe_receipts.py` runs both required commands, preserves their raw
+machine output in hash-bound tool artifacts, and verifies both per-event
+time-window coverage and ownership by a selector observed inside that event's
+painted DOM root. A concurrent global or neighboring-event tween cannot satisfy
+the event. The builder then emits the schema-valid receipt set and cannot run
+before the scope's parity artifact exists.
+
+The resulting `review/creative-review.html` embeds the aligned media, event seek
+markers, source sentence, explanatory value, compiler rationale, target IDs,
+four phases, and audio auditions. Its optional interactive mode is default-off,
+loopback-only, Bearer- and CSRF-protected, path-contained, and hash-bound. A
+`file://` dashboard gets only a narrowly enabled `Origin: null` preflight; the
+tokens are entered at submission time and are never persisted in the page. The
+UI can create pending correction proposals only. Approval and correction-ledger
+replay remain separate explicit commands.
+
+Under the decision-complete model, `quiet_source` and every other non-render
+decision remain in the semantic brief and are absent from the Storyboard. Legacy
+briefs may still carry quiet rows for compatibility; the motion snapshot planner
+excludes them from DOM selectors, motion-sidecar assertions, and four-phase
+motion captures.
 
 Every sample and full storyboard must include `visual-vocabulary-audit.json`.
 It must explicitly select or reject, with evidence, keyword typography, UI
@@ -241,9 +375,11 @@ use PIL or FFmpeg translation to impersonate the approved storyboard.
 
 ## Aesthetic gate
 
-`scripts/aesthetic_qa.py` requires every criterion to have `status=pass` and
-evidence. It also requires HyperFrames check, caption sync, overlap, overflow,
-and decode results plus four phase snapshots for every reviewed visual event.
+`scripts/aesthetic_qa.py` requires every applicable criterion to have
+`status=pass` and evidence. It also requires HyperFrames check, caption sync,
+overlap, overflow, and decode results. In Motion Quality mode, aesthetic review
+must cite the exact receipt-bound image for every compiled event and phase;
+legacy projects retain their representative review behavior.
 
 Visual snapshot, connector, and anatomy evidence must decode as an image and be
 large enough for meaningful review. General evidence is at least 320x180 in
@@ -268,10 +404,11 @@ Director version changes, the compose signature changes and the intermediate is
 rebuilt. Two-pass normalization validates target parameters, first-pass data,
 post-normalization loudness/true peak/LRA, and exact source/output hashes. If
 manual finishing is disabled, that master proceeds directly to `delivery_qa`.
-For source-first/preserve projects with no verified existing caption layer, the
+For every project with no independently verified existing caption layer, the
 current video-use `master.srt` is hash-bound into the compose signature and
-burned as the final picture filter. Explicit polish mode or independently
-verified existing captions preserve the established caption layer.
+burned as the final picture filter. A `polish_existing` label alone is not
+caption evidence; only independently verified existing captions preserve the
+established layer.
 If enabled, only the revalidated human return becomes the effective universal
 output. `delivery_qa` then blocks on the final aesthetic review, speech-dominant audio plan with
 provenance, topic/identity/expression-approved cover, and Douyin plus WeChat
@@ -331,7 +468,9 @@ and human-readable design rules without overwriting optical corrections already
 approved in the correction ledger.
 
 Sample and full QA each emit `visual-dynamics-qa.json`. The gate checks semantic
-event evidence, cadence without density gaming, family/structure diversity,
+event evidence and exact render-subset binding. Legacy briefs retain cadence and
+family/structure checks; decision-complete briefs never use fixed gaps, event
+minimums, or family ratios as pass/fail quality proxies. The gate also checks
 quiet intervals, IP/connector correctness, cue decisions, safe zones, captions,
 faces, UI, and canvas bounds. If editorial regression is enabled, sample approval
 creates the Golden baseline; the full stage compares structural event/family/
@@ -342,6 +481,29 @@ implementation, integrity, removed events, full-storyboard corrections, and corr
 before-value/target guards are independently revalidated. Mutable cover evidence is
 snapshotted at approval, while each correction must target and hash the Storyboard,
 semantic brief, audio plan, or cover artifact that actually owns the changed field.
+
+Current Golden schema v2 adds actual renderer evidence: normalized DOM-tree,
+motion-phase, and geometry fingerprints plus perceptual hashes of the overlay
+crop, not the whole source frame. Sample motion-audio contracts may be retained
+in the approved baseline, but they are never reused as proof for a full-timeline
+audio plan; delivery audio has its own full-media gates. Schema v1 remains a
+truthful legacy compatibility format.
+
+The editorial promise closure joins hook, one publishing title and description,
+optional cover, CTA, and proof-event motion copy to the same promise/proof
+ledger. Missing surfaces, prohibited claims, stale proof, or mechanical
+cross-surface repetition blocks the enabled workflow.
+
+Before Motion Quality sample QA, the Director materializes the actual paired
+review media. If the source has no independently verified caption layer and
+caption delivery is not disabled, `sample_caption_delivery.py` burns the same
+video-use `master.srt` into the raw video-use baseline and raw HyperFrames
+candidate. It writes both outputs to `work/director/review-media`, verifies a
+full decode and duration alignment, and records exact inputs, outputs, caption
+hash, and FFmpeg command in `sample-qa/sample-caption-delivery.json`. The raw
+HyperFrames sample remains unchanged; derived MP4 files never enter the
+renderer project manifest. Without a current receipt, `sample_qa` becomes
+`action_required` unless external execution is explicitly enabled.
 
 `derived_content` is default-off. Clip Factory emits candidates with source and
 output times, word IDs, quotes, titles, independence scores, cut reasons, and
@@ -380,12 +542,34 @@ validators freshly repeating probe, decode, and loudness measurement. Existing
 evidence images and current file hashes do not make self-declared measurements
 authoritative.
 
-## Schema-v9 P0/P1/P2 execution plane
+## Schema-v10 execution plane
 
-The v9 additions are optional capabilities inside existing stages and do not
+Schema v10 retains the v9 optional capabilities inside existing stages and does not
 change the nineteen-stage order. `init-project`, `doctor`, and `preflight` are
 front-door commands. Initialization probes display rotation, orientation,
 streams, duration, and existing-edit evidence. Diagnostics are read-only.
+
+Migration adds explicit `identity.mode`, a default-off `motion_quality` block,
+and `delivery.required_assets`. The Production Contract binds the identity mode
+and whether HongRun assets, personal intro/outro, and first-person brand
+expression are allowed. Before `delivery_qa` continues, every required asset
+must be complete at its configured deliverable readiness. A request or contract
+sidecar may resume work but cannot masquerade as a finished required asset.
+An audio plan becomes `asset_ready` only after it validates against the current
+Storyboard and every materialized cue/BGM file is included in Director artifact
+hashing. An enabled BGM route that produces no authorized asset is
+`unavailable`, while an explicit opt-out is `disabled`. Cover validation is
+conditional: a configured/produced cover is checked, an enabled release pack
+requires one, and an otherwise absent optional cover does not block the single
+universal MP4.
+
+P2 remains an adapter plane, not a second automatic editor. OTIO packages bind
+the authoritative EDL and report loss; returned human masters still undergo all
+fresh delivery QA. Remotion is event-scoped and requires maintained component,
+parity, and license files with current hashes. Explicitly enabled optional media
+adapters stop at `action_required` until provider, rights, privacy, provenance,
+budget, and human-review contracts are materialized. No OpenCut, Jianying, or
+other NLE API is inferred.
 
 Semantic confidence sits inside `semantic_brief`; it binds word IDs, times,
 screen evidence, grounding, explanatory value, ASR confidence, duplication,

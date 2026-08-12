@@ -319,6 +319,23 @@ class AdaptiveMotionTests(unittest.TestCase):
         self.assertNotIn("soft_motif", families)
         self.assertGreaterEqual(len(families), 3)
 
+    def test_explicit_semantic_audio_family_controls_the_generated_motif(self):
+        expected = {
+            "soft-focus": "soft_focus",
+            "two-note-contrast": "two_note_contrast",
+            "phrase": "phrase_rise",
+        }
+
+        actual = {
+            family: SFX.event_profile({
+                "audio_decision": {"type": "cue", "family": family},
+                "visual_structure": {"layout_archetype": "upper-safe-band-mark"},
+            }, index)[0]
+            for index, family in enumerate(expected, 1)
+        }
+
+        self.assertEqual(actual, expected)
+
     def test_hyperframes_sfx_markup_uses_planned_landing_duration_and_volume(self):
         event = {
             "start": 10.0,

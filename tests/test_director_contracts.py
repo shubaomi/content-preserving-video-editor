@@ -83,6 +83,8 @@ def valid_storyboard(brief: dict | None = None) -> dict:
         storyboard_event["visible_copy_manifest"] = (
             [approved_copy] if isinstance(approved_copy, str) and approved_copy.strip() else []
         )
+        if isinstance(approved_copy, list):
+            storyboard_event["visible_copy_manifest"] = list(approved_copy)
     return {
         "renderer": "hyperframes",
         "motion_output": "hyperframes_render",
@@ -92,6 +94,51 @@ def valid_storyboard(brief: dict | None = None) -> dict:
         ],
         "events": events,
     }
+
+
+def decision_complete_brief() -> dict:
+    brief = valid_brief()
+    brief.update({
+        "schema_version": 3,
+        "opportunity_model": "decision_complete_v1",
+        "evidence_bundle_sha256": "b" * 64,
+        "opening_hook": {"status": "not_selected", "evidence": ["direct opening"]},
+    })
+    decisions = ("render", "caption_only", "reuse_source", "quiet_source")
+    for index, semantic_event in enumerate(brief["events"]):
+        semantic_event.update({
+            "decision": decisions[index],
+            "decision_rationale": f"editorial decision {index}",
+            "viewer_job": "understand",
+            "visual_mechanism": "source-grounded explanation",
+            "target_frame_evidence": ["frame-001.png"],
+            "protected_zones": {"face": [], "ui": [], "caption": [], "cursor": []},
+            "form": "process",
+            "placement": "left",
+            "size": "medium",
+            "background": "transparent",
+            "read_time": 1.0,
+            "motion": {
+                "entrance": "fade", "reveal": "draw", "hold": "steady", "exit": "fade",
+            },
+            "audio_decision": {"type": "intentionally_silent", "reason": "test fixture"},
+            "deduplication": {"semantic": "unique", "visual": "not rendered"},
+        })
+        semantic_event["approved_visible_copy"] = [semantic_event["approved_visible_copy"]]
+        if semantic_event["decision"] == "quiet_source":
+            semantic_event["treatment"] = "quiet_source"
+            semantic_event["source_activity_evidence"] = ["source remains explanatory"]
+    return brief
+
+
+def selected_storyboard(brief: dict) -> dict:
+    selected = {
+        str(row["id"]): row
+        for row in brief["events"]
+        if row.get("decision") == "render"
+    }
+    storyboard = valid_storyboard({"events": list(selected.values())})
+    return storyboard
 
 
 class DirectorContractTests(unittest.TestCase):
@@ -116,6 +163,80 @@ class DirectorContractTests(unittest.TestCase):
 
     def test_semantic_brief_requires_four_real_structures(self) -> None:
         self.assertEqual(validate_semantic_brief(valid_brief(), require_sample_variety=True), [])
+
+    def test_decision_complete_brief_accepts_one_render_and_evidenced_nonrender_decisions(self) -> None:
+        brief = decision_complete_brief()
+
+        self.assertEqual(validate_semantic_brief(brief, require_sample_variety=True), [])
+        self.assertEqual(validate_storyboard(selected_storyboard(brief), brief), [])
+
+    def test_target_binding_metadata_is_not_misclassified_as_visible_copy(self) -> None:
+        brief = decision_complete_brief()
+        storyboard = selected_storyboard(brief)
+        storyboard["events"][0].update({
+            "target_binding_required": True,
+            "target_binding_ids": ["binding-e1"],
+        })
+
+        self.assertEqual(validate_storyboard(storyboard, brief), [])
+
+    def test_decision_complete_brief_requires_one_decision_and_rationale_per_opportunity(self) -> None:
+        for field in ("decision", "decision_rationale"):
+            with self.subTest(field=field):
+                brief = decision_complete_brief()
+                del brief["events"][1][field]
+                errors = validate_semantic_brief(brief, require_sample_variety=True)
+                self.assertTrue(any(field in error for error in errors), errors)
+
+    def test_every_decision_complete_opportunity_requires_visual_evidence(self) -> None:
+        brief = decision_complete_brief()
+        del brief["events"][1]["target_frame_evidence"]
+
+        errors = validate_semantic_brief(brief, require_sample_variety=True)
+
+        self.assertTrue(any("target_frame_evidence" in error for error in errors), errors)
+
+    def test_render_decision_requires_approved_copy(self) -> None:
+        brief = decision_complete_brief()
+        brief["events"][0]["approved_visible_copy"] = []
+
+        errors = validate_semantic_brief(brief, require_sample_variety=True)
+
+        self.assertTrue(any("approved_visible_copy" in error for error in errors), errors)
+
+    def test_storyboard_is_ordered_render_subset_not_all_opportunities(self) -> None:
+        brief = decision_complete_brief()
+        storyboard = selected_storyboard(brief)
+        storyboard["events"].append(deepcopy(brief["events"][1]))
+        storyboard["events"][-1]["semantic_event_id"] = brief["events"][1]["id"]
+        storyboard["events"][-1]["visible_copy_manifest"] = list(
+            brief["events"][1]["approved_visible_copy"]
+        )
+
+        errors = validate_storyboard(storyboard, brief)
+
+        self.assertTrue(any("render decision" in error for error in errors), errors)
+
+        two_render = decision_complete_brief()
+        two_render["events"][1]["decision"] = "render"
+        reordered = selected_storyboard(two_render)
+        reordered["events"].reverse()
+        errors = validate_storyboard(reordered, two_render)
+        self.assertTrue(any("order" in error for error in errors), errors)
+
+    def test_nonrender_opportunities_do_not_create_visual_family_quotas(self) -> None:
+        brief = decision_complete_brief()
+        brief["events"][1]["visual_structure"] = dict(brief["events"][0]["visual_structure"])
+
+        self.assertEqual(validate_semantic_brief(brief, require_sample_variety=True), [])
+
+    def test_decision_complete_opportunities_preserve_source_and_output_order(self) -> None:
+        brief = decision_complete_brief()
+        brief["events"][0], brief["events"][1] = brief["events"][1], brief["events"][0]
+
+        errors = validate_semantic_brief(brief, require_sample_variety=True)
+
+        self.assertTrue(any("opportunity order" in error for error in errors), errors)
 
     def test_low_information_anchor_is_blocking(self) -> None:
         brief = valid_brief()
@@ -309,6 +430,17 @@ class DirectorContractTests(unittest.TestCase):
                 }],
             },
         }
+
+        self.assertEqual(validate_storyboard(storyboard, brief), [])
+
+    def test_motion_compiler_binding_fields_are_nonvisible_metadata(self) -> None:
+        brief = valid_brief()
+        storyboard = valid_storyboard(brief)
+        storyboard["events"][0].update({
+            "motion_design_contract_id": "motion-contract-1",
+            "recipe_id": "MQE-02",
+            "choreography_fingerprint_sha256": "a" * 64,
+        })
 
         self.assertEqual(validate_storyboard(storyboard, brief), [])
 
@@ -608,6 +740,25 @@ class DirectorContractTests(unittest.TestCase):
         }}
         errors = validate_visual_vocabulary_audit(audit, storyboard)
         self.assertTrue(any("four distinct storyboard events" in error for error in errors))
+
+    def test_decision_complete_visual_vocabulary_does_not_invent_four_events(self) -> None:
+        storyboard = {"events": [{"id": "e1"}]}
+        audit = {"categories": {
+            name: (
+                {"status": "selected", "event_ids": ["e1"], "evidence": ["frame.png"]}
+                if index == 0 else
+                {"status": "not_applicable", "rationale": "not supported by the content",
+                 "evidence": ["words.json"]}
+            )
+            for index, name in enumerate(VISUAL_VOCABULARY)
+        }}
+
+        self.assertEqual(
+            validate_visual_vocabulary_audit(
+                audit, storyboard, decision_complete=True,
+            ),
+            [],
+        )
 
     def test_video_use_edl_owns_cut_policy_and_preserves_existing_timeline(self) -> None:
         edl = {

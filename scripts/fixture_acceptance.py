@@ -51,6 +51,16 @@ IMPLEMENTATION_DEPENDENCIES = (
     Path(__file__).with_name("director_contracts.py").resolve(),
     Path(__file__).with_name("semantic_confidence.py").resolve(),
     Path(__file__).with_name("event_cache.py").resolve(),
+    Path(__file__).with_name("motion_contracts.py").resolve(),
+    Path(__file__).with_name("motion_quality_engine.py").resolve(),
+    Path(__file__).with_name("keyframe_receipt.py").resolve(),
+    Path(__file__).with_name("renderer_project_manifest.py").resolve(),
+    Path(__file__).with_name("preview_render_parity.py").resolve(),
+    Path(__file__).with_name("build_motion_snapshot_plan.py").resolve(),
+    Path(__file__).with_name("creative_review.py").resolve(),
+    Path(__file__).with_name("review_dashboard.py").resolve(),
+    Path(__file__).with_name("review_server.py").resolve(),
+    Path(__file__).parents[1].joinpath("references", "motion-recipes-v1.json").resolve(),
 )
 LOW_INFORMATION = {"打开", "点击", "添加", "然后", "接着", "这里", "下面", "这个", "那个"}
 

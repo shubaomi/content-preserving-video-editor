@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-preserving-video-editor.local/schemas/real-project-validation-1.0.0.json",
+  "title": "Real Project Validation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "validation_id", "created_at", "producer", "media_kind", "canary_role", "project_id", "source", "rights", "identity_mode", "implementation", "configuration_sha256", "baseline", "candidate", "requirement_results", "metrics", "user_decisions", "overall_status", "maturity_recommendation"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "validation_id": { "$ref": "#/$defs/id" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "producer": { "type": "string", "minLength": 1 },
+    "media_kind": { "const": "real" },
+    "canary_role": { "enum": ["landscape_screen", "portrait_talking_head"] },
+    "project_id": { "$ref": "#/$defs/id" },
+    "source": { "$ref": "#/$defs/media" },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "basis", "evidence"],
+      "properties": {
+        "status": { "enum": ["authorized", "self_owned"] },
+        "basis": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/artifact" }
+      }
+    },
+    "identity_mode": { "enum": ["self", "third_party", "generic"] },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["git_commit", "source_tree_sha256", "schema_version"],
+      "properties": {
+        "git_commit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "source_tree_sha256": { "$ref": "#/$defs/sha256" },
+        "schema_version": { "type": "integer", "minimum": 10 }
+      }
+    },
+    "configuration_sha256": { "$ref": "#/$defs/sha256" },
+    "baseline": { "$ref": "#/$defs/media" },
+    "candidate": { "$ref": "#/$defs/media" },
+    "requirement_results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requirement_id", "gate_owner", "status", "evidence"],
+        "properties": {
+          "requirement_id": { "type": "string", "pattern": "^RQ-[0-9]{3}$" },
+          "gate_owner": { "enum": ["automated", "multimodal", "user"] },
+          "status": { "enum": ["pass", "fail", "pending", "not_applicable"] },
+          "reason": { "type": "string", "minLength": 1 },
+          "evidence": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/artifact" } }
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantic_correct_rate", "geometry_correct_rate", "caption_sync_pass", "audio_audibility_pass", "correction_minutes", "baseline_candidate_preference", "publish_willingness", "render_wall_seconds", "estimated_cost"],
+      "properties": {
+        "semantic_correct_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "geometry_correct_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "caption_sync_pass": { "type": "boolean" },
+        "audio_audibility_pass": { "type": "boolean" },
+        "correction_minutes": { "type": "number", "minimum": 0 },
+        "baseline_candidate_preference": { "enum": ["baseline", "candidate", "tie"] },
+        "publish_willingness": { "enum": ["yes", "no", "unsure"] },
+        "render_wall_seconds": { "type": "number", "minimum": 0 },
+        "estimated_cost": { "type": "number", "minimum": 0 },
+        "cost_currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+      }
+    },
+    "user_decisions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterion", "decision", "reviewer", "reviewed_at", "reason"],
+        "properties": {
+          "criterion": { "enum": ["sample_quality", "publishability", "brand_taste", "likeness", "cover_click_appeal"] },
+          "decision": { "enum": ["approved", "rejected", "not_applicable"] },
+          "reviewer": { "type": "string", "minLength": 1 },
+          "reviewed_at": { "type": "string", "format": "date-time" },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "overall_status": { "enum": ["pass", "fail", "pending_user_review", "action_required", "stale"] },
+    "maturity_recommendation": { "enum": ["documented", "director_integrated", "fixture_validated", "real_project_validated"] }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_type", "path", "sha256", "purpose"],
+      "properties": {
+        "artifact_type": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "pattern": "^(?:[A-Za-z]:\\\\|\\\\\\\\)" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "purpose": { "type": "string", "minLength": 1 }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_type", "path", "sha256", "purpose", "duration_seconds", "width", "height"],
+      "properties": {
+        "artifact_type": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "pattern": "^(?:[A-Za-z]:\\\\|\\\\\\\\)" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "purpose": { "type": "string", "minLength": 1 },
+        "duration_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

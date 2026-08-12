@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-preserving-video-editor.local/schemas/keyframe-receipt-1.0.0.json",
+  "title": "Keyframe Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipt_id", "event_id", "recipe_id", "created_at", "producer", "renderer", "project_artifact", "input_hashes", "phase_observations", "strict_check", "animation_map", "status"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "receipt_id": { "$ref": "#/$defs/id" },
+    "event_id": { "$ref": "#/$defs/id" },
+    "recipe_id": { "$ref": "#/$defs/id" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "producer": { "type": "string", "minLength": 1 },
+    "renderer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "fps", "width", "height"],
+      "properties": {
+        "name": { "const": "hyperframes" },
+        "version": { "type": "string", "minLength": 1 },
+        "fps": { "type": "number", "exclusiveMinimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "project_artifact": { "$ref": "#/$defs/artifact" },
+    "input_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["motion_design_contract_sha256", "motion_recipe_sha256", "target_binding_sha256s"],
+      "properties": {
+        "motion_design_contract_sha256": { "$ref": "#/$defs/sha256" },
+        "motion_recipe_sha256": { "$ref": "#/$defs/sha256" },
+        "target_binding_sha256s": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "phase_observations": {
+      "type": "array",
+      "prefixItems": [
+        { "$ref": "#/$defs/entrance" },
+        { "$ref": "#/$defs/mid" },
+        { "$ref": "#/$defs/preExit" },
+        { "$ref": "#/$defs/postExit" }
+      ],
+      "items": false,
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "strict_check": { "$ref": "#/$defs/toolReceipt" },
+    "animation_map": { "$ref": "#/$defs/toolReceipt" },
+    "preview_render_parity_receipt": { "$ref": "#/$defs/artifact" },
+    "status": { "enum": ["pass", "fail", "action_required"] },
+    "errors": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "bbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 1 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1 },
+        "width": { "type": "number", "minimum": 0, "maximum": 1 },
+        "height": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^(?:[A-Za-z]:\\\\|\\\\\\\\)" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "phaseBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "timestamp_seconds", "snapshot", "visible", "overlay_bbox", "animation_phase", "source_state_sha256", "target_observations", "crop_status", "caption_overlap_ratio"],
+      "properties": {
+        "phase": { "type": "string" },
+        "timestamp_seconds": { "type": "number", "minimum": 0 },
+        "snapshot": { "$ref": "#/$defs/artifact" },
+        "visible": { "type": "boolean" },
+        "overlay_bbox": { "$ref": "#/$defs/bbox" },
+        "animation_phase": { "type": "string", "minLength": 1 },
+        "source_state_sha256": { "$ref": "#/$defs/sha256" },
+        "target_observations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["target_id", "target_bbox", "overlay_distance_pixels"],
+            "properties": {
+              "target_id": { "$ref": "#/$defs/id" },
+              "target_bbox": { "$ref": "#/$defs/bbox" },
+              "overlay_distance_pixels": { "type": "number", "minimum": 0 },
+              "connector_attachment_error_pixels": { "type": "number", "minimum": 0 }
+            }
+          }
+        },
+        "crop_status": { "enum": ["inside", "clipped", "not_applicable"] },
+        "caption_overlap_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "composite_contrast_ratio": { "type": "number", "minimum": 0 }
+      }
+    },
+    "entrance": { "allOf": [{ "$ref": "#/$defs/phaseBase" }, { "properties": { "phase": { "const": "entrance" } } }] },
+    "mid": { "allOf": [{ "$ref": "#/$defs/phaseBase" }, { "properties": { "phase": { "const": "mid" } } }] },
+    "preExit": { "allOf": [{ "$ref": "#/$defs/phaseBase" }, { "properties": { "phase": { "const": "pre_exit" } } }] },
+    "postExit": { "allOf": [{ "$ref": "#/$defs/phaseBase" }, { "properties": { "phase": { "const": "post_exit" } } }] },
+    "toolReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "exit_code", "artifact"],
+      "properties": {
+        "command": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "exit_code": { "type": "integer" },
+        "artifact": { "$ref": "#/$defs/artifact" }
+      }
+    }
+  }
+}

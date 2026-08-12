@@ -77,6 +77,90 @@ class VideoUseBridgeTests(unittest.TestCase):
         self.assertEqual("".join(word["text"] for word in corrected), "HongRun")
         self.assertEqual(applied[0]["evidence"], "confirmed profile name")
 
+    def test_sync_sampling_accepts_sub_millisecond_caption_rounding(self) -> None:
+        words = [
+            {"text": "上", "start": 19.5056, "end": 19.73},
+            {"text": "半", "start": 19.73, "end": 19.95},
+        ]
+        captions = [{
+            "start": 19.506,
+            "end": 19.95,
+            "text": "上半",
+        }]
+
+        report = bridge.synchronization_report(words, captions, sample_count=1)
+
+        self.assertTrue(report["passed"], report)
+        self.assertLessEqual(report["samples"][0]["lead_error_s"], 0.001)
+
+    def test_sync_sampling_always_covers_first_middle_last_and_cut_boundaries(self) -> None:
+        words = [
+            {"text": f"词{index}。", "start": index * 2.0, "end": index * 2.0 + 0.8}
+            for index in range(9)
+        ]
+        captions = bridge.build_captions(words)
+
+        report = bridge.synchronization_report(
+            words, captions, sample_count=3, cut_boundaries=[5.9, 12.1],
+        )
+
+        self.assertTrue(report["passed"], report)
+        self.assertEqual(report["coverage"]["first_caption_index"], 0)
+        self.assertEqual(report["coverage"]["middle_caption_index"], len(captions) // 2)
+        self.assertEqual(report["coverage"]["last_caption_index"], len(captions) - 1)
+        self.assertEqual(len(report["coverage"]["cut_boundaries"]), 2)
+        sampled = {sample["caption_index"] for sample in report["samples"]}
+        self.assertTrue(set(report["coverage"]["required_caption_indices"]).issubset(sampled))
+
+    def test_sync_sampling_covers_configured_terminology(self) -> None:
+        words = [
+            {"text": "普通句。", "start": 0.0, "end": 0.8},
+            {"text": "HyperFrames。", "start": 2.0, "end": 3.0},
+            {"text": "结束句。", "start": 4.0, "end": 4.8},
+        ]
+        captions = bridge.build_captions(words)
+
+        report = bridge.synchronization_report(
+            words, captions, sample_count=1, terminology=["HyperFrames"],
+        )
+
+        self.assertEqual(report["coverage"]["terminology"]["HyperFrames"]["status"], "sampled")
+        self.assertTrue(any("HyperFrames" in sample.get("text", "") for sample in report["samples"]))
+
+    def test_final_composite_proof_is_fail_closed_when_requested(self) -> None:
+        words = [{"text": "完整字幕。", "start": 0.0, "end": 0.8}]
+        captions = bridge.build_captions(words)
+
+        report = bridge.synchronization_report(
+            words, captions, final_composite={
+                "required": True, "full_av_decode": True,
+                "subtitle_filter_verified": False,
+            },
+        )
+
+        self.assertFalse(report["passed"])
+        self.assertFalse(report["final_composite"]["passed"])
+
+    def test_final_composite_proof_requires_media_and_caption_hashes(self) -> None:
+        words = [{"text": "完整字幕。", "start": 0.0, "end": 0.8}]
+        captions = bridge.build_captions(words)
+        valid = bridge.synchronization_report(
+            words, captions, final_composite={
+                "required": True, "full_av_decode": True,
+                "subtitle_filter_verified": True,
+                "media_sha256": "a" * 64, "caption_sha256": "b" * 64,
+            },
+        )
+        missing_hashes = bridge.synchronization_report(
+            words, captions, final_composite={
+                "required": True, "full_av_decode": True,
+                "subtitle_filter_verified": True,
+            },
+        )
+
+        self.assertTrue(valid["passed"], valid)
+        self.assertFalse(missing_hashes["passed"], missing_hashes)
+
     def test_semantic_phrase_is_not_split_only_to_hit_soft_duration(self) -> None:
         text = "你想了解的概念词语，"
         words = [{"text": char, "start": index * 0.55, "end": index * 0.55 + 0.5,

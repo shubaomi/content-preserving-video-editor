@@ -69,20 +69,23 @@ def bind_cover(report: dict, cover: Path) -> dict:
     return {**report, "cover": str(cover.resolve()), "cover_sha256": digest.hexdigest()}
 
 
-def validate_bound_report(report: dict, media: Path, cover: Path) -> list[str]:
+def validate_bound_report(report: dict, media: Path, cover: Path | None) -> list[str]:
     errors = []
     required_checks = ("container_mp4", "video_codec", "pixel_format", "minimum_short_edge",
                        "ratio", "audio_present", "full_decode", "true_peak_recommendation")
     media_hash = hashlib.sha256(media.read_bytes()).hexdigest() if media.is_file() else None
-    cover_hash = hashlib.sha256(cover.read_bytes()).hexdigest() if cover.is_file() else None
+    cover_present = bool(cover and cover.is_file())
+    cover_hash = hashlib.sha256(cover.read_bytes()).hexdigest() if cover_present else None
     if (report.get("schema_version") != 1 or report.get("status") != "pass"
             or report.get("passed") is not True or report.get("universal_output") is not True
             or report.get("file_sha256") != media_hash or report.get("cover_sha256") != cover_hash
             or not report.get("preset_version") or not report.get("preset_verified_on")
             or any((report.get("checks") or {}).get(name) is not True for name in required_checks)):
         errors.append("platform report structure, checks, or byte bindings did not pass")
-    for path_field, hash_field in (("safe_zone_snapshot", "safe_zone_snapshot_sha256"),
-                                   ("cover_crop_preview", "cover_crop_preview_sha256")):
+    evidence_fields = [("safe_zone_snapshot", "safe_zone_snapshot_sha256")]
+    if cover_present:
+        evidence_fields.append(("cover_crop_preview", "cover_crop_preview_sha256"))
+    for path_field, hash_field in evidence_fields:
         path = Path(str(report.get(path_field, "")))
         actual = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
         if not path.is_file() or report.get(hash_field) != actual:
