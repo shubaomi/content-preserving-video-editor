@@ -88,13 +88,10 @@ def validate_maturity_transition(
         ):
             errors.append("real-project canaries must bind the same implementation hash")
     elif requested == "production_default":
-        promotion = evidence.get("production_promotion") or {}
-        if (
-            promotion.get("approved") is not True
-            or not str(promotion.get("approved_by") or "").strip()
-            or not str(promotion.get("approved_at") or "").strip()
-        ):
-            errors.append("production default requires a separate explicit promotion approval")
+        errors.append(
+            "production default promotion is not implemented; a separately trusted "
+            "HongRun approval authority must be designed and validated first"
+        )
     return errors
 
 
@@ -224,6 +221,14 @@ _REGISTRY = (
                 inputs=["content_type", "semantic_role", "protected_regions"],
                 outputs=["motion-design-contract.json", "hyperframes-choreography.json"],
                 maturity="fixture_validated", failure_fallback="caption_only_or_action_required"),
+    _capability("portrait_brand_motion_v2", "director",
+                dependencies=["content_format_motion_grammar", "HyperFrames", "ffmpeg"],
+                inputs=["hongrun_profile", "portrait_energy_map", "portrait_motion_contracts",
+                        "portrait_sonic_plan", "named_user_approval"],
+                outputs=["portrait_hyperframes_project", "portrait_audio_plan",
+                         "portrait_style_reel", "portrait_real_project_validation"],
+                maturity="real_project_validated",
+                failure_fallback="existing_portrait_typography_or_action_required"),
     _capability("perceptual_motion_audio", "director",
                 dependencies=["motion_quality_engine", "ffmpeg", "ffprobe"],
                 inputs=["motion_design_contract", "authorized_sfx", "delivered_sample_mix"],
@@ -415,6 +420,7 @@ _CANONICAL_CONFIG_PATHS = {
     "hyperframes_keyframe_evidence": ("motion_quality",),
     "paired_creative_review": ("motion_quality",),
     "content_format_motion_grammar": ("motion_quality",),
+    "portrait_brand_motion_v2": ("motion_quality", "portrait_brand"),
     "perceptual_motion_audio": ("audio", "sfx", "perceptual"),
     "caption_sync_closure": ("editing", "caption_sync_closure"),
     "editorial_promise_closure": ("editorial_intent",),
@@ -466,7 +472,8 @@ def capability_config(project: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def build_capability_inventory(project: dict[str, Any]) -> dict[str, Any]:
-    fixture_receipt = Path(__file__).parents[1] / "references" / "validation" / "test-suite-report.json"
+    repository_root = Path(__file__).parents[1]
+    fixture_receipt = repository_root / "references" / "validation" / "test-suite-report.json"
     fixture_evidence: dict[str, Any] | None = None
     if fixture_receipt.is_file():
         try:
@@ -476,11 +483,48 @@ def build_capability_inventory(project: dict[str, Any]) -> dict[str, Any]:
                 fixture_evidence = candidate
         except (OSError, ValueError, json.JSONDecodeError):
             fixture_evidence = None
+    portrait_receipt = (
+        repository_root / "references" / "validation"
+        / "portrait-brand-motion-v2-real-project-validation.json"
+    )
+    portrait_evidence: dict[str, Any] | None = None
+    if portrait_receipt.is_file():
+        try:
+            candidate = json.loads(portrait_receipt.read_text(encoding="utf-8"))
+            if (
+                isinstance(candidate, dict)
+                and candidate.get("schema_version") == 1
+                and candidate.get("kind")
+                == "hongrun_portrait_brand_retained_real_project_validation"
+                and candidate.get("status") == "pass"
+                and candidate.get("maturity") == "real_project_validated"
+            ):
+                from portrait_golden import validate_retained_real_project_portrait_validation
+                if not validate_retained_real_project_portrait_validation(
+                    candidate, repository_root=repository_root,
+                ):
+                    portrait_evidence = candidate
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            portrait_evidence = None
     capabilities: list[dict[str, Any]] = []
     for declared in _REGISTRY:
         row = deepcopy(declared)
         row["declared_maturity"] = row["maturity"]
-        if row["maturity"] == "fixture_validated" and fixture_evidence is None:
+        if row["name"] == "portrait_brand_motion_v2":
+            if portrait_evidence is not None and fixture_evidence is not None:
+                row["maturity_evidence"] = {
+                    "path": str(portrait_receipt.resolve()),
+                    "sha256": hashlib.sha256(portrait_receipt.read_bytes()).hexdigest(),
+                    "validation_id": portrait_evidence.get("validation_id"),
+                    "production_default": False,
+                }
+            elif fixture_evidence is not None:
+                row["maturity"] = "fixture_validated"
+                row["maturity_reason"] = "current two-topic named-user receipt is missing or stale"
+            else:
+                row["maturity"] = "director_integrated"
+                row["maturity_reason"] = "current fixture and two-topic receipts are missing or stale"
+        elif row["maturity"] == "fixture_validated" and fixture_evidence is None:
             row["maturity"] = "director_integrated"
             row["maturity_reason"] = "current zero-skip fixture receipt is missing or stale"
         elif row["maturity"] == "fixture_validated":

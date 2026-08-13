@@ -301,6 +301,22 @@ Complete a video only when applicable gates pass.
 - When at least two cues are selected, enforce `maximum_family_ratio` (default
   0.5) so unique filenames and simple pitch changes cannot make one repeated
   sonic motif look diverse.
+- For portrait-brand v2, require the exact PBM-S01 through PBM-S05 registry,
+  current local rights evidence, two non-pitch-only variants for any family
+  claiming technical readiness, and exact semantic-event coverage. Recompute
+  PCM identity and the actual short-media mix. Word cues must land within 80 ms,
+  EDL-mapped gesture peaks within 120 ms, and chapter leads within 180 ms.
+  Revalidate the sonic plan against the current library, frozen registry,
+  selected variant, rights record, PCM, phase, and duration. Reused audition
+  evidence must be decoded and remeasured; a self-signed metric is not evidence.
+  Allow speech-protection attenuation only when its starting gain, adjusted gain,
+  post-gain relation, and current off/on measurement all agree. Cue-bearing
+  portrait samples require the current complete sample mix and receipt on both
+  execution and resume paths, and nested evidence files participate in stage
+  invalidation.
+  Missing authorization and explicit SFX disablement must produce reasoned
+  silence rather than alternate motion or fabricated assets. Technical passage
+  does not approve the sonic taste.
 - Do not infer embedded BGM from the presence of an audio stream or a project
   declaration. Require measured presence evidence; otherwise use an authorized
   asset when enabled by default, with speech-driven sidechain ducking.
@@ -447,6 +463,78 @@ Complete a video only when applicable gates pass.
   format grammars. For portrait, reject product-dashboard cards and require
   face-safe expressive treatments; technical pass and publish willingness do
   not substitute for the user's separate brand-taste decision.
+- For schema-v11 portrait-brand projects, require all six portrait contract
+  schemas plus cross-file validation. Recompute every referenced file hash,
+  require absolute paths, exact semantic/render event order and approved copy,
+  complete sonic decisions, distinct aligned A/B/C Style Reel fingerprints,
+  and HongRun-only approval. Reject fixed cadence, minimum quotas, random
+  rotation, product-card fallback, changed comparison inputs, and stale review
+  bytes. Contract success is not rendered-style or brand-taste approval.
+- For a Style Reel fixture gate, revalidate the transitive authority manifest,
+  require a 30–45 second isolated plan and the frozen A/B/C order, and derive
+  each structural fingerprint from hierarchy, layout, camera, choreography and
+  sonic pattern rather than a label or color token. Require the selected window
+  to be covered by the current video-use EDL and any macro event to bind an
+  independent typed in-window chapter boundary. Fully decode all three
+  direction reels; require equal durations, exactly one video and one audio
+  stream, and matching complete stream signatures,
+  distinct media hashes, exact event order, current direction contracts, and
+  one 320x180-or-larger decodable image for every event at entrance, mid,
+  pre-exit and post-exit. Require a separate current baseline with the same
+  signature and duration before synchronized review.
+- Recompute palette-normalized phase geometry at review creation and replay:
+  for a synthetic fixture require the frozen deterministic geometry for the
+  named direction, and reject rotated direction sets, solid images, palette-only
+  changes, tiny-marker-only differences, static event phases, and phases without
+  a clean post-exit. This proves
+  observable fixture structure only; HyperFrames runtime/parity and user taste
+  remain separate WP6 gates.
+- A real WP6 selection must bind the immutable pending review and the current
+  `awaiting_user` package in one explicit SHA-256-bound decision receipt. Revalidate the
+  package's window confirmation, technical evidence, review/context/dashboard,
+  selected media, and all three contracts before accepting the decision.
+- The first selected direction may create only a provisional portrait Golden.
+  Require current refs for the profile snapshot, selected contract/media/phases,
+  HyperFrames check/render, audio/sonic plans, SFX auditions, project config,
+  decision receipt, Git base, and scripts/tests tree. Require exactly one of two
+  real validations and `production_default=false`. Preference capture must have
+  `auto_apply=false` and an empty inferred-preference list.
+- The second-topic gate requires a materially different current HongRun portrait
+  candidate, the same profile version/direction, current candidate and QA bytes,
+  passing decode/HyperFrames/phase/caption/audio/occlusion gates, and an exact
+  HongRun `repeat_use_willingness=yes` plus `preference=candidate` decision. Its
+  retained receipt may promote only to `real_project_validated`; it must keep
+  `production_default=false`, `auto_apply=false`, and inferred preferences empty.
+- `production_default` is a separate maturity transition. Two-topic repeat-use
+  evidence is necessary but not sufficient. This release intentionally rejects
+  the transition because it has no independently trusted HongRun approval
+  authority. A later design must bind that authority to the current profile,
+  implementation, retained real-project validation, and explicit default-use
+  intent; never interpret a favorable reason as default-use authorization.
+- Every displayed Style Reel SFX audition must bind the current audio and
+  portrait-sonic plans, exact semantic event, voice-stem window, audio policy,
+  and authorized cue asset. Freshly decode PCM and reject silence, arbitrary
+  tones, stale display refs, project SFX roots redirected through links, an on
+  track that does not preserve the voice window plus the authorized cue, or
+  any unplanned residual energy before or after the cue window.
+- A synthetic fixture review must remain `pending`, even with a current passing
+  automated report; it cannot authorize a render or user taste decision. The
+  page must escape authored text, keep desktop as the
+  primary taste surface, provide usable mobile stacking, synchronize all four
+  players and markers, bind semantic rationale exactly to the current brief,
+  expose voice/SFX-off and SFX-on auditions, and use
+  the existing loopback Bearer/CSRF/path/hash protections for pending proposals.
+  It may not approve taste. Real-project render requests need an explicit
+  HongRun exact-window receipt; `awaiting_user` additionally requires the WP6
+  runtime, caption-last, voice/mix and parity gate. Any bound hash drift rejects
+  a prior decision; only an explicit HongRun receipt answering all six
+  applicable questions can later authorize a selected direction.
+- PBM-01 through PBM-08 fixture promotion requires a registered GSAP timeline,
+  strict HyperFrames runtime/layout/motion/contrast checks, actual discovered
+  per-event keyframes, all five component phases, clean post-exit state, a
+  decodable short render, and same-time preview/render comparison. Synthetic
+  silhouettes and placeholder phrases may prove mechanics only; they cannot
+  pass HongRun's brand-taste gate.
 - Advanced runtime recipes require current seek-safety, deterministic fallback,
   parity, device, license, and cost evidence. Otherwise require deterministic
   2D fallback.

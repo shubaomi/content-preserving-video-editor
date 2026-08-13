@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -101,15 +102,41 @@ class CapabilityRegistryTests(unittest.TestCase):
         self.assertTrue(validate_maturity_transition(
             "real_project_validated", "production_default", evidence={}
         ))
-        self.assertEqual(validate_maturity_transition(
+        receipt = {
+            "kind": "hongrun_portrait_production_default_approval",
+            "actor": "HongRun",
+            "decision": "approve_production_default",
+            "authentication_method": "codex_authenticated_thread_explicit_statement",
+            "thread_id": "thread-1",
+            "decision_text": "明确批准作为生产默认",
+        }
+        receipt["integrity_sha256"] = hashlib.sha256(json.dumps(
+            receipt, ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        self.assertTrue(validate_maturity_transition(
             "real_project_validated",
             "production_default",
             evidence={"production_promotion": {
                 "approved": True,
                 "approved_by": "HongRun",
                 "approved_at": "2026-08-11T03:00:12-07:00",
+                "receipt": receipt,
             }},
-        ), [])
+        ))
+        forged = dict(receipt)
+        forged["actor"] = "agent"
+        forged["integrity_sha256"] = hashlib.sha256(json.dumps(
+            {key: value for key, value in forged.items() if key != "integrity_sha256"},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+        ).encode("utf-8")).hexdigest()
+        self.assertTrue(validate_maturity_transition(
+            "real_project_validated", "production_default",
+            evidence={"production_promotion": {
+                "approved": True, "approved_by": "agent", "approved_at": "now",
+                "receipt": forged,
+            }},
+        ))
 
     def test_inventory_declares_complete_adapter_contract_and_truthful_levels(self) -> None:
         project = {
@@ -130,6 +157,7 @@ class CapabilityRegistryTests(unittest.TestCase):
             "hyperframes_keyframe_evidence",
             "paired_creative_review",
             "content_format_motion_grammar",
+            "portrait_brand_motion_v2",
             "perceptual_motion_audio",
             "caption_sync_closure",
             "editorial_promise_closure",
@@ -144,6 +172,14 @@ class CapabilityRegistryTests(unittest.TestCase):
         self.assertEqual(by_name["motion_quality_engine"]["declared_maturity"], "fixture_validated")
         self.assertEqual(by_name["hyperframes_keyframe_evidence"]["declared_maturity"], "fixture_validated")
         self.assertEqual(by_name["paired_creative_review"]["declared_maturity"], "fixture_validated")
+        self.assertEqual(
+            by_name["portrait_brand_motion_v2"]["declared_maturity"],
+            "real_project_validated",
+        )
+        self.assertIn(
+            by_name["portrait_brand_motion_v2"]["maturity"],
+            {"director_integrated", "fixture_validated", "real_project_validated"},
+        )
         for name in (
             "content_format_motion_grammar", "perceptual_motion_audio",
             "caption_sync_closure", "editorial_promise_closure",
@@ -166,6 +202,20 @@ class CapabilityRegistryTests(unittest.TestCase):
         minimum = CAPABILITY_LEVELS.index("director_integrated")
         self.assertTrue(all(CAPABILITY_LEVELS.index(row["maturity"]) >= minimum
                             for row in by_name.values()))
+
+    @patch("portrait_golden.validate_retained_real_project_portrait_validation")
+    @patch("test_acceptance_report.validate_report", return_value=[])
+    def test_action_required_portrait_receipt_skips_expensive_live_validation(
+        self, _fixture_validator, retained_validator,
+    ) -> None:
+        inventory = build_capability_inventory({})
+        retained_validator.assert_not_called()
+        portrait = next(
+            row for row in inventory["capabilities"]
+            if row["name"] == "portrait_brand_motion_v2"
+        )
+        self.assertEqual("fixture_validated", portrait["maturity"])
+        self.assertIn("missing or stale", portrait["maturity_reason"])
 
     def test_toolchain_report_records_versions_without_installing_or_updating(self) -> None:
         with patch("capability_registry.shutil.which", side_effect=lambda name: f"C:/tools/{name}.exe"):

@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "checkpoint_id": "portrait-brand-motion-v2-wp9-release-closure-2026-08-12",
+  "created_at": "2026-08-12T21:07:54-07:00",
+  "repository": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor",
+    "branch": "main",
+    "base_head": "1b74d8370d1fb985f21c7e8b6e5dfbb3aa5a42b4",
+    "commit_created": false,
+    "push_performed": false
+  },
+  "authorities": {
+    "design_objective_sha256": "593da5b11bc07c5188b24fd9e0a2e010472ec60c21677efb94c60a14674407d6",
+    "design_candidate_sha256": "6ec215c87ae9b9b049f901429b09e92e774ab7ba692558eac7d79d85d91e657e",
+    "approval_sha256": "b4c0a1ad915b98228c3835389e07dea5b93f62ababba2cbc015f6fce58f5c029",
+    "implementation_goal_sha256": "f733fdaffc3ac344e7ba05994226faab325c0c1e32ff5bf20a8419da2d19838d"
+  },
+  "work_packages": {
+    "WP0": {
+      "status": "complete",
+      "evidence": [
+        "schema v11 and in-memory v1-v10 migration",
+        "six Draft 2020-12 contracts plus fail-closed cross-contract validation",
+        "default-off isolation for migrated, non-HongRun, third-party, generic, and nonportrait projects"
+      ]
+    },
+    "WP1": {
+      "status": "complete",
+      "evidence": [
+        "versioned proposed HongRun profile v2.0.0",
+        "deterministic energy compilation without cadence, quotas, keywords, randomness, or SFX selection",
+        "gesture, subject, word, and frame authorities are typed and source-hash-bound",
+        "profile drift reopens dependent Director stages"
+      ]
+    },
+    "WP2": {
+      "status": "complete",
+      "maturity": "compiler_driven_synthetic_browser_fixture",
+      "evidence": [
+        "PBM-01 through PBM-08 registry, compiler authority revalidation, and exact Storyboard projection",
+        "synthetic component fixture exercises subject depth, gesture geometry, source-camera transform, semantic asset, chapter bridge, relation, phrase, and resolution behavior",
+        "missing required runtime bindings are rejected for PBM-02, PBM-03, PBM-05, PBM-06, and PBM-07",
+        "one registered paused GSAP timeline passed real non-monotonic seek-repeat checks",
+        "strict HyperFrames check passed the full 18-second transition sweep with zero lint, runtime, layout, motion, or contrast findings",
+        "18-second 540x960 30fps HyperFrames MP4 rendered and fully decoded",
+        "eight same-time preview/render comparisons passed at RGB MAE 2.85-3.46 with threshold 8"
+      ],
+      "synthetic_fixture": {
+        "root": "C:\\Users\\hongr\\AppData\\Local\\Temp\\cpve-pbm-v2-wp2-runtime-final-current-q3g4w03p",
+        "component_js_sha256": "974a7e5533bb64a4d70ceb189611484cf7c0415a3cc04d68b0d147c9eaa19ff4",
+        "component_css_sha256": "9d020cfd1b15e81c3ed9b015e3d5b42b33bc520ca0901ec6c549d0204259f60c",
+        "index_sha256": "c7f90802fcad07bdcd1379fbf26e19c1fe51311f823b15e588092edf8ab2aa34",
+        "renderer_payload_sha256": "0654fc3653d579bc2c0306356443e45bb2a059e79ff5c9174d1c343cad399e2e",
+        "runtime_evidence_sha256": "49bd6719abc875aa1e77c37b907f4d0b76ba9db787f12a4ec903867e48185e32",
+        "capture_tool_sha256": "d7366768409d91f19ac8b68bf040e97a7fddebe3384a6e12789a70553a0fb93a",
+        "hyperframes_check_sha256": "6be93f335b9f4bbb148beb76c2e8a1809586694611e3a697980aab0ec5f36fb3",
+        "recipe_count": 8,
+        "phase_count": 40,
+        "typed_negative_count": 18,
+        "fresh_browser_replay": "pass",
+        "pbm06_http_asset": "loaded_twice_with_http_200"
+      }
+    },
+    "WP3": {
+      "status": "complete",
+      "maturity": "real_source_audio_technical_audition_only",
+      "evidence": [
+        "PBM-S01 through PBM-S05 proposed motif registry with two deterministic, project-owned, perceptually distinct local PCM variants per family",
+        "100 percent cue-or-reasoned-silence decision coverage without forcing 100 percent audible cue coverage",
+        "word, gesture, and chapter landings use 80, 120, and 180 millisecond event-specific tolerances",
+        "portrait sonic decisions project into the existing FFmpeg audio production and QA path; no second mixer was introduced",
+        "current registry, generator, library, asset, rights, PCM, semantic, motion-contract, Storyboard, audition, and full-sample mix bytes are transitively hash-bound",
+        "Junction escapes, non-atomic replacement, malformed nested contracts, non-finite values, stale or aliased cues, masked cues, and stale resume evidence fail closed"
+      ],
+      "real_source_technical_audition": {
+        "root": "C:\\Users\\hongr\\AppData\\Local\\Temp\\cpve-pbm-v2-wp3-real-audition-current-q3bpigun",
+        "report": "C:\\Users\\hongr\\AppData\\Local\\Temp\\cpve-pbm-v2-wp3-real-audition-current-q3bpigun\\wp3-real-audition-report.json",
+        "report_sha256": "81872b1ab58b106371b08026072f3f43bc1ab4823cb1e2a96f6f6eeb6d2d72bd",
+        "duration_seconds": 12.016,
+        "event_count": 2,
+        "motif_families": ["PBM-S01", "PBM-S05"],
+        "onset_error_ms": [4.979, 4.979],
+        "audibility_status": ["audible_without_masking", "audible_without_masking"],
+        "full_decode": "pass",
+        "projection_errors": [],
+        "evidence_errors": [],
+        "mix_receipt_errors": []
+      }
+    },
+    "WP4": {
+      "status": "complete",
+      "maturity": "deterministic_synthetic_review_fixture_only",
+      "evidence": [
+        "isolated A/B/C Style Reel plan binds one source, EDL, transcript, semantic event inventory, captions, voice stem, audio policy, subject evidence, profile, WP3 audio/sonic authorities, motion contracts, and Storyboard",
+        "deterministic direction-specific fixture identity rejects phase-set rotation, palette-only, common geometry, tiny markers, and decorative checker differences without claiming real HyperFrames aesthetics",
+        "event auditions consume current WP3 motion_sfx decisions and revalidate the sonic plan, library, default registry, rights, PCM, event mapping, gain, onset, duration, and full residual window",
+        "Style Reel review and dashboard remain pending-only; synthetic evidence cannot authorize render or brand taste, while real-project review is blocked until the WP6 transitive HyperFrames gate",
+        "all public writers are authorized-root constrained, Junction-safe, and package-atomic where multiple artifacts are emitted"
+      ]
+    },
+    "WP5": {
+      "status": "complete",
+      "maturity": "fixture_validated",
+      "evidence": [
+        "source-bound full-suite receipt passes 893 tests with zero failures and zero skips",
+        "six structured video-type fixtures and six retained short-media technical fixtures remain current and passing",
+        "Current Golden deterministically revalidates against the current source, fixtures, and six-media manifest",
+        "portrait v2 remains default-off and existing portrait-v1, landscape/product, third-party, migrated, manual-finish, universal-delivery, caption, and audio regression paths remain passing",
+        "code, Python, and security adversarial reviews approved with no blocker, high, or medium findings",
+        "generated portrait component, sonic, and runtime writers reject root and child NTFS Junction escapes and write completed files atomically"
+      ]
+    },
+    "WP6": {
+      "status": "complete",
+      "maturity": "real_project_style_reel_named_user_approved",
+      "confirmed_window": {
+        "original_start_seconds": 83.86,
+        "original_end_seconds": 122.44,
+        "local_start_seconds": 0.0,
+        "local_end_seconds": 38.58
+      },
+      "evidence": [
+        "HongRun explicitly confirmed the exact 83.86-122.44 second source window before any A/B/C render; the receipt is SHA-256-bound and requires no user key",
+        "three isolated 544x960 25fps HyperFrames directions were fully decoded and retain one render event, one reuse_source event, and one quiet_source event",
+        "caption-last review media use one phrase-level video-use-derived subtitle authority and preserve the original voice",
+        "the render event has a current WP3-bound off/on audition receipt; reuse_source and quiet_source explicitly remain not_applicable for added SFX",
+        "same-time baseline subtraction proves observable entrance, mid, pre-exit, and clean post-exit motion without treating the portrait background as motion",
+        "the pending-only synchronized review dashboard is hash-bound by wp6-review-package.json and does not authorize a full-video render",
+        "HongRun selected luminous_intelligence with all six brand-taste questions answered yes and reason 整体感觉都还可以",
+        "the explicit decision receipt and approved review revalidate with zero errors against the immutable pending review and complete WP6 package; SHA-256 is used only for drift detection"
+      ],
+      "review_package": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-farewell-2025\\farewell-2025-p0-portrait\\work\\director\\style-reel\\wp6-review-package.json",
+      "dashboard": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-farewell-2025\\farewell-2025-p0-portrait\\work\\director\\style-reel\\review\\style-reel-review.html",
+      "approved_review": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-farewell-2025\\farewell-2025-p0-portrait\\work\\director\\style-reel\\style-reel-approved-review.json",
+      "decision_receipt": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-farewell-2025\\farewell-2025-p0-portrait\\work\\director\\style-reel\\style-reel-user-decision.json"
+    },
+    "WP7": {
+      "status": "complete",
+      "maturity": "one_real_project_provisional_golden",
+      "selected_direction_id": "luminous_intelligence",
+      "evidence": [
+        "project-local profile snapshot is provisional_golden while the shared profile and project YAML remain unchanged",
+        "provisional Golden binds current selected profile, contract, review media, phase images, HyperFrames technical evidence, audio identity, explicit user decision, configuration, Git base, and scripts/tests source tree",
+        "preference candidate contains only explicit user inputs, has no inferred preferences, cannot auto-apply, and keeps production_default false"
+      ],
+      "golden": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-farewell-2025\\farewell-2025-p0-portrait\\work\\director\\style-reel\\wp7-provisional-golden\\portrait-golden.json",
+      "preference_candidate": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-farewell-2025\\farewell-2025-p0-portrait\\work\\director\\style-reel\\wp7-provisional-golden\\portrait-preference-candidate.json"
+    },
+    "WP8": {
+      "status": "action_required",
+      "maturity": "second_topic_technical_and_repeat_use_evidence_only",
+      "source_topic": "physical_open_ear_headphone_product_demo",
+      "selected_direction_id": "luminous_intelligence",
+      "source_window": {
+        "original_start_seconds": 33.52,
+        "original_end_seconds": 88.97,
+        "local_start_seconds": 0.0,
+        "local_end_seconds": 55.45
+      },
+      "candidate": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\exports\\wp8-second-topic\\hongrun-product-intro-wp8-luminous-candidate.mp4",
+      "candidate_sha256": "1fdbd63318c1f3dee48eb3725bd8a9b50314b296ccebd05e7d9e10263941e1fd",
+      "qa_report": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\work\\director\\wp8-candidate\\final-qa\\wp8-candidate-qa-report.json",
+      "user_decision": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\work\\director\\wp8-candidate\\final-qa\\wp8-promotion\\second-topic-user-decision.json",
+      "real_project_validation": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\work\\director\\wp8-candidate\\final-qa\\wp8-promotion\\portrait-brand-real-project-validation.json",
+      "evidence": [
+        "The source is an authorized HongRun self-recorded portrait physical-product talking-head clip, materially different from the first reflective farewell topic.",
+        "Three word-ID-bound opportunities compile to PBM-01, PBM-04, and PBM-08 without cadence, quota, keyword, random, or SFX-driven event selection.",
+        "The isolated 544x960 25fps HyperFrames project passes strict lint, runtime, layout, and contrast checks with zero findings.",
+        "Twelve entrance, hold, exit, and post-exit snapshots were reviewed against face, hand, product, and caption safe zones.",
+        "Three different portrait sonic motifs pass fresh PCM audibility checks with 4.979 millisecond onset error and remain below the primary voice.",
+        "The 17 source-preserving phrase captions are burned in last; caption, sonic projection, full-sample SFX mix, and full A/V decode receipts revalidate with zero errors.",
+        "The current implementation passes 109 focused ASR, evidence, phrase-caption, portrait compiler, sonic, audio-production, and caption-delivery tests.",
+        "HongRun explicitly recorded repeat_use_willingness=yes, preference=candidate, and reason 效果还可以 for the exact second-topic candidate.",
+        "The second-topic technical and repeat-use evidence is retained, but it does not promote maturity until HongRun explicitly answers the separate face/hand/product/caption visual-review gate."
+      ],
+      "user_gate": {
+        "status": "approved",
+        "actor": "HongRun",
+        "repeat_use_willingness": "yes",
+        "preference": "candidate",
+        "reason": "效果还可以",
+        "thread_id": "019f521d-3972-7dd2-a666-9b84e7aa921e"
+      }
+    },
+    "WP9": {"status": "action_required", "next_gate": "explicit_second_topic_visual_review_then_refresh_receipts_review_commit_push"}
+  },
+  "validation": {
+    "focused_tests": {"status": "pass", "tests": 26, "failed": 0, "skipped": 0, "coverage": "WP9 promotion, capability, completion, renderer observation, and regression failures"},
+    "retained_full_suite_receipt": {"status": "pass_current", "tests": 893, "failed": 0, "skipped": 0},
+    "compileall": "pass",
+    "git_diff_check": "pass_with_windows_line_ending_warnings_only",
+    "independent_reviews": "Final code and Python reviews approved with zero blocker, high, or medium findings after no-key review, canonical renderer binding, truthful maturity, non-finite runtime observation, fast action-required capability downgrade, receipt integrity, root/child Junction, and atomic-write replay"
+  },
+  "explicit_non_claims": [
+    "No real HongRun footage was rendered in WP0-WP2.",
+    "The shared proposed profile was not mutated; only the exact luminous_intelligence Style Reel received first-project brand-taste approval.",
+    "Two materially different HongRun topics have technical and repeat-use evidence, but the route remains fixture_validated/action_required until the second-topic visual-review answer is explicit.",
+    "WP3 proves technical audio production and real-source audibility only; it does not approve the motifs as HongRun brand taste.",
+    "WP4 proves only deterministic synthetic comparison wiring and technical audition truth; it does not prove real HyperFrames direction aesthetics.",
+    "WP5 fixture closure and both real named-user choices are complete, but second-topic face/hand/product/caption occlusion still needs an explicit user answer before WP9 can refresh receipts; no cryptographic key is required.",
+    "The HyperFrames keyframe parser reports dynamic loop targets as __unresolved__; browser runtime and render parity provide the binding evidence instead."
+  ],
+  "resume": {
+    "next_package": "WP9_release_closure",
+    "rule": "Re-read all five implementation authorities and this checkpoint, verify hashes and Git status, require no user-configured key, preserve the already stated second-topic repeat-use choice, request explicit visual-occlusion confirmation if it is still absent, regenerate and revalidate only evidence that does not invent that answer, keep production_default unavailable, then refresh the zero-skip suite, Current Golden, fixture receipts, capability inventory and completion audit, finish mandatory reviews, and create one focused commit with a non-force push. Do not render a full user video, publish, deploy, create a Release, PR, or modify upstream projects."
+  }
+}

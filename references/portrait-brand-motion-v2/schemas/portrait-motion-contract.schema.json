@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hongrun.local/schemas/portrait-motion-contract-v1.json",
+  "title": "Portrait Motion Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_id", "semantic_event_id", "brand_profile", "energy_map", "energy_tier", "primary_recipe_id", "supporting_layers", "approved_visible_copy", "source_window", "output_window", "protected_region_ids", "required_capabilities", "fallback", "input_hashes", "source_media"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "contract_id": {"$ref": "#/$defs/id"}, "semantic_event_id": {"$ref": "#/$defs/id"},
+    "brand_profile": {"$ref": "#/$defs/fileRef"}, "energy_map": {"$ref": "#/$defs/fileRef"},
+    "energy_tier": {"enum": ["micro", "meso", "macro"]},
+    "primary_recipe_id": {"pattern": "^PBM-0[1-8]$"},
+    "supporting_layers": {"type": "array", "maxItems": 2, "uniqueItems": true, "items": {"enum": ["ambient_light_field", "micro_grain", "orbit_particles", "focus_vignette", "icon_burst"]}},
+    "approved_visible_copy": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 32}},
+    "source_window": {"$ref": "#/$defs/window"},
+    "output_window": {"$ref": "#/$defs/window"},
+    "protected_region_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "gesture_binding_id": {"$ref": "#/$defs/id"},
+    "gesture_binding": {"$ref": "#/$defs/typedBinding"},
+    "subject_binding": {"$ref": "#/$defs/typedBinding"},
+    "chapter_boundary_binding": {"$ref": "#/$defs/typedBinding"},
+    "source_target_id": {"$ref": "#/$defs/id"},
+    "source_media": {"$ref": "#/$defs/fileRef"},
+    "subject_mask_ref": {"$ref": "#/$defs/fileRef"},
+    "asset_request_id": {"$ref": "#/$defs/id"},
+    "asset_ref": {"$ref": "#/$defs/fileRef"},
+    "required_capabilities": {"type": "array", "uniqueItems": true, "items": {"enum": ["dom", "svg", "gsap", "media_transform", "hand_tracking", "subject_tracking", "subject_mask", "asset_adapter", "remotion_event"]}},
+    "fallback": {"type": "object", "additionalProperties": false, "required": ["kind", "target"], "properties": {"kind": {"enum": ["portrait_recipe", "existing_portrait_typography", "caption_only", "quiet_source", "action_required"]}, "target": {"type": "string", "minLength": 1}}},
+    "input_hashes": {"type": "object", "minProperties": 5, "additionalProperties": {"$ref": "#/$defs/sha"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"}, "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fileRef": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 3}, "sha256": {"$ref": "#/$defs/sha"}}},
+    "window": {"type": "object", "additionalProperties": false, "required": ["start_seconds", "end_seconds"], "properties": {"start_seconds": {"type": "number", "minimum": 0}, "end_seconds": {"type": "number", "exclusiveMinimum": 0}}},
+    "typedBinding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["evidence_id", "kind", "authority_sha256", "source_sha256", "window", "time_domain", "status"],
+      "properties": {
+        "evidence_id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["subject_track", "gesture_track", "chapter_boundary"]},
+        "authority_sha256": {"$ref": "#/$defs/sha"},
+        "source_sha256": {"$ref": "#/$defs/sha"},
+        "window": {"$ref": "#/$defs/window"},
+        "time_domain": {"enum": ["source", "output"]},
+        "status": {"type": "string", "minLength": 1},
+        "visible": {"type": "boolean"},
+        "source_apex_seconds": {"type": "number", "minimum": 0},
+        "output_apex_seconds": {"type": "number", "minimum": 0},
+        "points": {"type": "array", "minItems": 2, "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}}},
+        "face": {"type": "object"},
+        "crop": {"type": "object"},
+        "smoothed_center": {"type": "array"}
+      }
+    }
+  }
+}

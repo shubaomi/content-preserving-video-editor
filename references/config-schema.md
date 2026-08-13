@@ -4,8 +4,8 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 10. New projects write both
-`schema_version: 10` and `version: 10`. Legacy projects from v1 through v9 are
+The current project schema is version 11. New projects write both
+`schema_version: 11` and `version: 11`. Legacy projects from v1 through v10 are
 deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
@@ -408,9 +408,9 @@ Completed stages normally report `ready`; audio and cover may instead report
 not evidence that its media asset exists. `director.py next` reduces this state
 to the single current owner, instruction, expected output, and resume command.
 
-## Schema v10 identity, motion-quality opt-in, and required assets
+## Schema v11 identity, motion-quality opt-in, portrait brand, and required assets
 
-Schema v10 adds these conservative in-memory defaults:
+Schema v11 retains the v10 defaults and adds a disabled portrait-brand block:
 
 ```yaml
 identity:
@@ -420,6 +420,19 @@ motion_quality:
   advanced_runtimes:
     enabled: false
     evidence: {}
+  portrait_brand:
+    enabled: false
+    profile_path: null
+    grammar_version: 2
+    style_direction: null
+    require_user_brand_approval: true
+    style_reel:
+      enabled: false
+      target_duration_seconds: 38.0
+      directions:
+        - luminous_intelligence
+        - high_energy_creator
+        - humanist_cinema
 editing:
   caption_sync_closure: {enabled: false}
 editorial_intent:
@@ -448,6 +461,101 @@ cadence, minimum event/family counts, and family-ratio pass/fail gates are not
 part of this model. `action_required` stops the semantic stage. With
 `motion_quality.enabled=false`, existing schema-v1/v2 briefs and one-to-one
 Storyboard behavior remain compatible.
+
+`motion_quality.portrait_brand.enabled=true` is legal only with
+`motion_quality.enabled=true`, `identity.mode=self`, a non-empty `profile_path`,
+portrait grammar version 2, an explicit frozen `style_direction`, and a
+verified or not-yet-classified talking-head source. An explicit non-talking-head
+content type is rejected. The A/B/C direction list is exact and ordered; unknown
+fields, cadence/quotas, random selectors, a disabled user gate, or a duration
+outside 30–45 seconds are invalid. v1-v10 migration always writes this block as
+disabled in memory even if a legacy mapping attempted to enable it, and never
+changes the YAML bytes.
+
+The repository-provided proposed HongRun profile is
+`references/portrait-brand-profiles/hongrun-portrait-brand-v2.0.0.json`. It is
+an opt-in `proposed` profile, not a user-approved or production-default style;
+projects must reference it explicitly and the Style Reel gate may later promote
+an exact profile version without mutating older project YAML.
+
+Two current HongRun portrait topics exercise the exact v2.0.0
+`luminous_intelligence` route, but current capability remains
+`fixture_validated`/`action_required` until the second topic receives an explicit
+face/hand/product/caption visual-review answer. The repository profile deliberately
+remains `status: proposed`, migrated projects remain disabled, and no new project
+inherits this route. `production_default` promotion is not implemented in this
+release; it requires a separately designed trusted approval authority plus a
+new HongRun decision bound to the current profile, implementation, and retained
+real-project evidence.
+
+When `style_reel.enabled=true`, planning is additive and isolated under
+`work/director/style-reel/`; it does not insert a new automatic render stage.
+The planner accepts only 30–45 seconds and the exact ordered direction list. It
+writes a current `style-reel-authorities.json` alongside the frozen-schema plan
+and includes current `audio-plan.json` and `portrait-sonic-plan.json` file
+references for event-level audition receipts. Each receipt is recomputed from
+decoded voice/off/on/cue PCM; the dashboard must display the exact receipt-bound
+tracks. The full residual must match the planned cue window with silence outside
+it, and the lexical project `assets/sfx` path must remain a non-linked child of
+the project root.
+so source, EDL, source/output transcripts, semantic brief, captions, voice stem,
+audio policy, subject evidence and profile bytes can be revalidated instead of
+trusting digest strings. The selected window must be fully covered by the
+current video-use EDL; chapter macro treatment requires an independent typed
+boundary mapped into that window. Render requests remain
+`blocked_by_user_window_confirmation` until an explicit HongRun confirmation
+receipt binds the exact plan, authority manifest and source/output window by
+SHA-256, names
+HyperFrames as owner, contain no executable command, and retain
+`full_video_render_authorized: false`. Existing projects with the block disabled
+never create these artifacts.
+
+An implemented fixture review requires three distinct direction media files
+with equal duration and exactly one video plus one audio stream with matching
+codec, dimensions, frame rate, sample rate and channel count; one current
+per-direction contract; and four current decodable
+phase images for every semantic event. The context manifest additionally binds
+a distinct aligned baseline, exact semantic sentences/copy/takeaways/rationales,
+direction recipes, and required voice/SFX-off plus SFX-on auditions. A synthetic
+fixture remains `pending` and is never eligible for a user decision; any
+authority, plan, reel, contract, phase, report, baseline or audition drift
+blocks the page. A real-project review may become `awaiting_user` only after the
+later HyperFrames runtime, caption-last, voice/mix and parity gate. Only HongRun
+may then select, revise, or reject through an explicit hash-bound decision receipt;
+the fixture UI does not perform that write. A second-topic candidate records a
+separate exact-thread repeat-use decision and may establish
+`real_project_validated`; it cannot set `production_default`.
+
+For the first real selection, the reviewed pending JSON remains immutable and
+the WP6 package carries `awaiting_user`. The explicit decision receipt binds both.
+The resulting profile snapshot may use `status: provisional_golden` only inside
+the project-local WP7 evidence directory; the shared proposed profile and the
+existing project YAML remain unchanged. A generated preference candidate is
+pending, profile-versioned, explicit-only, non-auto-applying, and cannot enable
+production default before the second-topic named-user gate.
+
+When portrait-brand v2 and `audio.production.enabled` are both active, the
+Director compiles the current portrait motion contracts through
+`references/portrait-sonic-motifs-v2.json`. PBM-S01 through PBM-S05 each expose
+at least two project-owned, rights-bound local synthesis variants for technical
+Style Reel evaluation. The compiler writes `portrait-sonic-plan.json` and
+`portrait-sonic-compile-report.json`; the plan also binds the exact generated
+sonic-library manifest, its frozen registry and generator, and every nested
+asset/rights hash. It then projects the exact event decisions
+into the existing HyperFrames `audio-plan.json`; it does not create a second
+mixer. `audio.sfx.enabled: false` produces one event-specific
+`intentionally_silent` decision per portrait render event. Missing, stale, or
+unlicensed variants also remain silent and truthful. Cue timing is bound to the
+current output timeline: word <=80 ms, EDL-mapped gesture apex <=120 ms, and
+chapter lead <=180 ms. The generated library is technically ready for Style
+Reel audition only. The existing named-user answers preserve technical and reuse
+evidence but do not establish current real-project maturity without the second
+explicit visual review, while production-default status
+remains false pending a separate explicit promotion. A legitimate audition may reduce the
+compiled starting gain to protect speech, but the measured value and its
+post-gain relation must match freshly decoded off/on evidence. Any cue-bearing
+portrait sample, including a non-executing resume, also requires a current
+full-sample mix output and hash-bound receipt.
 
 When `motion_quality.enabled=true`, evidence acquisition writes
 `work/director/evidence/adaptive-layout-constraints.json`. An optional
@@ -658,8 +766,9 @@ delivery:
     require_publication_authorization: true
 ```
 
-Interactive review serves only a loopback proposal API. Static dashboards enter
-Bearer and CSRF tokens at submission time; tokens are not embedded in HTML. The
+Interactive review serves only a loopback proposal API. When explicitly enabled,
+Director creates short-lived in-memory authorization and CSRF nonces and embeds
+them only in that generated local review session; users configure no keys. The
 server permits `Origin: null` only for this explicitly enabled mode, only for the
 proposal endpoint, and still enforces project containment and current SHA-256.
 

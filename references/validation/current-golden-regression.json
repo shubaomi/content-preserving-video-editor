@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite_version": "2026.08-p0p1p2",
-  "generated_at": "2026-08-12T07:02:46.831002+00:00",
+  "generated_at": "2026-08-13T09:13:36.243895+00:00",
   "status": "pass",
   "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
   "source": {
@@ -19,26 +19,26 @@
   },
   "bindings": {
     "director_version": "2.6.0",
-    "project_schema_version": 10,
+    "project_schema_version": 11,
     "implementation_sha256": {
       "scripts/current_golden_regression.py": "f4792699876268449c49e820040fb4e108df26fa0492b69630737f501fb67405",
-      "scripts/director.py": "4b06c6ab449410dc232f6ea2e04793e0e0d598460592e31e330b18892597d31c",
-      "scripts/project_config.py": "a64d5d066b8688afed78febd304ab3d97998106e43af641b685e92eb195de9f8",
+      "scripts/director.py": "759cf9b3b701d9cbd4008ada1b7dc4af136797e4f4b098f3b97fbb91c2109403",
+      "scripts/project_config.py": "476372fb36bc5dbb082e6984a12e58161ed4b88f441117cc3e74103fee622a1b",
       "scripts/delivery_readiness.py": "4a409e9deb1abe2663dfb9e6145fc3334649197266bf072cd7c395349ab7d4ac",
-      "scripts/capability_registry.py": "4c680542c2bde88cf033cfc680df8b5f3cfc51e58f55affa2c1f921fffc377a1",
+      "scripts/capability_registry.py": "ceed4887182845737925acd16f047c2c1519e739563e1ac12b04c7315e74529c",
       "scripts/production_contract.py": "7ec71315a6a9e87bc2f74cfa015de4e3394a3143a072995efd7f23433b422195",
       "scripts/completion_audit.py": "ae8a29eb6e738d6f2c616b2869eb087155e44ed2c5e389025e409b862550127b",
       "scripts/fixture_acceptance.py": "de36fdd4b468d739c7ef0be06d945f8ca1ca69de71075aca73d49e2ecbe532f5",
-      "scripts/asr_router.py": "f3cb91f23ca83f6c6cf92f1adbcfb07410ebd4da46701a1a16cb8e850d367917",
+      "scripts/asr_router.py": "ce9bcc7bbfb12e985dbd9d45ac5f0ac7239dc11be69feed791f7c52704060fde",
       "scripts/semantic_confidence.py": "12f0126b6fa44e9821e930a1aa46f5c7644c5d36ec5a8761daa14657a1b49027",
       "scripts/preview_render_parity.py": "c4d3ee482f7d6de84f3d19a28398aea76eebc1b0341987d66c9fd4d873cf9cd2",
-      "scripts/audio_qa.py": "9d962504c3abde0afb687ce9d541b1e7e8823edfea441cff8c5ce615320c29c3",
+      "scripts/audio_qa.py": "327a3b2e3a4949a588024b15269bf4448ed3e60ee3cd0c83ad8496c771ffafcb",
       "scripts/ip_production.py": "2591753b2ab6fabf511639a2f570b501810bf1ad25c6dcd97038805f70f86e54",
       "scripts/cover_quality.py": "d2e411dacd7fb13659a3d5e01d43ff3aaffff53a2a0ad48d0cec6a3b7e36dd7b",
       "scripts/event_cache.py": "9d8d7dc7d77d2e8d89692f3b288182bc8553496055a6360552852d1b0e31528f",
       "scripts/event_render_pipeline.py": "19924c32ec46b04eb423b6a5f8f2380be423a0ffd8c50ab5b111e1674fc3746d",
-      "scripts/review_server.py": "ecff2dc0625ad775e6c8e44d17eb997bf988737d27beca534f9148e00cb6ea4d",
-      "scripts/review_dashboard.py": "aa0dc387416e8347832c083e89d20e325e470b2cc08f2c5a73f5a93b56dd4323",
+      "scripts/review_server.py": "5459606f829805ddcd571a6b4660725aaef19e0b76cce76e8840eb71103ffa6b",
+      "scripts/review_dashboard.py": "32ba78cfa8a5994679bdee369c9acfb295c8c0538f7b7685067fc1ad1d004b08",
       "scripts/creative_review.py": "54100477d5cbf786b6cde04fe79349c3610b155140c0b68b38d25da5abcfe0dd",
       "scripts/cover_reference_pack.py": "113d239fca4ce1408e4c6bb55d67d35f2358f178fb271455507d6d91a92a4dde",
       "scripts/preference_learning.py": "41d37cd11346f8963e0af04ed251e3318cee1ce7a4a6bcc801e3abb66255f8e6",
@@ -53,7 +53,7 @@
       "scripts/build_motion_snapshot_plan.py": "14c7b3e627b98e8d99ac64d7af17c3c20323f45bceba8061112b3247d8fe9e3a",
       "references/motion-recipes-v1.json": "e0cc533c44db17824aca3c889154659e91d8729126b6470815b3fde381e45b44"
     },
-    "fixture_suite_sha256": "1eacb01975e6f38646dd496855cb09f668f8f4a0b0727e8fa7661257499ada6e"
+    "fixture_suite_sha256": "b778b10a491992e0f3e4e2e52d68604e099bf1e606128a6503d4e844f5fbff08"
   },
   "cases": [
     {
@@ -549,5 +549,5 @@
       }
     }
   ],
-  "report_integrity_sha256": "799a2fe18d9ba1dcef1d9771e0562c4325258fc24b5899e27619b59c5ab42ba1"
+  "report_integrity_sha256": "86669c0ebefc45355691aa090089ce4ca4effb47542aa09f28b03733cea2a059"
 }

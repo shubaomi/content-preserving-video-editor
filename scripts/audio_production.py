@@ -296,7 +296,7 @@ def materialize_motion_audio_decisions(
         if isinstance(row, dict) and row.get("decision") == "render"
     }
     decisions = {
-        str(row.get("event_id")): row
+        str(row.get("semantic_event_id") or row.get("event_id")): row
         for row in ((plan.get("motion_sfx") or {}).get("event_decisions") or [])
         if isinstance(row, dict) and row.get("event_id")
     }
@@ -353,7 +353,8 @@ def materialize_motion_audio_decisions(
             "status": "asset_ready",
         }
         if decision.get("decision") == "cue":
-            row = measurements.get(event_id) or {}
+            renderer_event_id = str(decision.get("event_id") or event_id)
+            row = measurements.get(renderer_event_id) or {}
             perceptual = row.get("perceptual") or {}
             if row.get("decision_binding") != _decision_binding(decision, audio_plan):
                 raise ValueError(f"motion-audio cue decision binding is stale: {event_id}")
@@ -384,7 +385,7 @@ def materialize_motion_audio_decisions(
             if row.get("status") != "pass" or perceptual.get("audibility_status") != "audible_without_masking":
                 raise ValueError(f"motion-audio cue lacks passing perceptual evidence: {event_id}")
             cue_path = _authorized_sfx_path(audio_plan, decision.get("asset"))
-            license_row = assets.get(event_id) or {}
+            license_row = assets.get(renderer_event_id) or {}
             if (
                 Path(str(license_row.get("frozen_path") or "")).resolve() != cue_path
                 or license_row.get("sha256") != _sha256(cue_path)
@@ -714,6 +715,7 @@ def validate_sample_audio_evidence(
     if not isinstance(evidence, dict) or evidence.get("schema_version") != 1 \
             or evidence.get("status") != "pass":
         return ["sample audio evidence schema/status is invalid"]
+    errors.extend(_media_decode_errors(candidate_media, "sample audio evidence candidate"))
     if expected_evidence_path is not None and evidence_path.resolve() != expected_evidence_path.resolve():
         errors.append("sample audio evidence path is outside the canonical Director location")
     if not declared_evidence_sha256 or declared_evidence_sha256 != _sha256(evidence_path):
@@ -763,6 +765,7 @@ def validate_sample_audio_evidence(
         semantic_id = str(event.get("semantic_event_id") or event_id)
         if row.get("semantic_event_id") != audition_filename_stem(semantic_id):
             errors.append(f"sample audio evidence semantic id is stale: {event_id}")
+        artifact_paths: dict[str, Path] = {}
         for role in ("sfx_off", "sfx_on"):
             artifact = row.get(role)
             if not isinstance(artifact, dict):
@@ -773,7 +776,129 @@ def validate_sample_audio_evidence(
                 errors.append(f"sample audio evidence {role} path is invalid: {event_id}")
             elif artifact.get("sha256") != _sha256(path):
                 errors.append(f"sample audio evidence {role} hash is stale: {event_id}")
+            else:
+                artifact_paths[role] = path
+        if set(artifact_paths) != {"sfx_off", "sfx_on"}:
+            continue
+        try:
+            remeasured = _wave_metrics(
+                artifact_paths["sfx_off"], artifact_paths["sfx_on"],
+            )
+        except (OSError, ValueError, RuntimeError, wave.Error) as error:
+            errors.append(f"sample audio evidence WAVs cannot be decoded: {event_id}: {error}")
+            continue
+        for field, observed in remeasured.items():
+            try:
+                declared = float(row.get(field))
+            except (TypeError, ValueError):
+                errors.append(f"sample audio evidence {field} is malformed: {event_id}")
+                continue
+            if not math.isfinite(declared):
+                errors.append(f"sample audio evidence {field} is non-finite: {event_id}")
+                continue
+            if abs(declared - observed) > 0.01:
+                errors.append(f"sample audio evidence {field} differs from remeasured audio: {event_id}")
+        if decision.get("decision") == "cue":
+            try:
+                cue_path = _authorized_sfx_path(audio_plan, decision.get("asset"))
+                observed_perceptual = _perceptual_mix_metrics(
+                    off_path=artifact_paths["sfx_off"],
+                    on_path=artifact_paths["sfx_on"],
+                    cue_path=cue_path,
+                    planned_delay_seconds=max(
+                        0.0, float(decision.get("start", 0.0))
+                        - float(row.get("excerpt_start_seconds", 0.0))
+                    ),
+                )
+            except (OSError, ValueError, RuntimeError, wave.Error) as error:
+                errors.append(f"sample audio evidence cue cannot be remeasured: {event_id}: {error}")
+                continue
+            declared_perceptual = row.get("perceptual")
+            if not isinstance(declared_perceptual, dict):
+                errors.append(f"sample audio evidence perceptual record is missing: {event_id}")
+                continue
+            declared_fingerprint = declared_perceptual.get("motif_fingerprint")
+            if (
+                not isinstance(declared_fingerprint, dict)
+                or declared_fingerprint.get("sha256")
+                != observed_perceptual["motif_fingerprint"]["sha256"]
+            ):
+                errors.append(f"sample audio evidence motif identity differs from remeasured cue: {event_id}")
+            for field in (
+                "dialogue_window_lufs", "cue_window_lufs",
+                "dialogue_cue_delta_lu", "onset_error_ms",
+            ):
+                try:
+                    declared = float(declared_perceptual.get(field))
+                except (TypeError, ValueError):
+                    errors.append(f"sample audio evidence perceptual {field} is malformed: {event_id}")
+                    continue
+                if not math.isfinite(declared):
+                    errors.append(
+                        f"sample audio evidence perceptual {field} is non-finite: {event_id}"
+                    )
+                    continue
+                if abs(declared - float(observed_perceptual[field])) > 0.05:
+                    errors.append(
+                        f"sample audio evidence perceptual {field} differs from remeasured audio: {event_id}"
+                    )
+            for field in ("audibility_status", "measurement_method"):
+                if declared_perceptual.get(field) != observed_perceptual[field]:
+                    errors.append(
+                        f"sample audio evidence perceptual {field} differs from remeasured audio: {event_id}"
+                    )
+            try:
+                maximum_onset_error_ms = float(
+                    decision.get("portrait_landing_tolerance_ms", 80.0)
+                )
+            except (TypeError, ValueError):
+                maximum_onset_error_ms = float("nan")
+            if not math.isfinite(maximum_onset_error_ms) or maximum_onset_error_ms <= 0:
+                errors.append(
+                    f"sample audio evidence onset tolerance is malformed: {event_id}"
+                )
+                maximum_onset_error_ms = 0.0
+            if observed_perceptual["audibility_status"] != "audible_without_masking":
+                errors.append(
+                    f"sample audio evidence cue is not audible without masking: {event_id}"
+                )
+            if abs(float(observed_perceptual["onset_error_ms"])) > maximum_onset_error_ms:
+                errors.append(
+                    f"sample audio evidence cue onset exceeds {maximum_onset_error_ms:.0f} ms: {event_id}"
+                )
+            if (
+                remeasured["residual_mean_dbfs"] <= -60.0
+                or remeasured["on_peak_dbfs"] > -0.05
+                or remeasured["mix_gain_delta_db"] > 4.0
+            ):
+                errors.append(f"sample audio evidence cue fails measured mix thresholds: {event_id}")
+        elif (
+            artifact_paths["sfx_off"].read_bytes() != artifact_paths["sfx_on"].read_bytes()
+            or (row.get("perceptual") or {}).get("audibility_status") != "not_applicable"
+        ):
+            errors.append(f"sample audio evidence intentional silence is not bit-identical: {event_id}")
     return errors
+
+
+def sample_audio_evidence_artifacts(evidence_path: Path) -> list[Path]:
+    """Return every nested file whose bytes make a sample-audio receipt current."""
+    evidence_path = evidence_path.resolve()
+    payload = json.loads(evidence_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not isinstance(payload.get("events"), list):
+        raise ValueError("sample audio evidence must be an object with events")
+    result = [evidence_path]
+    for row in payload["events"]:
+        if not isinstance(row, dict):
+            raise ValueError("sample audio evidence event must be an object")
+        for role in ("sfx_off", "sfx_on"):
+            artifact = row.get(role)
+            if not isinstance(artifact, dict):
+                raise ValueError(f"sample audio evidence {role} record is missing")
+            path = Path(str(artifact.get("path") or ""))
+            if not path.is_absolute() or not path.is_file() or artifact.get("sha256") != _sha256(path):
+                raise ValueError(f"sample audio evidence {role} record is stale")
+            result.append(path.resolve())
+    return result
 
 
 def materialize_sample_review_mix(
@@ -958,10 +1083,13 @@ def materialize_sample_audio_evidence(
                 planned_delay_seconds=max(0.0, cue_start - clip_start),
             )
             decision["motif_fingerprint_sha256"] = perceptual["motif_fingerprint"]["sha256"]
-            decision["volume"] = round(volume, 3)
+            applied_volume = round(volume, 3)
+            decision["volume"] = applied_volume
             if planned_post_gain is not None and planned_volume > 0:
                 decision["post_gain_mean_dbfs"] = round(
-                    float(planned_post_gain) + 20.0 * math.log10(volume / planned_volume), 1
+                    float(planned_post_gain)
+                    + 20.0 * math.log10(applied_volume / planned_volume),
+                    1,
                 )
         elif decision.get("decision") == "intentionally_silent":
             planned_volume = None
@@ -986,6 +1114,10 @@ def materialize_sample_audio_evidence(
                 metrics["residual_mean_dbfs"] > -60.0
                 and metrics["on_peak_dbfs"] <= -0.05
                 and metrics["mix_gain_delta_db"] <= 4.0
+                and perceptual["audibility_status"] == "audible_without_masking"
+                and abs(float(perceptual["onset_error_ms"])) <= float(
+                    decision.get("portrait_landing_tolerance_ms", 80.0)
+                )
             )
         else:
             passed = _sha256(off_path) == _sha256(on_path)
@@ -1152,12 +1284,34 @@ def produce_audio_assets(
     *, storyboard: Path, project: dict[str, Any], project_root: Path,
     output_dir: Path, source_audio: Path, runner: AdapterRunner,
     semantic_brief: Path | None = None,
+    portrait_motion_contracts: Path | None = None,
+    portrait_profile: Path | None = None,
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     sfx_dir = storyboard.parent / "assets" / "sfx"
     sfx_manifest_path = storyboard.parent / "audio-sfx-manifest.json"
     sfx_config = project.get("audio", {}).get("sfx", {})
-    if sfx_config.get("enabled", True) is True:
+    portrait_enabled = (
+        portrait_motion_contracts is not None and portrait_profile is not None
+    )
+    semantic_payload: dict[str, Any] | None = None
+    storyboard_payload: dict[str, Any] | None = None
+    if portrait_enabled:
+        if semantic_brief is None or not semantic_brief.is_file():
+            raise FileNotFoundError("portrait audio production requires semantic brief")
+        storyboard_payload = json.loads(storyboard.read_text(encoding="utf-8"))
+        semantic_payload = json.loads(semantic_brief.read_text(encoding="utf-8"))
+        if not isinstance(storyboard_payload, dict) or not isinstance(semantic_payload, dict):
+            raise ValueError("portrait audio storyboard and semantic brief must be objects")
+        # Portrait motif assets are compiled below; do not generate the generic
+        # screen/product SFX library first and then leave its bytes unused.
+        manifest = {
+            "schema_version": 2,
+            "storyboard": str(storyboard.resolve()),
+            "assets": [],
+            "event_decisions": [],
+        }
+    elif sfx_config.get("enabled", True) is True:
         audio_storyboard = storyboard
         if semantic_brief is not None and semantic_brief.is_file():
             storyboard_payload = json.loads(storyboard.read_text(encoding="utf-8"))
@@ -1188,7 +1342,6 @@ def produce_audio_assets(
                 for event in (payload.get("events") or []) if event.get("treatment") != "quiet_source"
             ],
         }
-    write_json(sfx_manifest_path, manifest)
     bgm = resolve_bgm(
         project.get("audio", {}).get("bgm", {}), root=project_root,
         output_dir=output_dir / "bgm", runner=runner,
@@ -1196,9 +1349,93 @@ def produce_audio_assets(
     bgm_manifest = output_dir / "bgm-provenance.json"
     write_json(bgm_manifest, bgm)
     plan_path = storyboard.parent / "audio-plan.json"
-    write_json(plan_path, build_audio_plan(
+    plan_payload = build_audio_plan(
         manifest, source_audio=str(source_audio.resolve()), bgm=bgm,
         preview_volume=float(project.get("audio", {}).get("bgm", {}).get("preview_volume", 0.1)),
-    ))
+    )
+    portrait_outputs: list[Path] = []
+    if portrait_enabled:
+        from portrait_sonic import (
+            DEFAULT_PORTRAIT_SONIC_REGISTRY,
+            compile_portrait_sonic_plan,
+            materialize_portrait_sonic_library,
+            project_portrait_sonic_plan,
+        )
+
+        assert portrait_motion_contracts is not None
+        assert portrait_profile is not None
+        assert semantic_payload is not None
+        assert storyboard_payload is not None
+        semantic_for_audio = json.loads(json.dumps(semantic_payload))
+        library_manifest = materialize_portrait_sonic_library(
+            DEFAULT_PORTRAIT_SONIC_REGISTRY,
+            output_dir / "portrait-sonic-library",
+        )
+        compiled = compile_portrait_sonic_plan(
+            project_id=str(project.get("video_id") or project_root.name),
+            profile_path=portrait_profile,
+            motion_contracts_path=portrait_motion_contracts,
+            semantic_brief=semantic_for_audio,
+            library_manifest_path=library_manifest,
+        )
+        if sfx_config.get("enabled", True) is not True:
+            compiled["plan"]["decisions"] = [
+                {
+                    "event_id": row["event_id"],
+                    "recipe_id": row["recipe_id"],
+                    "decision": "intentionally_silent",
+                    "reason": "Project SFX is explicitly disabled for this portrait event.",
+                }
+                for row in compiled["plan"]["decisions"]
+            ]
+            compiled["report"]["status"] = "explicitly_disabled"
+            compiled["report"]["cue_count"] = 0
+            compiled["report"]["diagnostics"] = [
+                {
+                    "event_id": row["event_id"],
+                    "decision": "intentionally_silent",
+                    "reason": row["reason"],
+                }
+                for row in compiled["plan"]["decisions"]
+            ]
+        sonic_plan_path = portrait_motion_contracts.parent / "portrait-sonic-plan.json"
+        sonic_report_path = portrait_motion_contracts.parent / "portrait-sonic-compile-report.json"
+        write_json(sonic_plan_path, compiled["plan"])
+        write_json(sonic_report_path, compiled["report"])
+        plan_payload = project_portrait_sonic_plan(
+            compiled["plan"], plan_payload,
+            base_dir=storyboard.parent,
+            motion_contracts_path=portrait_motion_contracts,
+            storyboard=storyboard_payload,
+        )
+        manifest["event_decisions"] = list(plan_payload["motion_sfx"]["event_decisions"])
+        manifest["assets"] = []
+        for decision in manifest["event_decisions"]:
+            if decision.get("decision") != "cue":
+                continue
+            cue_path = (storyboard.parent / str(decision["asset"])).resolve()
+            rights_path = (storyboard.parent / str(decision["rights_evidence"])).resolve()
+            manifest["assets"].append({
+                "event_id": str(decision["event_id"]),
+                "semantic_event_id": str(decision.get("semantic_event_id") or decision["event_id"]),
+                "family": str(decision["family"]),
+                "variant": str(decision["variant_id"]),
+                "duration_seconds": float(decision["duration_seconds"]),
+                "post_gain_mean_dbfs": float(decision["post_gain_mean_dbfs"]),
+                "frozen_path": str(cue_path),
+                "sha256": _sha256(cue_path),
+                "source": "HongRun portrait sonic v2 original local synthesis",
+                "license": "project-owned original synthesis",
+                "rights_evidence": {"path": str(rights_path), "sha256": _sha256(rights_path)},
+            })
+        portrait_outputs = [
+            sonic_plan_path, sonic_report_path, library_manifest,
+            *[
+                path for path in (library_manifest.parent.rglob("*"))
+                if path.is_file() and path != library_manifest
+            ],
+        ]
+    write_json(sfx_manifest_path, manifest)
+    write_json(plan_path, plan_payload)
     assets = [Path(row["frozen_path"]) for row in manifest.get("assets") or []]
-    return [sfx_manifest_path, bgm_manifest, plan_path, *assets]
+    return [sfx_manifest_path, bgm_manifest, plan_path, *assets, *portrait_outputs]

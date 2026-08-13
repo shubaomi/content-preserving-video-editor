@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hongrun.local/schemas/portrait-energy-map-v1.json",
+  "title": "Portrait Energy Map",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id", "source_media", "input_hashes", "chapters", "evidence_authorities", "opportunities", "selection_policy"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project_id": {"$ref": "#/$defs/id"},
+    "source_media": {"$ref": "#/$defs/fileRef"},
+    "input_hashes": {"type": "object", "minProperties": 4, "additionalProperties": {"$ref": "#/$defs/sha"}},
+    "chapters": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/chapter"}},
+    "evidence_authorities": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/evidenceAuthority"}},
+    "opportunities": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/opportunity"}},
+    "selection_policy": {
+      "type": "object", "additionalProperties": false, "required": ["fixed_cadence", "minimum_event_quota", "random_rotation", "density_is_diagnostic_only"],
+      "properties": {
+        "fixed_cadence": {"const": false},
+        "minimum_event_quota": {"const": false},
+        "random_rotation": {"const": false},
+        "density_is_diagnostic_only": {"const": true}
+      }
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"},
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fileRef": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 3}, "sha256": {"$ref": "#/$defs/sha"}}},
+    "window": {"type": "object", "additionalProperties": false, "required": ["start_seconds", "end_seconds"], "properties": {"start_seconds": {"type": "number", "minimum": 0}, "end_seconds": {"type": "number", "exclusiveMinimum": 0}}},
+    "evidenceAuthority": {
+      "type": "object",
+      "required": ["evidence_id", "kind", "status", "source", "source_sha256", "authority_sha256", "time_domain"],
+      "properties": {
+        "evidence_id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["transcript_word", "representative_frame", "subject_track", "gesture_track", "chapter_boundary"]},
+        "status": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1},
+        "source_sha256": {"$ref": "#/$defs/sha"},
+        "authority_sha256": {"$ref": "#/$defs/sha"},
+        "time_domain": {"enum": ["source", "output"]},
+        "window": {"$ref": "#/$defs/window"},
+        "visible": {"type": "boolean"},
+        "structural": {"type": "boolean"},
+        "chapter_id": {"type": ["string", "null"]},
+        "semantic_event_id": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "chapter": {
+      "type": "object", "additionalProperties": false, "required": ["chapter_id", "output_window", "entry_energy", "exit_energy", "intent", "evidence_refs"],
+      "properties": {
+        "chapter_id": {"$ref": "#/$defs/id"}, "output_window": {"$ref": "#/$defs/window"},
+        "entry_energy": {"type": "number", "minimum": 0, "maximum": 1}, "exit_energy": {"type": "number", "minimum": 0, "maximum": 1},
+        "intent": {"enum": ["rise", "settle", "contrast", "resolve", "sustain"]},
+        "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}
+      }
+    },
+    "opportunity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["semantic_event_id", "chapter_id", "tier", "transition_intent", "max_attention_layers", "rationale", "evidence_refs", "fallback_tier"],
+      "properties": {
+        "semantic_event_id": {"$ref": "#/$defs/id"}, "chapter_id": {"$ref": "#/$defs/id"},
+        "tier": {"enum": ["quiet", "micro", "meso", "macro"]},
+        "transition_intent": {"enum": ["rise", "settle", "contrast", "resolve", "sustain"]},
+        "max_attention_layers": {"type": "integer", "minimum": 0, "maximum": 2},
+        "rationale": {"type": "string", "minLength": 8},
+        "evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+        "gesture_evidence_id": {"$ref": "#/$defs/id"},
+        "chapter_boundary_evidence_id": {"$ref": "#/$defs/id"},
+        "fallback_tier": {"enum": ["quiet", "micro", "meso"]}
+      }
+    }
+  }
+}

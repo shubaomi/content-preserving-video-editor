@@ -303,7 +303,9 @@ def build_evidence_bundle(
 def probe_media(media: Path) -> dict[str, Any]:
     result = subprocess.run([
         "ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(media),
-    ], check=True, capture_output=True, text=True)
+    ], check=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if not isinstance(result.stdout, str):
+        raise RuntimeError("ffprobe did not return decodable JSON output")
     return json.loads(result.stdout)
 
 

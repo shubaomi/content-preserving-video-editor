@@ -143,12 +143,14 @@ class CreativeReviewTests(unittest.TestCase):
             creative_review_path=self.output,
             motion_design_contract_path=self.motion_contract,
             interactive_api_url="http://127.0.0.1:8765/api/proposals",
+            interactive_session={"authorization": "ephemeral-a", "csrf": "ephemeral-c"},
         ).read_text(encoding="utf-8")
         self.assertIn("fetch(", interactive)
         self.assertIn("仅生成 pending proposal", interactive)
         self.assertNotIn("button type=\"button\" disabled", interactive)
-        self.assertNotIn("secret-token", interactive)
-        self.assertNotIn("csrf-token", interactive)
+        self.assertNotIn("DIRECTOR_REVIEW_TOKEN", interactive)
+        self.assertNotIn("DIRECTOR_REVIEW_CSRF_TOKEN", interactive)
+        self.assertNotIn("window.prompt", interactive)
         with self.assertRaisesRegex(ValueError, "loopback"):
             generate_dashboard(
                 project_root=self.project,

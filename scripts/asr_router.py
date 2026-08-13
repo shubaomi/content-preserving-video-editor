@@ -266,8 +266,10 @@ def _word_rows(raw: dict[str, Any]) -> list[tuple[dict[str, Any], Any]]:
 
 
 def normalize_transcript(raw: dict[str, Any], *, backend: str) -> dict[str, Any]:
+    raw_rows = _word_rows(raw)
     words: list[dict[str, Any]] = []
-    for index, (row, speaker) in enumerate(_word_rows(raw)):
+    timing_repairs: list[dict[str, Any]] = []
+    for index, (row, speaker) in enumerate(raw_rows):
         raw_text = row.get("text", row.get("word"))
         if not isinstance(raw_text, str) or not raw_text or row.get("start") is None or row.get("end") is None:
             raise ValueError(f"missing text or timing at ASR word index {index}")
@@ -277,8 +279,42 @@ def normalize_transcript(raw: dict[str, Any], *, backend: str) -> dict[str, Any]
             end = float(row["end"])
         except (TypeError, ValueError) as error:
             raise ValueError(f"invalid ASR word timing at index {index}") from error
-        if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start:
+        if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end < start:
             raise ValueError(f"invalid ASR word timing at index {index}")
+        word_id = row.get("id", f"w{len(words):06d}")
+        if end == start:
+            original_start = start
+            original_end = end
+            previous_end = float(words[-1]["end"]) if words else None
+            next_start: float | None = None
+            if index + 1 < len(raw_rows):
+                next_row = raw_rows[index + 1][0]
+                try:
+                    candidate = float(next_row.get("start"))
+                except (TypeError, ValueError):
+                    candidate = float("nan")
+                if math.isfinite(candidate):
+                    next_start = candidate
+            reason = ""
+            if previous_end is not None and previous_end < start and (
+                next_start is None or next_start <= start
+            ):
+                start = max(previous_end, start - 0.2)
+                reason = "zero_duration_word_assigned_to_preceding_silence"
+            elif next_start is not None and next_start > end:
+                end = min(next_start, end + 0.2)
+                reason = "zero_duration_word_assigned_to_following_silence"
+            if end <= start:
+                raise ValueError(f"invalid ASR word timing at index {index}")
+            timing_repairs.append({
+                "word_id": word_id,
+                "word_index": index,
+                "reason": reason,
+                "original_start": original_start,
+                "original_end": original_end,
+                "repaired_start": start,
+                "repaired_end": end,
+            })
         confidence = row.get("confidence", row.get("score", row.get("probability")))
         if confidence is not None:
             try:
@@ -288,7 +324,7 @@ def normalize_transcript(raw: dict[str, Any], *, backend: str) -> dict[str, Any]
             if not math.isfinite(confidence):
                 raise ValueError(f"invalid ASR word confidence at index {index}")
         words.append({
-            "id": row.get("id", f"w{len(words):06d}"),
+            "id": word_id,
             "type": "word",
             "text": text,
             "start": start,
@@ -304,7 +340,8 @@ def normalize_transcript(raw: dict[str, Any], *, backend: str) -> dict[str, Any]
         "words": words,
         "normalization": {
             "backend": backend,
-            "text_or_timing_modified": False,
+            "text_or_timing_modified": bool(timing_repairs),
+            "timing_repairs": timing_repairs,
             "semantic_deletion_authority": False,
         },
     }

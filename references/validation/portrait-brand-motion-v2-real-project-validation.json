@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "kind": "hongrun_portrait_brand_retained_real_project_validation",
+  "status": "action_required",
+  "maturity": "fixture_validated",
+  "validation_id": "hongrun-physical-product-intro-wp8-repeat-use-v1",
+  "created_at": "2026-08-13T05:40:49.702263+00:00",
+  "profile_id": "hongrun",
+  "profile_version": "2.0.0",
+  "direction": "luminous_intelligence",
+  "topics": [
+    "farewell-2025-p0-portrait",
+    "physical_open_ear_headphone_product_demo"
+  ],
+  "named_user": {
+    "actor": "HongRun",
+    "repeat_use_willingness": "yes",
+    "preference": "candidate",
+    "decision_receipt_sha256": "60cdb0717921aa1f43d546c80970c9c587e04502152b49ddb2441f95251ac497"
+  },
+  "evidence_sha256": {
+    "live_validation": "75a18595afedf7a14e135db59e0b7e47b2b703e958ef179d6dd66f62a3ce8b61",
+    "second_topic_candidate": "1fdbd63318c1f3dee48eb3725bd8a9b50314b296ccebd05e7d9e10263941e1fd",
+    "second_topic_qa": "66993dac9ae439fe723e7c0f1c531a6bf4f63028f5f5e885fd3189ef714be078"
+  },
+  "live_validation": {
+    "path": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\work\\director\\wp8-candidate\\final-qa\\wp8-promotion\\portrait-brand-real-project-validation.json",
+    "sha256": "75a18595afedf7a14e135db59e0b7e47b2b703e958ef179d6dd66f62a3ce8b61"
+  },
+  "implementation": {
+    "source_tree_sha256": "9f8ceead2e30e010aaee8f371a406d3fbc6247e2ced1bf0157f18d467da322eb",
+    "portrait_implementation_sha256": "c0f66b3c36d0abbb36ee5dd50a9ec04ebe78e0781cf6c16bd594090974539c63"
+  },
+  "promotion": {
+    "real_project_validation_count": 1,
+    "required_real_project_count": 2,
+    "production_default": false,
+    "next_gate": "second_topic_explicit_visual_review"
+  },
+  "production_default_approval": "not_provided",
+  "limitations": [
+    "Private real-project media remains in the authorized local validation projects.",
+    "The second-topic repeat-use answer is retained, but its explicit face/hand/product/caption visual review is missing.",
+    "This stale historical receipt cannot currently establish real_project_validated maturity or production-default approval."
+  ],
+  "integrity_sha256": "a6f64536340e0df5a7c2319010128b824e5c319595180fb5cc25fa4502adfc13"
+}

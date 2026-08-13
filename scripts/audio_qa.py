@@ -7,7 +7,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 def _resolve(base_dir: Path, value: Any) -> Path | None:
@@ -18,10 +18,10 @@ def _resolve(base_dir: Path, value: Any) -> Path | None:
 
 
 def _number(value: Any, default: float) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         return default
+    result = float(value)
+    return result if math.isfinite(result) else default
 
 
 def _perceptual_errors(
@@ -71,7 +71,7 @@ def _perceptual_errors(
     }
     if set(evidence_rows) != set(event_ids):
         errors.append("motion SFX perceptual evidence event inventory is stale")
-    maximum_onset_error = _number(config.get("maximum_onset_error_ms"), 80.0)
+    default_maximum_onset_error = _number(config.get("maximum_onset_error_ms"), 80.0)
     for event_id, decision in by_event.items():
         row = evidence_rows.get(event_id) or {}
         if row.get("decision") != decision.get("decision"):
@@ -89,7 +89,11 @@ def _perceptual_errors(
         if len(fingerprint) != 64 or observed_fingerprint != fingerprint:
             errors.append(f"motion SFX motif fingerprint is missing or stale: {event_id}")
         onset_error = _number(perceptual.get("onset_error_ms"), float("inf"))
-        if onset_error > maximum_onset_error:
+        maximum_onset_error = _number(
+            decision.get("portrait_landing_tolerance_ms"),
+            default_maximum_onset_error,
+        )
+        if abs(onset_error) > maximum_onset_error:
             errors.append(
                 f"motion SFX onset error exceeds {maximum_onset_error:.1f} ms: {event_id}"
             )
@@ -100,7 +104,11 @@ def _perceptual_errors(
             "dialogue_window_lufs", "cue_window_lufs", "dialogue_cue_delta_lu",
         ):
             value = perceptual.get(field)
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+            ):
                 errors.append(f"motion SFX perceptual evidence lacks {field}: {event_id}")
     return errors
 
@@ -113,20 +121,50 @@ def validate(
     base_dir: Path,
 ) -> list[str]:
     errors: list[str] = []
-    project = project or {}
+    if not isinstance(plan, Mapping):
+        return ["audio plan must be a mapping"]
+    if not isinstance(storyboard, Mapping):
+        return ["storyboard must be a mapping"]
+    if project is None:
+        project = {}
+    elif not isinstance(project, Mapping):
+        return ["project configuration must be a mapping"]
     base_dir = base_dir.resolve()
 
-    if plan.get("speech_track", {}).get("dominant") is not True:
+    speech_track = plan.get("speech_track")
+    if not isinstance(speech_track, Mapping):
+        errors.append("final audio plan speech_track must be a mapping")
+        speech_track = {}
+    if speech_track.get("dominant") is not True:
         errors.append("final audio plan must keep speech dominant")
     if not plan.get("provenance"):
         errors.append("final audio plan must record asset provenance")
 
-    events = [
-        event for event in (storyboard.get("events") or [])
-        if event.get("treatment") != "quiet_source"
-    ]
-    sfx = plan.get("motion_sfx") or {}
-    decisions = sfx.get("event_decisions") or []
+    event_rows = storyboard.get("events")
+    if not isinstance(event_rows, list):
+        errors.append("storyboard events must be a list")
+        event_rows = []
+    events: list[dict[str, Any]] = []
+    for index, event in enumerate(event_rows):
+        if not isinstance(event, Mapping):
+            errors.append(f"storyboard events[{index}] must be a mapping")
+            continue
+        if event.get("treatment") != "quiet_source":
+            events.append(dict(event))
+    sfx = plan.get("motion_sfx")
+    if not isinstance(sfx, Mapping):
+        errors.append("audio plan motion_sfx must be a mapping")
+        sfx = {}
+    decision_rows = sfx.get("event_decisions")
+    if not isinstance(decision_rows, list):
+        errors.append("audio plan motion_sfx event_decisions must be a list")
+        decision_rows = []
+    decisions: list[dict[str, Any]] = []
+    for index, row in enumerate(decision_rows):
+        if not isinstance(row, Mapping):
+            errors.append(f"audio plan motion_sfx event_decisions[{index}] must be a mapping")
+            continue
+        decisions.append(dict(row))
     by_event: dict[str, dict[str, Any]] = {}
     for row in decisions:
         event_id = str(row.get("event_id", ""))
@@ -137,8 +175,20 @@ def validate(
         else:
             by_event[event_id] = row
 
-    sfx_config = project.get("audio", {}).get("sfx", {})
-    perceptual_config = sfx_config.get("perceptual") or {}
+    audio_config = project.get("audio")
+    if not isinstance(audio_config, Mapping):
+        errors.append("project audio configuration must be a mapping")
+        audio_config = {}
+    sfx_config = audio_config.get("sfx")
+    if not isinstance(sfx_config, Mapping):
+        errors.append("project audio.sfx configuration must be a mapping")
+        sfx_config = {}
+    perceptual_config = sfx_config.get("perceptual")
+    if perceptual_config is None:
+        perceptual_config = {}
+    elif not isinstance(perceptual_config, Mapping):
+        errors.append("project audio.sfx.perceptual configuration must be a mapping")
+        perceptual_config = {}
     perceptual_enabled = perceptual_config.get("enabled") is True
     minimum_duration = _number(sfx_config.get("minimum_cue_duration_seconds"), 0.6)
     minimum_level = _number(sfx_config.get("minimum_post_gain_mean_dbfs"), -34.0)
@@ -231,15 +281,24 @@ def validate(
             if asset in last_start and start - last_start[asset] < cooldown:
                 errors.append(f"motion SFX asset repeats inside {cooldown:.1f}s cooldown: {asset}")
             last_start[asset] = start
-        audibility = sfx.get("mix_audibility_check") or {}
+        audibility = sfx.get("mix_audibility_check")
+        if not isinstance(audibility, Mapping):
+            errors.append("audio plan motion_sfx mix_audibility_check must be a mapping")
+            audibility = {}
         if audibility.get("status") != "pass":
             errors.append("motion SFX mixed-preview audibility check is not pass")
         evidence = _resolve(base_dir, audibility.get("evidence"))
         if not evidence or not evidence.is_file():
             errors.append("motion SFX mixed-preview audibility evidence is missing")
 
-    bgm = plan.get("background_music") or {}
-    bgm_config = project.get("audio", {}).get("bgm", {})
+    bgm = plan.get("background_music")
+    if not isinstance(bgm, Mapping):
+        errors.append("audio plan background_music must be a mapping")
+        bgm = {}
+    bgm_config = audio_config.get("bgm")
+    if not isinstance(bgm_config, Mapping):
+        errors.append("project audio.bgm configuration must be a mapping")
+        bgm_config = {}
     mode = bgm.get("mode")
     configured_asset = _resolve(base_dir, bgm_config.get("asset"))
     enabled_by_default = bgm_config.get("enabled_by_default") is True
@@ -252,16 +311,25 @@ def validate(
         preview_volume = _number(bgm.get("preview_volume"), -1.0)
         if not 0.08 <= preview_volume <= 0.12:
             errors.append("authorized BGM preview volume must stay within 0.08-0.12")
-        ducking = bgm.get("ducking") or {}
+        ducking = bgm.get("ducking")
+        if not isinstance(ducking, Mapping):
+            errors.append("audio plan background_music ducking must be a mapping")
+            ducking = {}
         if ducking.get("enabled") is not True or ducking.get("method") != "sidechaincompress":
             errors.append("authorized BGM must use speech-driven sidechaincompress ducking")
         if ducking.get("status") != "pass":
             errors.append("authorized BGM ducking QA is not pass")
-        provenance = bgm.get("provenance") or {}
+        provenance = bgm.get("provenance")
+        if not isinstance(provenance, Mapping):
+            errors.append("audio plan background_music provenance must be a mapping")
+            provenance = {}
         if not provenance.get("authorization") or not provenance.get("sha256"):
             errors.append("authorized BGM lacks authorization and SHA-256 provenance")
     elif mode == "embedded_source":
-        presence = bgm.get("presence_analysis") or {}
+        presence = bgm.get("presence_analysis")
+        if not isinstance(presence, Mapping):
+            errors.append("audio plan background_music presence_analysis must be a mapping")
+            presence = {}
         if presence.get("status") != "present":
             errors.append("embedded BGM was not confirmed by measured presence analysis")
     elif mode == "disabled":

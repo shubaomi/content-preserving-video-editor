@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "candidate_id": "hongrun-portrait-brand-motion-v2-design-freeze-2026-08-12",
+  "candidate": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\portrait-brand-motion-v2\\design-freeze-candidate.json",
+    "sha256": "6ec215c87ae9b9b049f901429b09e92e774ab7ba692558eac7d79d85d91e657e"
+  },
+  "canonical_objective": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\portrait-brand-motion-v2\\goal-objective.md",
+    "sha256": "593da5b11bc07c5188b24fd9e0a2e010472ec60c21677efb94c60a14674407d6"
+  },
+  "decision": "approved_for_implementation",
+  "approved_by": "HongRun",
+  "approved_at": "2026-08-12T05:26:09-07:00",
+  "approval_text": "批准 portrait-brand-motion-v2 design-freeze-candidate，按照实施计划进入下一阶段实现",
+  "implementation_plan": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\portrait-brand-motion-v2\\implementation-plan.md",
+  "retained_gates": {
+    "real_style_reel_window_confirmation_required": true,
+    "named_user_brand_taste_approval_required": true,
+    "full_video_render_before_style_reel_approval": false,
+    "upstream_source_changes_authorized": false,
+    "publication_or_deployment_authorized": false
+  }
+}

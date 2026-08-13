@@ -352,9 +352,10 @@ before the scope's parity artifact exists.
 The resulting `review/creative-review.html` embeds the aligned media, event seek
 markers, source sentence, explanatory value, compiler rationale, target IDs,
 four phases, and audio auditions. Its optional interactive mode is default-off,
-loopback-only, Bearer- and CSRF-protected, path-contained, and hash-bound. A
-`file://` dashboard gets only a narrowly enabled `Origin: null` preflight; the
-tokens are entered at submission time and are never persisted in the page. The
+loopback-only, session-nonce-protected, path-contained, and hash-bound. A
+`file://` dashboard gets only a narrowly enabled `Origin: null` preflight;
+Director generates the short-lived authorization and CSRF values automatically
+for that local session, so the user configures no key. The
 UI can create pending correction proposals only. Approval and correction-ledger
 replay remain separate explicit commands.
 
@@ -542,9 +543,9 @@ validators freshly repeating probe, decode, and loudness measurement. Existing
 evidence images and current file hashes do not make self-declared measurements
 authoritative.
 
-## Schema-v10 execution plane
+## Schema-v11 execution plane
 
-Schema v10 retains the v9 optional capabilities inside existing stages and does not
+Schema v11 retains the v10 optional capabilities inside existing stages and does not
 change the nineteen-stage order. `init-project`, `doctor`, and `preflight` are
 front-door commands. Initialization probes display rotation, orientation,
 streams, duration, and existing-edit evidence. Diagnostics are read-only.
@@ -581,6 +582,88 @@ loopback-only, token/CSRF protected, path allowlisted, and limited to pending
 proposals. A separate CLI validation writes the ledger, refreshes pending
 preference candidates, and invalidates the owning event/stage. It cannot approve
 likeness, sample, render, or publication.
+
+The additive `motion_quality.portrait_brand` plane is default-off for every
+migrated v1-v10 project and for non-HongRun, generic, third-party, and explicit
+screen-tutorial configurations. WP0 adds only configuration and six-contract
+validation: exact profile/energy/motion/sonic/Style-Reel inheritance, current
+absolute file/hash references, non-card deterministic fallback, aligned A/B/C
+comparison, and HongRun-only approval. Rendering remains owned by HyperFrames
+and is not implied by the existence of these contracts.
+
+When explicitly eligible, the Director compiles a source-bound portrait energy
+map and additive PBM-01 through PBM-08 motion contracts. It materializes the
+reusable portrait component JS/CSS inside each generated HyperFrames project
+and binds their hashes in the renderer request. Current WP2 evidence is a
+synthetic mechanical browser/CLI fixture: it can prove typed bindings, painted
+DOM states, registered-timeline seeking, bounds, caption-lane protection, and
+technical preview/render behavior. It does not prove brand taste, recipe value
+on real speech, real-project integration, or user approval.
+
+WP3 routes the same current portrait contracts into a separate sonic compiler,
+then projects PBM-S01 through PBM-S05 decisions into the existing audio plan.
+The local motif library and rights records are content/hash bound; gesture
+landings use EDL-mapped output apex times, and missing assets or explicit SFX
+disablement become per-event silence. Existing FFmpeg audition, full-band cue
+identity, onset, dialogue-relative audibility, true-peak, and sample-mix receipt
+validators remain the only production/mix authority. The Director revalidates
+the library/registry/variant chain, decodes and remeasures reused off/on
+auditions, requires the full cue-bearing sample mix even on non-executing
+resume, and fingerprints every nested authority/evidence byte. Short synthetic MP4
+evidence proves this integration mechanically, not HongRun brand taste.
+
+WP4 adds an isolated Style Reel planning/review plane without changing the
+normal sample stage or automatic master. `style-reel-plan.json` declares the
+frozen A/B/C structures; `style-reel-authorities.json` retains the current paths
+and hashes for source, video-use EDL, source/output transcripts, semantic brief,
+captions, voice stem, audio policy, subject evidence, and profile. The exact
+audio plan and portrait-sonic plan are also current hash-bound authorities for
+each event audition. The off track must decode to the exact voice-stem event
+window; the on track must preserve that voice window and correlate with the
+event's authorized cue asset rather than merely differ in bytes.
+window must be fully covered by the current EDL, and PBM-07 can enter only from
+an independent typed boundary mapped into that window. Three request packets
+name HyperFrames as owner while keeping command execution unset and full-video
+authority false; an explicit current SHA-256-bound HongRun receipt is required before the
+future real-project request can leave the window-confirmation block. After
+fixture reels exist, each direction
+contract binds the common comparison digest, exact event order, structural
+fingerprint, and every entrance/mid/pre-exit/post-exit image. The validator
+normalizes those images before measuring large-scale edge/layout structure,
+requires material differences between directions, observable within-event
+choreography changes, and a clean post-exit. This is a technical fixture gate,
+not proof that rendered media is aesthetically good or that HongRun approves it.
+fully decodes all A/B/C media, recomputes durations and file hashes, and requires
+exactly one video plus one audio stream with the same signature. Synthetic
+evidence writes a non-approvable `pending` review; it never writes
+`awaiting_user`.
+
+`director.py review` discovers a complete Style Reel package and links a
+separate synchronized desktop-primary A/B/C page. The existing loopback review
+server remains the only writable surface; its Bearer, CSRF, project-path and
+hash checks still produce pending proposals only. The Style Reel page and
+multimodal reviewer cannot approve taste or render a full video. The three real
+Style Reels must first pass the WP6 runtime, caption-last, voice/mix and parity
+gate; only then can an explicit HongRun receipt carrying all six explicit
+answers become the first brand-aesthetic approval.
+
+WP7 preserves the original pending review bytes and stores the selected answer
+in a separate SHA-256 integrity receipt bound to the complete WP6 package. The
+hash detects drift; it is not encryption or an identity-authentication claim.
+`portrait_golden.py` then snapshots the selected profile, direction contract,
+review media, four-phase evidence, HyperFrames technical refs, sonic/audio
+identity, configuration, decision receipt, Git base, and current scripts/tests
+tree into a project-local provisional Golden. A separate preference candidate
+contains only the explicit direction and six answers; inferred preferences and
+automatic application are forbidden. The shared profile is not rewritten, and
+the first approval alone cannot change defaults. The second product-demo topic
+supplies repeat-use evidence, but its explicit face/hand/product/caption review
+is still absent, so the opt-in `luminous_intelligence` route remains
+`fixture_validated` and `action_required`. The shared proposed
+profile remains unchanged and production default remains false until a separate
+trusted promotion authority is designed and a new HongRun decision is bound to
+the current profile, implementation, and retained real-project evidence. That
+promotion is not implemented in this release.
 
 The event cache accepts only HyperFrames-owned render/assembly commands with
 explicit frame/audio/visual equivalence. Per-event fingerprints avoid binding

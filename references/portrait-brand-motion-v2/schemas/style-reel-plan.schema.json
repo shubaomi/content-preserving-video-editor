@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hongrun.local/schemas/style-reel-plan-v1.json",
+  "title": "Style Reel Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "plan_id", "project_id", "comparison_basis", "directions", "output_policy"],
+  "properties": {
+    "schema_version": {"const": 1}, "plan_id": {"$ref": "#/$defs/id"}, "project_id": {"$ref": "#/$defs/id"},
+    "comparison_basis": {
+      "type": "object", "additionalProperties": false, "required": ["source", "edl_sha256", "transcript_sha256", "semantic_event_ids", "caption_sha256", "start_seconds", "end_seconds", "audio_policy_sha256"],
+      "properties": {
+        "source": {"$ref": "#/$defs/fileRef"}, "edl_sha256": {"$ref": "#/$defs/sha"}, "transcript_sha256": {"$ref": "#/$defs/sha"},
+        "semantic_event_ids": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}, "caption_sha256": {"$ref": "#/$defs/sha"},
+        "start_seconds": {"type": "number", "minimum": 0}, "end_seconds": {"type": "number", "exclusiveMinimum": 0}, "audio_policy_sha256": {"$ref": "#/$defs/sha"}
+      }
+    },
+    "directions": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/direction"}},
+    "output_policy": {"type": "object", "additionalProperties": false, "required": ["isolated", "may_replace_automatic_master", "full_video_render_authorized"], "properties": {"isolated": {"const": true}, "may_replace_automatic_master": {"const": false}, "full_video_render_authorized": {"const": false}}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"}, "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fileRef": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 3}, "sha256": {"$ref": "#/$defs/sha"}}},
+    "direction": {
+      "type": "object", "additionalProperties": false, "required": ["direction_id", "profile", "structural_fingerprint", "recipe_ids", "energy_tiers", "macro_applicability", "status"],
+      "properties": {
+        "direction_id": {"enum": ["luminous_intelligence", "high_energy_creator", "humanist_cinema"]}, "profile": {"$ref": "#/$defs/fileRef"}, "structural_fingerprint": {"$ref": "#/$defs/sha"},
+        "recipe_ids": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"pattern": "^PBM-0[1-8]$"}}, "energy_tiers": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"enum": ["micro", "meso", "macro"]}},
+        "macro_applicability": {"enum": ["selected", "not_applicable"]}, "macro_reason": {"type": "string", "minLength": 8}, "status": {"const": "planned"}
+      }
+    }
+  }
+}

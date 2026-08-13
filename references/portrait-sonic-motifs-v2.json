@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "registry_id": "hongrun-portrait-sonic-motifs-v2",
+  "status": "proposed",
+  "signature_envelope": ["pulse", "orbit", "focus"],
+  "selection_policy": {
+    "semantic_role_only": true,
+    "fixed_cadence": false,
+    "minimum_cue_quota": false,
+    "random_rotation": false,
+    "speech_is_primary": true
+  },
+  "families": [
+    {
+      "family_id": "PBM-S01",
+      "name": "crystal_pulse",
+      "recipe_ids": ["PBM-01"],
+      "phase": "entrance",
+      "landing_kind": "word",
+      "landing_tolerance_ms": 80,
+      "duration_range_seconds": [0.45, 1.0],
+      "production_ready": false,
+      "variants": [
+        {"variant_id": "PBM-S01-clear", "semantic_roles": ["mark", "explain"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 0.72, "waveform": "sine", "notes": [[0.00, 0.22, 660, 0.75, -0.25], [0.19, 0.30, 990, 0.48, 0.25]], "noise_level": 0.004, "tail_seconds": 0.20}},
+        {"variant_id": "PBM-S01-soft", "semantic_roles": ["relate", "resolve", "transition"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 0.88, "waveform": "triangle", "notes": [[0.00, 0.34, 523.25, 0.58, 0.20], [0.27, 0.42, 783.99, 0.40, -0.20]], "noise_level": 0.001, "tail_seconds": 0.24}}
+      ]
+    },
+    {
+      "family_id": "PBM-S02",
+      "name": "orbit_sweep",
+      "recipe_ids": ["PBM-02", "PBM-03", "PBM-06"],
+      "phase": "explain",
+      "landing_kind": "visual_or_gesture",
+      "landing_tolerance_ms": 120,
+      "duration_range_seconds": [0.7, 1.6],
+      "production_ready": false,
+      "variants": [
+        {"variant_id": "PBM-S02-orbit", "semantic_roles": ["explain", "relate"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 1.08, "waveform": "sine", "notes": [[0.00, 0.72, 330, 0.42, -0.75, 550], [0.36, 0.52, 660, 0.28, 0.65, 440]], "noise_level": 0.018, "tail_seconds": 0.28}},
+        {"variant_id": "PBM-S02-depth", "semantic_roles": ["mark", "transition", "resolve"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 1.34, "waveform": "triangle", "notes": [[0.00, 0.88, 247, 0.38, 0.72, 392], [0.54, 0.56, 494, 0.30, -0.62, 622]], "noise_level": 0.010, "tail_seconds": 0.34}}
+      ]
+    },
+    {
+      "family_id": "PBM-S03",
+      "name": "contrast_dyad",
+      "recipe_ids": ["PBM-04"],
+      "phase": "explain",
+      "landing_kind": "word",
+      "landing_tolerance_ms": 80,
+      "duration_range_seconds": [0.8, 1.8],
+      "production_ready": false,
+      "variants": [
+        {"variant_id": "PBM-S03-balanced", "semantic_roles": ["relate", "explain"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 1.18, "waveform": "sine", "notes": [[0.00, 0.42, 392, 0.48, -0.55], [0.46, 0.48, 587.33, 0.48, 0.55]], "noise_level": 0.002, "tail_seconds": 0.24}},
+        {"variant_id": "PBM-S03-shift", "semantic_roles": ["mark", "transition", "resolve"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 1.46, "waveform": "triangle", "notes": [[0.00, 0.52, 349.23, 0.45, -0.60], [0.58, 0.62, 698.46, 0.40, 0.60]], "noise_level": 0.006, "tail_seconds": 0.28}}
+      ]
+    },
+    {
+      "family_id": "PBM-S04",
+      "name": "chapter_lift",
+      "recipe_ids": ["PBM-05", "PBM-07"],
+      "phase": "entrance",
+      "landing_kind": "chapter",
+      "landing_tolerance_ms": 180,
+      "duration_range_seconds": [1.0, 2.2],
+      "production_ready": false,
+      "variants": [
+        {"variant_id": "PBM-S04-rise", "semantic_roles": ["transition", "explain"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 1.62, "waveform": "sine", "notes": [[0.00, 0.72, 220, 0.32, -0.45, 440], [0.48, 0.70, 440, 0.36, 0.00, 659.25], [0.92, 0.54, 659.25, 0.30, 0.45]], "noise_level": 0.020, "tail_seconds": 0.34}},
+        {"variant_id": "PBM-S04-open", "semantic_roles": ["mark", "relate", "resolve"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 1.96, "waveform": "triangle", "notes": [[0.00, 0.86, 196, 0.30, 0.55, 293.66], [0.62, 0.80, 392, 0.34, -0.35, 523.25], [1.18, 0.56, 587.33, 0.28, 0.35]], "noise_level": 0.012, "tail_seconds": 0.38}}
+      ]
+    },
+    {
+      "family_id": "PBM-S05",
+      "name": "warm_resolve",
+      "recipe_ids": ["PBM-08"],
+      "phase": "hold",
+      "landing_kind": "word",
+      "landing_tolerance_ms": 80,
+      "duration_range_seconds": [1.2, 2.2],
+      "production_ready": false,
+      "variants": [
+        {"variant_id": "PBM-S05-warm", "semantic_roles": ["resolve", "relate"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 1.74, "waveform": "triangle", "notes": [[0.00, 0.62, 261.63, 0.36, -0.30], [0.32, 0.78, 329.63, 0.30, 0.00], [0.66, 0.84, 392, 0.28, 0.30]], "noise_level": 0.002, "tail_seconds": 0.42}},
+        {"variant_id": "PBM-S05-light", "semantic_roles": ["mark", "explain", "transition"], "rights_basis": "project_owned_original_synthesis", "synthesis": {"duration_seconds": 2.08, "waveform": "sine", "notes": [[0.00, 0.72, 293.66, 0.30, 0.35], [0.42, 0.88, 440, 0.27, -0.25], [0.94, 0.84, 587.33, 0.24, 0.20]], "noise_level": 0.006, "tail_seconds": 0.44}}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hongrun.local/schemas/portrait-brand-profile-v1.json",
+  "title": "Portrait Brand Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "profile_version", "identity_mode", "status", "direction", "signature_primitives", "palettes", "typography", "motion_character", "sonic_family_ids", "forbidden_defaults", "promotion"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_id": {"const": "hongrun"},
+    "profile_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "identity_mode": {"const": "self"},
+    "status": {"enum": ["proposed", "user_approved", "provisional_golden", "production_default", "rejected"]},
+    "direction": {"enum": ["luminous_intelligence", "high_energy_creator", "humanist_cinema"]},
+    "signature_primitives": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"enum": ["pulse_dot", "orbit_trace", "focus_beam", "split_plane"]}},
+    "palettes": {
+      "type": "object", "additionalProperties": false, "required": ["light", "dark"],
+      "properties": {
+        "light": {"$ref": "#/$defs/palette"},
+        "dark": {"$ref": "#/$defs/palette"}
+      }
+    },
+    "typography": {
+      "type": "object", "additionalProperties": false, "required": ["font_family", "fallback", "techniques", "max_phrase_characters"],
+      "properties": {
+        "font_family": {"type": "string", "minLength": 1},
+        "fallback": {"type": "string", "minLength": 1},
+        "techniques": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"enum": ["variable_weight", "masked_reveal", "baseline_travel", "outline_to_fill", "tracking_shift", "depth_layering"]}},
+        "max_phrase_characters": {"type": "integer", "minimum": 2, "maximum": 14}
+      }
+    },
+    "motion_character": {
+      "type": "object", "additionalProperties": false, "required": ["traits", "energy_tiers", "reduced_motion_fallback"],
+      "properties": {
+        "traits": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "energy_tiers": {"type": "array", "const": ["quiet", "micro", "meso", "macro"]},
+        "reduced_motion_fallback": {"type": "string", "minLength": 1}
+      }
+    },
+    "sonic_family_ids": {"type": "array", "minItems": 3, "maxItems": 5, "uniqueItems": true, "items": {"pattern": "^PBM-S0[1-5]$"}},
+    "forbidden_defaults": {"type": "array", "minItems": 4, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "promotion": {
+      "type": "object", "additionalProperties": false, "required": ["required_real_project_count", "required_named_user", "golden_required"],
+      "properties": {
+        "required_real_project_count": {"const": 2},
+        "required_named_user": {"const": "HongRun"},
+        "golden_required": {"const": true}
+      }
+    }
+  },
+  "$defs": {
+    "palette": {
+      "type": "object", "minProperties": 4, "additionalProperties": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"}
+    }
+  }
+}

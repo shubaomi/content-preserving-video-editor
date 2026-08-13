@@ -7,7 +7,7 @@ import math
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 10
+CURRENT_PROJECT_SCHEMA_VERSION = 11
 IDENTITY_MODES = {"self", "third_party", "generic"}
 REQUIRED_ASSET_APPLICABILITY = {"required", "optional", "not_applicable"}
 DELIVERABLE_READINESS = {"ready", "asset_ready", "not_applicable"}
@@ -119,6 +119,23 @@ RELEASE_PACK_DEFAULTS = {
     "publication_authorization": None,
     "output_dir": "exports/release-pack",
 }
+PORTRAIT_BRAND_DIRECTIONS = [
+    "luminous_intelligence",
+    "high_energy_creator",
+    "humanist_cinema",
+]
+PORTRAIT_BRAND_DEFAULTS: dict[str, Any] = {
+    "enabled": False,
+    "profile_path": None,
+    "grammar_version": 2,
+    "style_direction": None,
+    "require_user_brand_approval": True,
+    "style_reel": {
+        "enabled": False,
+        "target_duration_seconds": 38.0,
+        "directions": PORTRAIT_BRAND_DIRECTIONS,
+    },
+}
 
 
 def _required_asset_defaults(caption_delivery: str) -> dict[str, dict[str, str]]:
@@ -193,7 +210,7 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     """Return a current in-memory copy without modifying the source mapping/YAML."""
     if not isinstance(project, dict):
         raise ValueError("project configuration must be a mapping")
-    _source_version(project)
+    source_version = _source_version(project)
     migrated = deepcopy(project)
     source = migrated.setdefault("source", {})
     if not isinstance(source, dict):
@@ -240,6 +257,90 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     advanced_evidence = advanced_runtimes.setdefault("evidence", {})
     if not isinstance(advanced_evidence, dict):
         raise ValueError("motion_quality.advanced_runtimes.evidence must be a mapping")
+    if source_version < 11:
+        motion_quality["portrait_brand"] = deepcopy(PORTRAIT_BRAND_DEFAULTS)
+    portrait_brand = motion_quality.setdefault(
+        "portrait_brand", deepcopy(PORTRAIT_BRAND_DEFAULTS)
+    )
+    if not isinstance(portrait_brand, dict):
+        raise ValueError("motion_quality.portrait_brand must be a mapping")
+    allowed_portrait_keys = set(PORTRAIT_BRAND_DEFAULTS)
+    unknown_portrait_keys = set(portrait_brand) - allowed_portrait_keys
+    if unknown_portrait_keys:
+        raise ValueError(
+            "motion_quality.portrait_brand has unsupported fields: "
+            + ", ".join(sorted(unknown_portrait_keys))
+        )
+    for key, value in PORTRAIT_BRAND_DEFAULTS.items():
+        portrait_brand.setdefault(key, deepcopy(value))
+    if not isinstance(portrait_brand.get("enabled"), bool):
+        raise ValueError("motion_quality.portrait_brand.enabled must be a boolean")
+    profile_path = portrait_brand.get("profile_path")
+    if profile_path is not None and (
+        not isinstance(profile_path, str) or not profile_path.strip()
+    ):
+        raise ValueError("motion_quality.portrait_brand.profile_path must be a path or null")
+    grammar_version = portrait_brand.get("grammar_version")
+    if isinstance(grammar_version, bool) or grammar_version != 2:
+        raise ValueError("motion_quality.portrait_brand.grammar_version must be 2")
+    style_direction = portrait_brand.get("style_direction")
+    if style_direction is not None and style_direction not in PORTRAIT_BRAND_DIRECTIONS:
+        raise ValueError("motion_quality.portrait_brand.style_direction is unsupported")
+    if portrait_brand.get("require_user_brand_approval") is not True:
+        raise ValueError(
+            "motion_quality.portrait_brand.require_user_brand_approval must be true"
+        )
+    style_reel = portrait_brand.get("style_reel")
+    if not isinstance(style_reel, dict):
+        raise ValueError("motion_quality.portrait_brand.style_reel must be a mapping")
+    allowed_style_reel_keys = set(PORTRAIT_BRAND_DEFAULTS["style_reel"])
+    unknown_style_reel_keys = set(style_reel) - allowed_style_reel_keys
+    if unknown_style_reel_keys:
+        raise ValueError(
+            "motion_quality.portrait_brand.style_reel has unsupported fields: "
+            + ", ".join(sorted(unknown_style_reel_keys))
+        )
+    for key, value in PORTRAIT_BRAND_DEFAULTS["style_reel"].items():
+        style_reel.setdefault(key, deepcopy(value))
+    if not isinstance(style_reel.get("enabled"), bool):
+        raise ValueError("motion_quality.portrait_brand.style_reel.enabled must be a boolean")
+    duration = style_reel.get("target_duration_seconds")
+    if (
+        isinstance(duration, bool)
+        or not isinstance(duration, (int, float))
+        or not math.isfinite(float(duration))
+        or not 30.0 <= float(duration) <= 45.0
+    ):
+        raise ValueError(
+            "motion_quality.portrait_brand.style_reel.target_duration_seconds "
+            "must be finite and in [30, 45]"
+        )
+    style_reel["target_duration_seconds"] = float(duration)
+    if style_reel.get("directions") != PORTRAIT_BRAND_DIRECTIONS:
+        raise ValueError(
+            "motion_quality.portrait_brand.style_reel.directions must equal the frozen A/B/C set"
+        )
+    if portrait_brand["enabled"]:
+        if motion_quality["enabled"] is not True:
+            raise ValueError(
+                "motion_quality.enabled must be true when portrait_brand is enabled"
+            )
+        if identity_mode != "self":
+            raise ValueError(
+                "motion_quality.portrait_brand requires identity.mode self"
+            )
+        if not isinstance(profile_path, str) or not profile_path.strip():
+            raise ValueError(
+                "motion_quality.portrait_brand.profile_path is required when enabled"
+            )
+        if source.get("content_type") not in {None, "talking_head"}:
+            raise ValueError(
+                "motion_quality.portrait_brand requires talking_head source content"
+            )
+        if style_direction is None:
+            raise ValueError(
+                "motion_quality.portrait_brand.style_direction is required when enabled"
+            )
     required_assets = delivery.setdefault("required_assets", {})
     if not isinstance(required_assets, dict):
         raise ValueError("delivery.required_assets must be a mapping")

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hongrun.local/schemas/style-reel-review-v1.json",
+  "title": "Style Reel Review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "review_id", "plan", "reels", "automated", "multimodal", "user", "status"],
+  "properties": {
+    "schema_version": {"const": 1}, "review_id": {"$ref": "#/$defs/id"}, "plan": {"$ref": "#/$defs/fileRef"},
+    "reels": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/reel"}},
+    "automated": {"type": "object", "additionalProperties": false, "required": ["status", "report"], "properties": {"status": {"enum": ["pending", "pass", "failed", "stale"]}, "report": {"$ref": "#/$defs/fileRef"}}},
+    "multimodal": {"type": "object", "additionalProperties": false, "required": ["actor", "recommendation", "reason", "evidence_refs"], "properties": {"actor": {"type": "string", "minLength": 1}, "recommendation": {"enum": ["not_run", "reject", "revise", "recommend"]}, "reason": {"type": "string"}, "evidence_refs": {"type": "array", "items": {"$ref": "#/$defs/id"}}}},
+    "user": {"$ref": "#/$defs/userDecision"},
+    "status": {"enum": ["pending", "automated_failed", "awaiting_user", "approved", "rejected", "revision_requested", "stale"]}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"}, "sha": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "fileRef": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 3}, "sha256": {"$ref": "#/$defs/sha"}}},
+    "reel": {"type": "object", "additionalProperties": false, "required": ["direction_id", "media", "duration_seconds", "contract_sha256", "event_ids", "phase_evidence"], "properties": {"direction_id": {"enum": ["luminous_intelligence", "high_energy_creator", "humanist_cinema"]}, "media": {"$ref": "#/$defs/fileRef"}, "duration_seconds": {"type": "number", "minimum": 28, "maximum": 47}, "contract_sha256": {"$ref": "#/$defs/sha"}, "event_ids": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}, "phase_evidence": {"type": "array", "minItems": 4, "items": {"$ref": "#/$defs/fileRef"}}}},
+    "userDecision": {
+      "type": "object", "additionalProperties": false, "required": ["actor", "decision", "format_fit", "person_primary", "expressive_not_noisy", "semantic_help", "sonic_fit", "repeat_use_willingness", "reason"],
+      "properties": {
+        "actor": {"const": "HongRun"}, "decision": {"enum": ["pending", "select", "reject_all", "revise"]}, "selected_direction_id": {"enum": ["luminous_intelligence", "high_energy_creator", "humanist_cinema"]},
+        "format_fit": {"enum": ["pending", "yes", "no"]}, "person_primary": {"enum": ["pending", "yes", "no"]}, "expressive_not_noisy": {"enum": ["pending", "yes", "no"]}, "semantic_help": {"enum": ["pending", "yes", "no"]}, "sonic_fit": {"enum": ["pending", "yes", "no", "not_applicable"]}, "repeat_use_willingness": {"enum": ["pending", "yes", "no"]},
+        "reason": {"type": "string"}, "reviewed_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

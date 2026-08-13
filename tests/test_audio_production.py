@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import struct
 import subprocess
@@ -22,6 +23,7 @@ from audio_production import (  # noqa: E402
     materialize_sample_review_mix,
     produce_audio_assets,
     resolve_bgm,
+    validate_sample_audio_evidence,
     validate_sample_review_mix_receipt,
 )
 from motion_contracts import validate_contract_schema  # noqa: E402
@@ -30,6 +32,11 @@ from director_adapters import AdapterRunner  # noqa: E402
 
 
 class AudioProductionTests(unittest.TestCase):
+    @staticmethod
+    def _json_hash(value: object) -> str:
+        return hashlib.sha256(json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
     @staticmethod
     def _write_tone(path: Path, *, duration: float, frequency: float, amplitude: float) -> None:
         sample_rate = 48_000
@@ -175,6 +182,312 @@ class AudioProductionTests(unittest.TestCase):
                 "two_note_contrast",
             )
 
+    def test_portrait_audio_production_projects_compiler_decisions_into_existing_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            storyboard = root / "storyboard.json"
+            storyboard.write_text(json.dumps({"events": [{
+                "id": "render-1", "semantic_event_id": "semantic-1",
+                "start": 1.0, "end": 2.5,
+                "visual_structure": {"layout_archetype": "portrait-phrase"},
+            }]}), encoding="utf-8")
+            semantic = root / "semantic-brief.json"
+            semantic_payload = {"events": [{
+                "id": "semantic-1", "semantic_role": "mark",
+                "output_start": 1.0, "output_end": 2.5,
+                "audio_decision": {"type": "cue"},
+            }]}
+            semantic.write_text(json.dumps(semantic_payload), encoding="utf-8")
+            profile = root / "profile.json"
+            profile.write_bytes((
+                ROOT / "references" / "portrait-brand-profiles"
+                / "hongrun-portrait-brand-v2.0.0.json"
+            ).read_bytes())
+            motion = root / "portrait-motion-contracts.json"
+            motion.write_text(json.dumps({"schema_version": 1, "contracts": [{
+                "semantic_event_id": "semantic-1", "primary_recipe_id": "PBM-01",
+                "energy_tier": "micro",
+                "output_window": {"start_seconds": 1.0, "end_seconds": 2.5},
+                "input_hashes": {"semantic_brief": self._json_hash(semantic_payload)},
+            }]}), encoding="utf-8")
+            source = root / "source.wav"
+            self._write_tone(source, duration=4.0, frequency=180.0, amplitude=0.04)
+
+            outputs = produce_audio_assets(
+                storyboard=storyboard,
+                semantic_brief=semantic,
+                project={"audio": {"sfx": {"enabled": True}, "bgm": {"enabled": False}}},
+                project_root=root,
+                output_dir=root / "audio",
+                source_audio=source,
+                runner=AdapterRunner(root / "adapter-state.json"),
+                portrait_motion_contracts=motion,
+                portrait_profile=profile,
+            )
+
+            plan = json.loads((root / "audio-plan.json").read_text(encoding="utf-8"))
+            decision = plan["motion_sfx"]["event_decisions"][0]
+            self.assertEqual(decision["event_id"], "render-1")
+            self.assertEqual(decision["semantic_event_id"], "semantic-1")
+            self.assertEqual(decision["family"], "PBM-S01")
+            self.assertTrue((root / decision["asset"]).is_file())
+            self.assertEqual(
+                plan["provenance"]["portrait_sonic_plan"]["actual_mix_owner"],
+                "existing_ffmpeg_audio_production_and_qa",
+            )
+            sonic_plan = motion.parent / "portrait-sonic-plan.json"
+            sonic_report = motion.parent / "portrait-sonic-compile-report.json"
+            self.assertIn(sonic_plan, outputs)
+            self.assertIn(sonic_report, outputs)
+            manifest = json.loads((root / "audio-sfx-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["assets"][0]["event_id"], "render-1")
+            self.assertEqual(manifest["assets"][0]["license"], "project-owned original synthesis")
+
+    def test_portrait_audio_production_respects_explicit_sfx_disable_per_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            storyboard = root / "storyboard.json"
+            storyboard.write_text(json.dumps({"events": [{
+                "id": "render-1", "semantic_event_id": "semantic-1",
+                "start": 1.0, "end": 2.5,
+                "visual_structure": {"layout_archetype": "portrait-phrase"},
+            }]}), encoding="utf-8")
+            semantic = root / "semantic-brief.json"
+            semantic_payload = {"events": [{
+                "id": "semantic-1", "semantic_role": "mark",
+                "output_start": 1.0, "output_end": 2.5,
+                "audio_decision": {"type": "cue"},
+            }]}
+            semantic.write_text(json.dumps(semantic_payload), encoding="utf-8")
+            profile = root / "profile.json"
+            profile.write_bytes((
+                ROOT / "references" / "portrait-brand-profiles"
+                / "hongrun-portrait-brand-v2.0.0.json"
+            ).read_bytes())
+            motion = root / "portrait-motion-contracts.json"
+            motion.write_text(json.dumps({"schema_version": 1, "contracts": [{
+                "semantic_event_id": "semantic-1", "primary_recipe_id": "PBM-01",
+                "energy_tier": "micro",
+                "output_window": {"start_seconds": 1.0, "end_seconds": 2.5},
+                "input_hashes": {"semantic_brief": self._json_hash(semantic_payload)},
+            }]}), encoding="utf-8")
+            source = root / "source.wav"
+            self._write_tone(source, duration=4.0, frequency=180.0, amplitude=0.04)
+
+            produce_audio_assets(
+                storyboard=storyboard,
+                semantic_brief=semantic,
+                project={"audio": {"sfx": {"enabled": False}, "bgm": {"enabled": False}}},
+                project_root=root,
+                output_dir=root / "audio",
+                source_audio=source,
+                runner=AdapterRunner(root / "adapter-state.json"),
+                portrait_motion_contracts=motion,
+                portrait_profile=profile,
+            )
+
+            plan = json.loads((root / "audio-plan.json").read_text(encoding="utf-8"))
+            decision = plan["motion_sfx"]["event_decisions"][0]
+            self.assertEqual(decision["event_id"], "render-1")
+            self.assertEqual(decision["semantic_event_id"], "semantic-1")
+            self.assertEqual(decision["decision"], "intentionally_silent")
+            self.assertIn("explicitly disabled", decision["reason"])
+            self.assertEqual(
+                plan["motion_sfx"]["mix_audibility_check"]["status"],
+                "not_applicable",
+            )
+            manifest = json.loads((root / "audio-sfx-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["assets"], [])
+
+    def test_portrait_motif_survives_real_short_sample_mix_and_receipt_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "portrait-sample.mp4"
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "color=c=0x172033:s=320x568:r=25:d=4",
+                "-f", "lavfi", "-i", "sine=frequency=180:sample_rate=48000:duration=4",
+                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264",
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(candidate),
+            ], check=True)
+            storyboard = root / "storyboard.json"
+            storyboard.write_text(json.dumps({"events": [{
+                "id": "render-1", "semantic_event_id": "semantic-1",
+                "start": 1.0, "end": 2.5,
+                "visual_structure": {"layout_archetype": "portrait-phrase"},
+            }]}), encoding="utf-8")
+            semantic = root / "semantic-brief.json"
+            semantic_payload = {"events": [{
+                "id": "semantic-1", "semantic_role": "mark",
+                "output_start": 1.0, "output_end": 2.5,
+                "audio_decision": {"type": "cue"},
+            }]}
+            semantic.write_text(json.dumps(semantic_payload), encoding="utf-8")
+            profile = root / "profile.json"
+            profile.write_bytes((
+                ROOT / "references" / "portrait-brand-profiles"
+                / "hongrun-portrait-brand-v2.0.0.json"
+            ).read_bytes())
+            motion = root / "portrait-motion-contracts.json"
+            motion.write_text(json.dumps({"schema_version": 1, "contracts": [{
+                "semantic_event_id": "semantic-1", "primary_recipe_id": "PBM-01",
+                "energy_tier": "micro",
+                "output_window": {"start_seconds": 1.0, "end_seconds": 2.5},
+                "input_hashes": {"semantic_brief": self._json_hash(semantic_payload)},
+            }]}), encoding="utf-8")
+
+            produce_audio_assets(
+                storyboard=storyboard,
+                semantic_brief=semantic,
+                project={"audio": {"sfx": {"enabled": True}, "bgm": {"enabled": False}}},
+                project_root=root,
+                output_dir=root / "audio",
+                source_audio=candidate,
+                runner=AdapterRunner(root / "adapter-state.json"),
+                portrait_motion_contracts=motion,
+                portrait_profile=profile,
+            )
+            audio_plan = root / "audio-plan.json"
+            review_audio = root / "sample-qa" / "review-audio"
+            artifacts = materialize_sample_audio_evidence(
+                storyboard=storyboard,
+                audio_plan=audio_plan,
+                candidate_media=candidate,
+                output_dir=review_audio,
+            )
+            evidence = root / "sample-qa" / "mix-audibility.json"
+            measured = json.loads(evidence.read_text(encoding="utf-8"))
+            self.assertEqual(measured["status"], "pass")
+            self.assertEqual(measured["events"][0]["event_id"], "render-1")
+            self.assertEqual(measured["events"][0]["semantic_event_id"], "semantic-1")
+            self.assertLessEqual(measured["events"][0]["perceptual"]["onset_error_ms"], 80.0)
+            self.assertIn(evidence.resolve(), artifacts)
+            evidence_hash = hashlib.sha256(evidence.read_bytes()).hexdigest()
+            self.assertEqual(validate_sample_audio_evidence(
+                audio_plan=audio_plan, storyboard=storyboard,
+                candidate_media=candidate, evidence_path=evidence,
+                output_dir=review_audio, expected_evidence_path=evidence,
+                declared_evidence_sha256=evidence_hash,
+            ), [])
+
+            measured["events"][0]["residual_mean_dbfs"] += 12.0
+            evidence.write_text(json.dumps(measured), encoding="utf-8")
+            forged_hash = hashlib.sha256(evidence.read_bytes()).hexdigest()
+            self.assertTrue(any("remeasured" in row for row in validate_sample_audio_evidence(
+                audio_plan=audio_plan, storyboard=storyboard,
+                candidate_media=candidate, evidence_path=evidence,
+                output_dir=review_audio, expected_evidence_path=evidence,
+                declared_evidence_sha256=forged_hash,
+            )))
+            materialize_sample_audio_evidence(
+                storyboard=storyboard, audio_plan=audio_plan,
+                candidate_media=candidate, output_dir=review_audio,
+            )
+
+            for value in (float("nan"), float("inf"), float("-inf")):
+                forged = json.loads(evidence.read_text(encoding="utf-8"))
+                forged["events"][0]["residual_mean_dbfs"] = value
+                forged["events"][0]["perceptual"]["dialogue_window_lufs"] = value
+                forged["events"][0]["perceptual"]["onset_error_ms"] = value
+                evidence.write_text(json.dumps(forged), encoding="utf-8")
+                forged_hash = hashlib.sha256(evidence.read_bytes()).hexdigest()
+                with self.subTest(non_finite=value):
+                    errors = validate_sample_audio_evidence(
+                        audio_plan=audio_plan, storyboard=storyboard,
+                        candidate_media=candidate, evidence_path=evidence,
+                        output_dir=review_audio, expected_evidence_path=evidence,
+                        declared_evidence_sha256=forged_hash,
+                    )
+                    self.assertTrue(any("non-finite" in row for row in errors), errors)
+                materialize_sample_audio_evidence(
+                    storyboard=storyboard, audio_plan=audio_plan,
+                    candidate_media=candidate, output_dir=review_audio,
+                )
+
+            mixed = root / "portrait-sample-with-sfx.mp4"
+            receipt = root / "sample-review-mix.json"
+            materialize_sample_review_mix(
+                candidate_media=candidate,
+                audio_plan=audio_plan,
+                output=mixed,
+                receipt_path=receipt,
+            )
+            self.assertEqual(
+                validate_sample_review_mix_receipt(
+                    json.loads(receipt.read_text(encoding="utf-8")),
+                    candidate_media=candidate,
+                    audio_plan=audio_plan,
+                    output=mixed,
+                ),
+                [],
+            )
+
+    def test_sample_audio_evidence_rejects_self_signed_non_media_bytes(self) -> None:
+        from audio_production import _decision_binding
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidate = root / "candidate.mp4"
+            candidate.write_bytes(b"not media")
+            cue = root / "assets" / "sfx" / "cue.wav"
+            cue.parent.mkdir(parents=True)
+            cue.write_bytes(b"not audio")
+            storyboard = root / "storyboard.json"
+            storyboard.write_text(json.dumps({"events": [{
+                "id": "event-1", "semantic_event_id": "semantic-1",
+                "start": 0.0, "end": 1.0, "treatment": "portrait",
+            }]}), encoding="utf-8")
+            audio_plan = root / "audio-plan.json"
+            decision = {
+                "event_id": "event-1", "decision": "cue", "family": "PBM-S01",
+                "asset": "assets/sfx/cue.wav", "start": 0.0,
+                "duration_seconds": 1.0, "volume": 0.1,
+                "post_gain_mean_dbfs": -30.0,
+            }
+            audio_plan.write_text(json.dumps({
+                "motion_sfx": {"event_decisions": [decision]},
+            }), encoding="utf-8")
+            review_audio = root / "sample-qa" / "review-audio"
+            review_audio.mkdir(parents=True)
+            off = review_audio / "semantic-1-sfx-off.wav"
+            on = review_audio / "semantic-1-sfx-on.wav"
+            off.write_bytes(b"same junk")
+            on.write_bytes(b"same junk")
+            artifact = lambda path: {
+                "path": str(path.resolve()),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+            evidence = root / "sample-qa" / "mix-audibility.json"
+            evidence.write_text(json.dumps({
+                "schema_version": 1, "status": "pass",
+                "storyboard": artifact(storyboard),
+                "candidate_media": artifact(candidate),
+                "events": [{
+                    "event_id": "event-1", "semantic_event_id": "semantic-1",
+                    "decision": "cue", "status": "pass",
+                    "decision_binding": _decision_binding(decision, audio_plan),
+                    "excerpt_start_seconds": 0.0,
+                    "sfx_off": artifact(off), "sfx_on": artifact(on),
+                    "off_mean_dbfs": -20.0, "on_mean_dbfs": -20.0,
+                    "residual_mean_dbfs": 0.0, "on_peak_dbfs": -1.0,
+                    "mix_gain_delta_db": 0.0,
+                    "perceptual": {
+                        "motif_fingerprint": {"sha256": "0" * 64},
+                        "dialogue_window_lufs": -20.0, "cue_window_lufs": -30.0,
+                        "dialogue_cue_delta_lu": 10.0, "onset_error_ms": 0.0,
+                        "audibility_status": "audible_without_masking",
+                    },
+                }],
+            }), encoding="utf-8")
+
+            errors = validate_sample_audio_evidence(
+                audio_plan=audio_plan, storyboard=storyboard,
+                candidate_media=candidate, evidence_path=evidence,
+                output_dir=review_audio, expected_evidence_path=evidence,
+                declared_evidence_sha256=hashlib.sha256(evidence.read_bytes()).hexdigest(),
+            )
+            self.assertTrue(any("decodable" in row or "audio evidence" in row for row in errors), errors)
+
     def test_materializes_hash_bound_sfx_auditions_and_real_mix_measurement(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -283,7 +596,8 @@ class AudioProductionTests(unittest.TestCase):
             }]}), encoding="utf-8")
             plan = root / "audio-plan.json"
             plan.write_text(json.dumps({"motion_sfx": {"event_decisions": [{
-                "event_id": "e1", "decision": "cue", "asset": "assets/sfx/cue.wav",
+                "event_id": "render-e1", "semantic_event_id": "e1",
+                "decision": "cue", "asset": "assets/sfx/cue.wav",
                 "family": "mark", "start": .8, "duration_seconds": 1.0,
                 "volume": .05, "reason": "semantic mark",
             }]}}), encoding="utf-8")
@@ -306,7 +620,7 @@ class AudioProductionTests(unittest.TestCase):
             evidence.write_text(json.dumps({
                 "candidate_media": {"path": str(final_mix.resolve()), "sha256": __import__("hashlib").sha256(final_mix.read_bytes()).hexdigest()},
                 "status": "pass", "events": [{
-                "event_id": "e1", "decision": "cue", "status": "pass",
+                "event_id": "render-e1", "decision": "cue", "status": "pass",
                 "decision_binding": _decision_binding(decision, plan),
                 "sfx_off": {"path": str(off.resolve()), "sha256": __import__("hashlib").sha256(off.read_bytes()).hexdigest()},
                 "sfx_on": {"path": str(on.resolve()), "sha256": __import__("hashlib").sha256(on.read_bytes()).hexdigest()},
@@ -315,7 +629,8 @@ class AudioProductionTests(unittest.TestCase):
             }]}), encoding="utf-8")
             license_receipt = root / "audio-sfx-manifest.json"
             license_receipt.write_text(json.dumps({"assets": [{
-                "event_id": "e1", "frozen_path": str(cue.resolve()),
+                "event_id": "render-e1", "semantic_event_id": "e1",
+                "frozen_path": str(cue.resolve()),
                 "sha256": __import__("hashlib").sha256(cue.read_bytes()).hexdigest(),
                 "license": "project-owned generated asset",
             }]}), encoding="utf-8")

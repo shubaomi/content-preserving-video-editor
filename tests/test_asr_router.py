@@ -214,6 +214,35 @@ class AsrRouterTests(unittest.TestCase):
             with self.subTest(row=row), self.assertRaisesRegex(ValueError, "invalid ASR word"):
                 normalize_transcript({"words": [row]}, backend="local_faster_whisper")
 
+    def test_normalization_repairs_zero_duration_word_only_inside_a_real_gap(self) -> None:
+        normalized = normalize_transcript({"words": [
+            {"text": "不会掉", "start": 45.65, "end": 46.29},
+            {"text": "然后", "start": 47.21, "end": 47.21},
+            {"text": "这", "start": 47.21, "end": 48.47},
+        ]}, backend="local_faster_whisper")
+        repaired = normalized["words"][1]
+        self.assertEqual(repaired["text"], "然后")
+        self.assertAlmostEqual(repaired["start"], 47.01)
+        self.assertAlmostEqual(repaired["end"], 47.21)
+        self.assertTrue(normalized["normalization"]["text_or_timing_modified"])
+        self.assertEqual(normalized["normalization"]["timing_repairs"], [{
+            "word_id": "w000001",
+            "word_index": 1,
+            "reason": "zero_duration_word_assigned_to_preceding_silence",
+            "original_start": 47.21,
+            "original_end": 47.21,
+            "repaired_start": 47.01,
+            "repaired_end": 47.21,
+        }])
+
+    def test_normalization_rejects_zero_duration_word_without_safe_gap(self) -> None:
+        with self.assertRaisesRegex(ValueError, "invalid ASR word timing"):
+            normalize_transcript({"words": [
+                {"text": "前", "start": 0.0, "end": 0.5},
+                {"text": "坏", "start": 0.5, "end": 0.5},
+                {"text": "后", "start": 0.5, "end": 0.9},
+            ]}, backend="local_faster_whisper")
+
     def test_combines_hotword_transcription_with_precise_alignment(self) -> None:
         route = choose_pipeline({"backends": {
             "local_faster_whisper": {"available": True},

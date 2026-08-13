@@ -5,6 +5,7 @@ import tempfile
 import unittest
 import hashlib
 import json
+import math
 from pathlib import Path
 
 
@@ -164,6 +165,66 @@ class AudioQaTests(unittest.TestCase):
 
         self.assertTrue(any("authorized SFX root" in error for error in errors), errors)
 
+    def test_malformed_nested_audio_payloads_fail_closed(self) -> None:
+        cases = [
+            ({**self.plan, "motion_sfx": "bad"}, self.storyboard, "motion_sfx"),
+            ({**self.plan, "motion_sfx": {"event_decisions": "bad"}}, self.storyboard, "event_decisions"),
+            ({**self.plan, "motion_sfx": {"event_decisions": [1]}}, self.storyboard, "event_decisions[0]"),
+            (self.plan, {"events": [1]}, "storyboard events[0]"),
+        ]
+        for plan, storyboard, expected in cases:
+            with self.subTest(expected=expected):
+                errors = validate(plan, storyboard, self.project, base_dir=self.root)
+                self.assertTrue(any(expected in row for row in errors), errors)
+
+    def test_all_malformed_audio_qa_subrecords_fail_closed(self) -> None:
+        cases = []
+        project = json.loads(json.dumps(self.project))
+        project["audio"]["sfx"]["perceptual"] = "bad"
+        cases.append((self.plan, project, "perceptual"))
+        plan = json.loads(json.dumps(self.plan))
+        plan["motion_sfx"]["mix_audibility_check"] = "bad"
+        cases.append((plan, self.project, "mix_audibility_check"))
+        for field in ("ducking", "provenance"):
+            plan = json.loads(json.dumps(self.plan))
+            plan["background_music"][field] = "bad"
+            cases.append((plan, self.project, field))
+        plan = json.loads(json.dumps(self.plan))
+        plan["background_music"] = {
+            "mode": "embedded_source", "enabled": True, "presence_analysis": "bad",
+        }
+        cases.append((plan, self.project, "presence_analysis"))
+
+        for plan, project, expected in cases:
+            with self.subTest(expected=expected):
+                errors = validate(plan, self.storyboard, project, base_dir=self.root)
+                self.assertTrue(any(expected in row for row in errors), errors)
+
+    def test_non_finite_audio_measurements_cannot_pass(self) -> None:
+        for value in (float("nan"), float("inf"), float("-inf")):
+            plan = json.loads(json.dumps(self.plan))
+            plan["motion_sfx"]["event_decisions"][0]["duration_seconds"] = value
+            plan["motion_sfx"]["event_decisions"][0]["post_gain_mean_dbfs"] = value
+            with self.subTest(field="cue", value=value):
+                errors = validate(plan, self.storyboard, self.project, base_dir=self.root)
+                self.assertTrue(any("e1" in row for row in errors), errors)
+
+        self.plan["motion_sfx"]["event_decisions"][1] = {
+            "event_id": "e2", "decision": "intentionally_silent", "reason": "dense speech",
+        }
+        self._enable_perceptual_policy()
+        evidence_path = Path(self.plan["motion_sfx"]["perceptual_evidence"]["path"])
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        evidence["events"][0]["onset_error_ms"] = float("nan")
+        evidence["events"][0]["dialogue_window_lufs"] = float("nan")
+        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+        self.plan["motion_sfx"]["perceptual_evidence"]["sha256"] = hashlib.sha256(
+            evidence_path.read_bytes()
+        ).hexdigest()
+        errors = validate(self.plan, self.storyboard, self.project, base_dir=self.root)
+        self.assertTrue(any("onset" in row for row in errors), errors)
+        self.assertTrue(any("dialogue_window_lufs" in row for row in errors), errors)
+
     def _enable_perceptual_policy(self) -> None:
         self.project["audio"]["sfx"]["perceptual"] = {
             "enabled": True,
@@ -236,6 +297,33 @@ class AudioQaTests(unittest.TestCase):
 
         self.assertTrue(any("onset" in error for error in errors), errors)
         self.assertTrue(any("dialogue_harmed" in error for error in errors), errors)
+
+    def test_perceptual_onset_uses_absolute_event_specific_portrait_tolerance(self) -> None:
+        self.plan["motion_sfx"]["event_decisions"][1] = {
+            "event_id": "e2", "decision": "intentionally_silent", "reason": "dense speech",
+        }
+        self.plan["motion_sfx"]["event_decisions"][0]["portrait_landing_tolerance_ms"] = 120.0
+        self._enable_perceptual_policy()
+        evidence_path = Path(self.plan["motion_sfx"]["perceptual_evidence"]["path"])
+
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        evidence["events"][0]["onset_error_ms"] = 100.0
+        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+        self.plan["motion_sfx"]["perceptual_evidence"]["sha256"] = hashlib.sha256(
+            evidence_path.read_bytes()
+        ).hexdigest()
+        errors = validate(self.plan, self.storyboard, self.project, base_dir=self.root)
+        self.assertFalse(any("onset" in row for row in errors), errors)
+
+        for onset in (121.0, -121.0, -500.0):
+            evidence["events"][0]["onset_error_ms"] = onset
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            self.plan["motion_sfx"]["perceptual_evidence"]["sha256"] = hashlib.sha256(
+                evidence_path.read_bytes()
+            ).hexdigest()
+            with self.subTest(onset=onset):
+                errors = validate(self.plan, self.storyboard, self.project, base_dir=self.root)
+                self.assertTrue(any("120.0 ms" in row for row in errors), errors)
 
 
 if __name__ == "__main__":

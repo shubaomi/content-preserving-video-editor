@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import hmac
 import json
-import os
+import secrets
 from dataclasses import dataclass
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -132,10 +131,10 @@ def validate_request(
             raise RequestRejected("OPTIONS request body is not accepted")
         return
     expected_auth = f"Bearer {config.auth_token}"
-    if not hmac.compare_digest(normalized.get("authorization", ""), expected_auth):
+    if not secrets.compare_digest(normalized.get("authorization", ""), expected_auth):
         raise RequestRejected("review server token is invalid", status=401)
     if method == "POST":
-        if not hmac.compare_digest(normalized.get("x-csrf-token", ""), config.csrf_token):
+        if not secrets.compare_digest(normalized.get("x-csrf-token", ""), config.csrf_token):
             raise RequestRejected("review server CSRF token is invalid", status=403)
         if "transfer-encoding" in normalized:
             raise RequestRejected("chunked request bodies are not accepted", status=411)
@@ -193,7 +192,7 @@ def _hash_bound_files(
         path = _target_path(config, row.get("path"))
         expected = str(row.get("sha256") or "").lower()
         actual = sha256_file(path)
-        if not hmac.compare_digest(expected, actual):
+        if not secrets.compare_digest(expected, actual):
             raise RequestRejected(f"{field}[{index}] hash evidence is stale", status=409)
         result.append({"path": str(path), "sha256": actual})
     return result
@@ -223,7 +222,7 @@ def propose_event_action(
     target = _target_path(config, proposal.get("target_path"))
     target_hash = sha256_file(target)
     expected_hash = str(proposal.get("target_sha256") or "").lower()
-    if not expected_hash or not hmac.compare_digest(expected_hash, target_hash):
+    if not expected_hash or not secrets.compare_digest(expected_hash, target_hash):
         raise RequestRejected("event action target hash is stale", status=409)
     related_files = _hash_bound_files(config, proposal.get("related_files"))
     canonical_payload = {
@@ -395,8 +394,8 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--max-body-bytes", type=int, default=64 * 1024)
     args = parser.parse_args()
-    token = os.environ.get("DIRECTOR_REVIEW_TOKEN", "")
-    csrf = os.environ.get("DIRECTOR_REVIEW_CSRF_TOKEN", "")
+    token = secrets.token_urlsafe(32)
+    csrf = secrets.token_urlsafe(32)
     config = ReviewServerConfig(
         root=Path(args.root), proposal_dir=Path(args.proposal_dir),
         auth_token=token, csrf_token=csrf, max_body_bytes=args.max_body_bytes,

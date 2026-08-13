@@ -6,7 +6,7 @@ import html
 import ipaddress
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 from director_contracts import sha256_file
@@ -74,7 +74,7 @@ def _validated_interactive_api_url(value: str | None) -> str | None:
 
 def _creative_review_section(
     review_path: Path | None, motion_design_contract_path: Path | None,
-    interactive_api_url: str | None,
+    interactive_api_url: str | None, interactive_session: Mapping[str, str] | None,
 ) -> str:
     if review_path is None or not review_path.is_file():
         return ""
@@ -92,7 +92,12 @@ def _creative_review_section(
         motion_design_contract_path is not None and motion_design_contract_path.is_file()
     ) else None
     proposal_target_hash = sha256_file(proposal_target) if proposal_target else ""
-    interactive = interactive_api_url is not None and proposal_target is not None
+    interactive = (
+        interactive_api_url is not None and proposal_target is not None
+        and isinstance(interactive_session, Mapping)
+        and bool(interactive_session.get("authorization"))
+        and bool(interactive_session.get("csrf"))
+    )
     event_cards: list[str] = []
     for row in review.get("event_comparisons") or []:
         event_id = str(row.get("semantic_event_id") or row.get("event_id") or "")
@@ -146,15 +151,16 @@ def _creative_review_section(
     proposal_script = ""
     if interactive:
         endpoint = json.dumps(interactive_api_url, ensure_ascii=False)
+        authorization = json.dumps(interactive_session["authorization"], ensure_ascii=False)
+        csrf = json.dumps(interactive_session["csrf"], ensure_ascii=False)
         proposal_script = f"""<script>
 const proposalEndpoint={endpoint};
+const proposalAuthorization={authorization};
+const proposalCsrf={csrf};
 document.querySelectorAll('form.proposal').forEach(function(form){{
 form.addEventListener('submit',async function(event){{
 event.preventDefault();
 const status=form.querySelector('.proposal-status');
-const token=window.prompt('输入 DIRECTOR_REVIEW_TOKEN（不会写入页面）');
-const csrf=window.prompt('输入 DIRECTOR_REVIEW_CSRF_TOKEN（不会写入页面）');
-if(!token||!csrf){{status.textContent='已取消：缺少本机审核令牌';return;}}
 const body={{status:'pending',action:form.elements.action.value,event_id:form.dataset.event,
 target_path:form.dataset.target,target_sha256:form.dataset.targetSha256,
 selector:form.elements.selector.value,before_value:form.elements.before_value.value,
@@ -163,7 +169,7 @@ approver:form.elements.approver.value,timestamp:new Date().toISOString(),
 related_files:[{{path:form.dataset.target,sha256:form.dataset.targetSha256}}]}};
 status.textContent='提交中…';
 try{{const response=await fetch(proposalEndpoint,{{method:'POST',headers:{{
-'Authorization':'Bearer '+token,'X-CSRF-Token':csrf,'Content-Type':'application/json'}},
+'Authorization':'Bearer '+proposalAuthorization,'X-CSRF-Token':proposalCsrf,'Content-Type':'application/json'}},
 body:JSON.stringify(body)}});const payload=await response.json();
 if(!response.ok)throw new Error(payload.error||('HTTP '+response.status));
 status.textContent='已生成 pending proposal：'+payload.proposal_id;
@@ -173,7 +179,7 @@ status.textContent='已生成 pending proposal：'+payload.proposal_id;
 </script>"""
     return f"""
 <section class="creative-review"><h2>Paired creative review</h2>
-<p>技术状态：<strong>{html.escape(str((review.get('automated_status') or {{}}).get('status')))}</strong> · 用户决定：<strong>{html.escape(str(user.get('decision') or 'pending'))}</strong></p>
+<p>技术状态：<strong>{html.escape(str((review.get('automated_status') or {}).get('status')))}</strong> · 用户决定：<strong>{html.escape(str(user.get('decision') or 'pending'))}</strong></p>
 <p>页面只展示证据和创建待审建议；不会替用户批准，也不会直接修改工程。</p>
 <div class="media-pair"><article><h3>Baseline</h3><video id="baseline-video" controls preload="metadata" src="{html.escape(_artifact_uri(baseline), quote=True)}"></video></article>
 <article><h3>Candidate</h3><video id="candidate-video" controls preload="metadata" src="{html.escape(_artifact_uri(candidate), quote=True)}"></video></article></div>
@@ -188,7 +194,9 @@ def generate_dashboard(
     *, project_root: Path, director_root: Path, output: Path,
     creative_review_path: Path | None = None,
     motion_design_contract_path: Path | None = None,
+    style_reel_dashboard_path: Path | None = None,
     interactive_api_url: str | None = None,
+    interactive_session: Mapping[str, str] | None = None,
 ) -> Path:
     project_root = project_root.resolve()
     director_root = director_root.resolve()
@@ -215,7 +223,15 @@ def generate_dashboard(
     interactive_api_url = _validated_interactive_api_url(interactive_api_url)
     creative = _creative_review_section(
         creative_review_path, motion_design_contract_path, interactive_api_url,
+        interactive_session,
     )
+    style_reel_link = ""
+    if style_reel_dashboard_path is not None and style_reel_dashboard_path.is_file():
+        style_reel_link = (
+            '<section><h2>HongRun portrait Style Reel</h2>'
+            '<p><a href="{}">Open synchronized Source / A / B / C review</a></p>'
+            '<p>This separate surface is pending-only and cannot approve brand taste.</p></section>'
+        ).format(html.escape(style_reel_dashboard_path.resolve().as_uri(), quote=True))
     dashboard_mode = (
         "Interactive evidence dashboard — it creates pending proposals only and never edits media, "
         "applies corrections, or replaces human approval."
@@ -239,7 +255,7 @@ pre{{max-height:320px;overflow:auto;white-space:pre-wrap;font-size:12px}}table{{
 @media(max-width:760px){{.media-pair,.phases{{grid-template-columns:1fr}}.event-head{{align-items:flex-start;flex-direction:column}}}}
 </style></head><body><header><h1>Director Review</h1><p>{html.escape(dashboard_mode)}</p>
 <p>Status: <strong>{html.escape(str(state.get('status')))}</strong> · Current stage: {html.escape(str(state.get('current_stage') or 'none'))}</p></header>
-<main>{creative}<section><h2>Stage progress</h2><table><thead><tr><th>Stage</th><th>Status</th><th>Note</th></tr></thead><tbody>{stage_rows}</tbody></table></section>
+<main>{creative}{style_reel_link}<section><h2>Stage progress</h2><table><thead><tr><th>Stage</th><th>Status</th><th>Note</th></tr></thead><tbody>{stage_rows}</tbody></table></section>
 <section><h2>Sample / Full snapshots, covers, source evidence and Universal MP4</h2><p>Snapshot phases include entrance, midpoint, pre-exit and post-exit when available.</p><ul>{evidence}</ul></section>
 <div class="grid">{known_cards}</div></main></body></html>"""
     output.write_text(document, encoding="utf-8")

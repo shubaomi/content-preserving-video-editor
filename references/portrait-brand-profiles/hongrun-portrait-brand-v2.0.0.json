@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "profile_id": "hongrun",
+  "profile_version": "2.0.0",
+  "identity_mode": "self",
+  "status": "proposed",
+  "direction": "luminous_intelligence",
+  "signature_primitives": [
+    "pulse_dot",
+    "orbit_trace",
+    "focus_beam",
+    "split_plane"
+  ],
+  "palettes": {
+    "light": {
+      "canvas": "#F7F7F2",
+      "ink": "#102A2A",
+      "mint": "#2DD4BF",
+      "cyan": "#22D3EE",
+      "amber": "#F59E0B",
+      "violet": "#8B5CF6"
+    },
+    "dark": {
+      "canvas": "#071A1A",
+      "ink": "#F8FAFC",
+      "mint": "#34D399",
+      "cyan": "#22D3EE",
+      "warm": "#F6C177",
+      "violet": "#A78BFA"
+    }
+  },
+  "typography": {
+    "font_family": "Noto Sans SC",
+    "fallback": "Microsoft YaHei, PingFang SC, sans-serif",
+    "techniques": [
+      "variable_weight",
+      "masked_reveal",
+      "baseline_travel",
+      "outline_to_fill",
+      "depth_layering"
+    ],
+    "max_phrase_characters": 10
+  },
+  "motion_character": {
+    "traits": [
+      "intelligent",
+      "energetic",
+      "light",
+      "precise",
+      "human"
+    ],
+    "energy_tiers": [
+      "quiet",
+      "micro",
+      "meso",
+      "macro"
+    ],
+    "reduced_motion_fallback": "Preserve hierarchy with opacity, color, and variable-weight changes while removing camera movement, path travel, spring overshoot, and particle motion."
+  },
+  "sonic_family_ids": [
+    "PBM-S01",
+    "PBM-S02",
+    "PBM-S03",
+    "PBM-S04",
+    "PBM-S05"
+  ],
+  "forbidden_defaults": [
+    "product_dashboard_card",
+    "rounded_keyword_card_above_head",
+    "fixed_cadence",
+    "minimum_event_quota",
+    "random_template_rotation",
+    "caption_duplication",
+    "constant_punch_zoom",
+    "untracked_face_or_hand_overlap",
+    "unrelated_full_frame_ip_art",
+    "copied_proprietary_preset"
+  ],
+  "promotion": {
+    "required_real_project_count": 2,
+    "required_named_user": "HongRun",
+    "golden_required": true
+  }
+}

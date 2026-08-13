@@ -18,6 +18,9 @@ from director import (  # noqa: E402
     Director,
     ROLE_CONTRACT,
     _cover_delivery_gate,
+    _artifact_records,
+    _artifact_records_current,
+    _json_file_content_sha256,
     _json_sha256,
     _review_evidence_files,
     _semantic_inheritance_contract,
@@ -165,6 +168,7 @@ class DirectorTests(unittest.TestCase):
             "events": storyboard_events,
         }
         (project / "storyboard.json").write_text(json.dumps(storyboard), encoding="utf-8")
+
         categories = {}
         for index, name in enumerate(VISUAL_VOCABULARY):
             if index < 4:
@@ -187,6 +191,41 @@ class DirectorTests(unittest.TestCase):
         director.semantic_brief_path.write_text(json.dumps(full_brief), encoding="utf-8")
         director._start("production_contract")
         director.stage_production_contract()
+
+    def test_review_discovers_only_a_complete_isolated_portrait_style_reel_package(self) -> None:
+        director = Director(self.project)
+        self.assertIsNone(director._generate_portrait_style_reel_dashboard_if_ready())
+        director.portrait_style_reel_plan_path.parent.mkdir(parents=True, exist_ok=True)
+        director.portrait_style_reel_plan_path.write_text("{}", encoding="utf-8")
+        with self.assertRaisesRegex(DirectorContractError, "incomplete"):
+            director._generate_portrait_style_reel_dashboard_if_ready()
+        required = (
+            director.portrait_style_reel_authority_manifest_path,
+            director.portrait_style_reel_review_path,
+            director.portrait_style_reel_context_path,
+            *director.portrait_style_reel_contract_paths().values(),
+        )
+        for path in required:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("{}", encoding="utf-8")
+        with patch("director.generate_style_reel_dashboard") as generate:
+            observed = director._generate_portrait_style_reel_dashboard_if_ready(
+                interactive_api_url="http://127.0.0.1:8765/api/proposals",
+                interactive_session={"authorization": "auto-a", "csrf": "auto-c"},
+            )
+        self.assertEqual(director.portrait_style_reel_dashboard_path, observed)
+        self.assertEqual(
+            director.portrait_style_reel_authority_manifest_path,
+            generate.call_args.kwargs["authority_manifest_path"],
+        )
+        self.assertEqual(
+            "http://127.0.0.1:8765/api/proposals",
+            generate.call_args.kwargs["interactive_api_url"],
+        )
+        self.assertEqual(
+            {"authorization": "auto-a", "csrf": "auto-c"},
+            generate.call_args.kwargs["interactive_session"],
+        )
 
     def _write_passing_sample_evidence(self, director: Director) -> tuple[Path, Path, Path]:
         sample = director.sample_hyperframes_project
@@ -956,6 +995,181 @@ class DirectorTests(unittest.TestCase):
         self.assertTrue(playbook.is_file())
         self.assertEqual(json.loads(playbook.read_text(encoding="utf-8"))["orientation"], "landscape")
 
+    def test_semantic_authority_hash_uses_canonical_json_not_file_bytes(self) -> None:
+        brief = self.root / "pretty-brief.json"
+        payload = {"events": [{"id": "e1", "approved_visible_copy": ["重点"]}]}
+        brief.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.assertEqual(_json_file_content_sha256(brief), _json_sha256(payload))
+        self.assertNotEqual(_json_file_content_sha256(brief), sha256_file(brief))
+
+    def test_portrait_profile_drift_reopens_brand_motion_stage(self) -> None:
+        profile = self.root / "profile.json"
+        profile.write_text(
+            (ROOT / "references" / "portrait-brand-profiles" / "hongrun-portrait-brand-v2.0.0.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config.update({
+            "version": 11,
+            "schema_version": 11,
+            "identity": {"mode": "self"},
+            "motion_quality": {
+                "enabled": True,
+                "portrait_brand": {
+                    "enabled": True,
+                    "profile_path": str(profile),
+                    "grammar_version": 2,
+                    "style_direction": "luminous_intelligence",
+                    "require_user_brand_approval": True,
+                    "style_reel": {
+                        "enabled": True,
+                        "target_duration_seconds": 38.0,
+                        "directions": [
+                            "luminous_intelligence", "high_energy_creator", "humanist_cinema",
+                        ],
+                    },
+                },
+            },
+        })
+        config["source"].update({"content_type": "talking_head"})
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director._complete("brand_motion_playbook", [profile])
+        self.assertEqual(director.state["stages"]["brand_motion_playbook"]["status"], "complete")
+
+        profile.write_text(profile.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        resumed = Director(self.project)
+        self.assertEqual(resumed.state["stages"]["brand_motion_playbook"]["status"], "pending")
+
+    def test_portrait_motion_request_binds_compiler_renderer_payload_and_runtime_gate(self) -> None:
+        profile = self.root / "profile.json"
+        profile.write_text(
+            (ROOT / "references" / "portrait-brand-profiles" / "hongrun-portrait-brand-v2.0.0.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config.update({
+            "version": 11, "schema_version": 11,
+            "identity": {"mode": "self"},
+            "motion_quality": {"enabled": True, "portrait_brand": {
+                "enabled": True, "profile_path": str(profile), "grammar_version": 2,
+                "style_direction": "luminous_intelligence",
+                "require_user_brand_approval": True,
+            }},
+        })
+        config["source"].update({"content_type": "talking_head"})
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        motion_dir = director.motion_design_dir("sample")
+        motion_dir.mkdir(parents=True, exist_ok=True)
+        for name, payload in (
+            ("motion-design-contract.json", {"opportunities": [], "selected_event_ids": []}),
+            ("hyperframes-choreography.json", {"events": []}),
+            ("portrait-motion-contracts.json", {"contracts": []}),
+            ("portrait-component-assets.json", {"outputs": []}),
+            ("portrait-renderer-payload.json", {
+                "schema_version": 1, "component_api": "hongrun-portrait-components-v2",
+                "events": [], "payload_sha256": "0" * 64,
+            }),
+        ):
+            (motion_dir / name).write_text(json.dumps(payload), encoding="utf-8")
+        request = director._motion_design_request(
+            "sample", {"opportunities": [], "selected_event_ids": []},
+        )
+        portrait = request["portrait_brand_motion_v2"]
+        self.assertEqual(
+            portrait["renderer_payload"],
+            str((motion_dir / "portrait-renderer-payload.json").resolve()),
+        )
+        self.assertEqual(
+            portrait["runtime_evidence"],
+            str(director.portrait_runtime_evidence_path("sample").resolve()),
+        )
+
+    def test_portrait_runtime_gate_fails_closed_when_evidence_is_missing(self) -> None:
+        profile = self.root / "profile.json"
+        profile.write_text(
+            (ROOT / "references" / "portrait-brand-profiles" / "hongrun-portrait-brand-v2.0.0.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config.update({
+            "version": 11, "schema_version": 11,
+            "identity": {"mode": "self"},
+            "motion_quality": {"enabled": True, "portrait_brand": {
+                "enabled": True, "profile_path": str(profile), "grammar_version": 2,
+                "style_direction": "luminous_intelligence",
+                "require_user_brand_approval": True,
+            }},
+        })
+        config["source"].update({"content_type": "talking_head"})
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        payload = director.motion_design_dir("sample") / "portrait-renderer-payload.json"
+        payload.parent.mkdir(parents=True, exist_ok=True)
+        payload.write_text(json.dumps({
+            "schema_version": 1, "component_api": "hongrun-portrait-components-v2",
+            "events": [], "payload_sha256": "0" * 64,
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(DirectorContractError, "runtime evidence"):
+            director._validate_portrait_runtime_gate("sample")
+
+    def test_portrait_runtime_gate_requires_fresh_browser_replay(self) -> None:
+        director = Director(self.project)
+        payload = director.portrait_renderer_payload_path("sample")
+        evidence = director.portrait_runtime_evidence_path("sample")
+        payload.parent.mkdir(parents=True, exist_ok=True)
+        evidence.parent.mkdir(parents=True, exist_ok=True)
+        payload.write_text("{}", encoding="utf-8")
+        evidence.write_text("{}", encoding="utf-8")
+        with patch("director.validate_portrait_runtime_evidence", return_value=[]), patch(
+            "director.replay_portrait_runtime_gate", return_value=[]
+        ) as replay:
+            self.assertIn(evidence, director._validate_portrait_runtime_gate("sample"))
+            replay.assert_called_once()
+        with patch("director.validate_portrait_runtime_evidence", return_value=[]), patch(
+            "director.replay_portrait_runtime_gate", return_value=["browser replay failed"]
+        ):
+            with self.assertRaisesRegex(DirectorContractError, "browser replay"):
+                director._validate_portrait_runtime_gate("sample")
+
+    def test_portrait_runtime_gate_tracks_nested_evidence_for_resume(self) -> None:
+        director = Director(self.project)
+        payload_path = director.portrait_renderer_payload_path("sample")
+        evidence_path = director.portrait_runtime_evidence_path("sample")
+        evidence_path.parent.mkdir(parents=True, exist_ok=True)
+        paths = {
+            name: self.root / f"{name}.bin"
+            for name in ("capture", "engine", "fixture", "component", "phase", "repeat", "asset")
+        }
+        for name, path in paths.items():
+            path.write_bytes(name.encode())
+        payload_path.write_text(json.dumps({
+            "events": [{"bindings": {"renderAssetRef": {
+                "path": str(paths["asset"]), "sha256": sha256_file(paths["asset"]),
+            }}}],
+        }), encoding="utf-8")
+        evidence_path.write_text(json.dumps({
+            "capture_tool": {"path": str(paths["capture"])},
+            "runtime_engine": {"path": str(paths["engine"])},
+            "fixture": {"path": str(paths["fixture"])},
+            "component_assets": [{"path": str(paths["component"])}],
+            "recipes": [{
+                "phases": [{"snapshot": {"path": str(paths["phase"])}}],
+                "seek_repeat_snapshot": {"path": str(paths["repeat"])},
+            }],
+        }), encoding="utf-8")
+        with patch("director.validate_portrait_runtime_evidence", return_value=[]), patch(
+            "director.replay_portrait_runtime_gate", return_value=[]
+        ):
+            artifacts = director._validate_portrait_runtime_gate("sample")
+        for path in [evidence_path, payload_path, *paths.values()]:
+            self.assertIn(path.resolve(), [item.resolve() for item in artifacts])
+        records = _artifact_records(artifacts)
+        self.assertTrue(_artifact_records_current(records))
+        paths["phase"].unlink()
+        self.assertFalse(_artifact_records_current(records))
+
     def test_sample_approval_creates_golden_editorial_baseline_when_enabled(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["editorial_regression"] = {"enabled": True}
@@ -1225,7 +1439,11 @@ class DirectorTests(unittest.TestCase):
         director._start("inspect")
         with patch("director.subprocess.run", side_effect=fake_analysis) as run:
             director.stage_inspect()
-        self.assertEqual(run.call_count, 1)
+        input_mode_calls = [
+            call for call in run.call_args_list
+            if "analyze_existing_edit.py" in " ".join(str(value) for value in call.args[0])
+        ]
+        self.assertEqual(len(input_mode_calls), 1)
         self.assertEqual(director.context.input_mode, "polish_existing")
         evidence = json.loads((director.root / "input-mode-evidence.json").read_text(encoding="utf-8"))
         self.assertIn("high_confidence_burned_captions", evidence["signals"])
@@ -1911,6 +2129,72 @@ class DirectorTests(unittest.TestCase):
         self.assertIn(str(audio_plan), director.state["stages"]["audio"]["artifacts"])
         self.assertEqual(director.state["stages"]["audio"]["readiness"], "asset_ready")
 
+    def test_portrait_audio_stage_passes_current_profile_and_motion_contracts_to_existing_producer(self) -> None:
+        profile = self.root / "profile.json"
+        profile.write_bytes((
+            ROOT / "references" / "portrait-brand-profiles"
+            / "hongrun-portrait-brand-v2.0.0.json"
+        ).read_bytes())
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config.update({
+            "version": 11,
+            "schema_version": 11,
+            "identity": {"mode": "self"},
+            "motion_quality": {"enabled": True, "portrait_brand": {
+                "enabled": True,
+                "profile_path": str(profile),
+                "grammar_version": 2,
+                "style_direction": "luminous_intelligence",
+                "require_user_brand_approval": True,
+            }},
+            "audio": {"production": {"enabled": True}, "bgm": {"enabled": False}},
+        })
+        config["source"].update({"content_type": "talking_head"})
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project, execute_external=True)
+        director.sample_hyperframes_project.mkdir(parents=True, exist_ok=True)
+        storyboard = director.sample_hyperframes_project / "storyboard.json"
+        storyboard.write_text(json.dumps({"events": []}), encoding="utf-8")
+        motion = director.motion_design_dir("sample") / "portrait-motion-contracts.json"
+        motion.parent.mkdir(parents=True, exist_ok=True)
+        motion.write_text(json.dumps({"contracts": []}), encoding="utf-8")
+        director.semantic_brief_path.write_text(json.dumps({"events": []}), encoding="utf-8")
+        audio_plan = director.sample_hyperframes_project / "audio-plan.json"
+        audio_plan.write_text(json.dumps({
+            "schema_version": 3,
+            "motion_sfx": {"event_decisions": [{
+                "event_id": "stale-generic", "decision": "intentionally_silent",
+                "reason": "pre-existing generic plan must not bypass portrait sonic compilation",
+            }]},
+        }), encoding="utf-8")
+
+        def fake_produce(**kwargs):
+            self.assertEqual(kwargs["portrait_motion_contracts"], motion)
+            self.assertEqual(kwargs["portrait_profile"], profile.resolve())
+            (motion.parent / "portrait-sonic-plan.json").write_text(
+                json.dumps({"fixture": True}), encoding="utf-8"
+            )
+            audio_plan.write_text(json.dumps({
+                "schema_version": 3,
+                "speech_track": {"dominant": True},
+                "motion_sfx": {"event_decisions": []},
+                "background_music": {
+                    "mode": "disabled", "enabled": False,
+                    "reason": "explicitly disabled", "explicitly_disabled": True,
+                },
+                "provenance": {"source_audio": str(director.context.source_video)},
+            }), encoding="utf-8")
+            return [audio_plan, motion, profile]
+
+        director._start("audio")
+        with patch("director.produce_audio_assets", side_effect=fake_produce) as produce, \
+                patch("director.validate_portrait_sonic_projection", return_value=[]), \
+                patch("director.portrait_sonic_plan_artifacts", return_value=[]):
+            director.stage_audio()
+
+        self.assertEqual(produce.call_count, 1)
+        self.assertEqual(director.state["stages"]["audio"]["readiness"], "asset_ready")
+
     def test_audio_stage_does_not_meter_deterministic_local_sfx_when_bgm_is_disabled(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["audio"] = {
@@ -2165,6 +2449,112 @@ class DirectorTests(unittest.TestCase):
         ))
         self.assertEqual(readiness["status"], "contract_ready")
         self.assertTrue(readiness["validation_errors"])
+
+    def test_audio_resume_reopens_when_projected_cue_rights_disappear(self) -> None:
+        director = Director(self.project)
+        project = director.sample_hyperframes_project
+        cue = project / "assets" / "sfx" / "portrait-brand-v2" / "cue.wav"
+        rights = project / "assets" / "sfx" / "portrait-brand-v2" / "rights" / "cue.rights.json"
+        cue.parent.mkdir(parents=True, exist_ok=True)
+        rights.parent.mkdir(parents=True, exist_ok=True)
+        cue.write_bytes(b"cue")
+        rights.write_text("{}", encoding="utf-8")
+        storyboard = project / "storyboard.json"
+        storyboard.write_text(json.dumps({"events": [{
+            "id": "e1", "start": 1.0, "end": 2.0, "treatment": "mark",
+        }]}), encoding="utf-8")
+        audio_plan = project / "audio-plan.json"
+        audio_plan.write_text(json.dumps({
+            "motion_sfx": {"event_decisions": [{
+                "event_id": "e1", "decision": "cue",
+                "asset": str(cue.relative_to(project)).replace("\\", "/"),
+                "rights_evidence": str(rights.relative_to(project)).replace("\\", "/"),
+            }]},
+        }), encoding="utf-8")
+
+        director._complete("audio", [
+            storyboard, audio_plan, *(__import__("director")._audio_plan_asset_files(
+                json.loads(audio_plan.read_text(encoding="utf-8")), project,
+            )),
+        ])
+        self.assertTrue(_artifact_records_current(
+            director.state["stages"]["audio"]["artifact_records"]
+        ))
+        rights.unlink()
+        self.assertFalse(_artifact_records_current(
+            director.state["stages"]["audio"]["artifact_records"]
+        ))
+        resumed = Director(self.project)
+        self.assertEqual(resumed.state["stages"]["audio"]["status"], "pending")
+
+    def test_portrait_audio_resume_requires_current_full_sample_mix(self) -> None:
+        profile = self.root / "profile.json"
+        profile.write_bytes((
+            ROOT / "references" / "portrait-brand-profiles"
+            / "hongrun-portrait-brand-v2.0.0.json"
+        ).read_bytes())
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config.update({
+            "version": 11, "schema_version": 11,
+            "identity": {"mode": "self"},
+            "motion_quality": {"enabled": True, "portrait_brand": {
+                "enabled": True, "profile_path": str(profile),
+                "grammar_version": 2, "style_direction": "luminous_intelligence",
+                "require_user_brand_approval": True,
+            }},
+        })
+        config["source"].update({"content_type": "talking_head"})
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        project = director.sample_hyperframes_project
+        cue = project / "assets" / "sfx" / "cue.wav"
+        cue.parent.mkdir(parents=True, exist_ok=True)
+        cue.write_bytes(b"cue")
+        (project / "storyboard.json").write_text(json.dumps({"events": [{
+            "id": "e1", "start": 1.0, "end": 2.0, "treatment": "mark",
+        }]}), encoding="utf-8")
+        evidence = director.creative_review_audio_dir.parent / "mix-audibility.json"
+        evidence.parent.mkdir(parents=True, exist_ok=True)
+        evidence.write_text("{}", encoding="utf-8")
+        (project / "audio-plan.json").write_text(json.dumps({
+            "motion_sfx": {
+                "event_decisions": [{
+                    "event_id": "e1", "decision": "cue", "asset": "assets/sfx/cue.wav",
+                }],
+                "mix_audibility_check": {
+                    "status": "pass", "evidence": str(evidence.resolve()),
+                    "evidence_sha256": sha256_file(evidence),
+                },
+            },
+        }), encoding="utf-8")
+        motion_dir = director.motion_design_dir("sample")
+        motion_dir.mkdir(parents=True, exist_ok=True)
+        (motion_dir / "portrait-sonic-plan.json").write_text("{}", encoding="utf-8")
+        (motion_dir / "portrait-motion-contracts.json").write_text("{}", encoding="utf-8")
+
+        patches = (
+            patch("director.validate_audio_plan", return_value=[]),
+            patch("director.validate_portrait_sonic_projection", return_value=[]),
+            patch("director.portrait_sonic_plan_artifacts", return_value=[]),
+            patch("director.validate_sample_audio_evidence", return_value=[]),
+            patch("director.sample_audio_evidence_artifacts", return_value=[evidence]),
+        )
+        with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            director._start("audio")
+            director.stage_audio()
+        self.assertEqual(director.state["stages"]["audio"]["readiness"], "contract_ready")
+        readiness = json.loads((director.root / "audio-readiness.json").read_text(encoding="utf-8"))
+        self.assertTrue(any("full-sample mix" in row for row in readiness["validation_errors"]))
+
+        director.sample_candidate_sfx_path.parent.mkdir(parents=True, exist_ok=True)
+        director.sample_candidate_sfx_path.write_bytes(b"mixed")
+        director.sample_review_mix_receipt_path.write_text("{}", encoding="utf-8")
+        with patches[0], patches[1], patches[2], patches[3], patches[4], \
+                patch("director.validate_sample_review_mix_receipt", return_value=[]):
+            director._start("audio")
+            director.stage_audio()
+        self.assertEqual(director.state["stages"]["audio"]["readiness"], "asset_ready")
+        self.assertIn(str(director.sample_candidate_sfx_path), director.state["stages"]["audio"]["artifacts"])
 
     def test_non_object_audio_plan_and_storyboard_fail_closed(self) -> None:
         for plan_payload, storyboard_payload in (([], {"events": []}), ({}, [])):

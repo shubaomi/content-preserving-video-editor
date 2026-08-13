@@ -20,11 +20,21 @@ from director_contracts import (  # noqa: E402
     validate_semantic_evidence_binding,
 )
 from evidence_acquisition import (  # noqa: E402
-    acquire, build_evidence_bundle, extract_frames, representative_timestamps,
+    acquire, build_evidence_bundle, extract_frames, probe_media, representative_timestamps,
 )
 
 
 class EvidenceAcquisitionTests(unittest.TestCase):
+    def test_probe_media_decodes_ffprobe_json_as_utf8_on_windows(self) -> None:
+        completed = type("Completed", (), {
+            "stdout": json.dumps({"format": {"filename": "中文视频.mp4"}}, ensure_ascii=False),
+        })()
+        with patch("evidence_acquisition.subprocess.run", return_value=completed) as run:
+            result = probe_media(Path("中文视频.mp4"))
+        self.assertEqual(result["format"]["filename"], "中文视频.mp4")
+        self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+        self.assertEqual(run.call_args.kwargs["errors"], "replace")
+
     def test_lightweight_bundle_records_display_transcript_frames_and_design_tokens(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

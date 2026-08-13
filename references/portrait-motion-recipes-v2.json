@@ -1,0 +1,108 @@
+{
+  "schema_version": 2,
+  "registry_id": "hongrun-portrait-motion-recipes-v2",
+  "producer": "content-preserving-video-editor",
+  "selection_policy": "portrait_energy_semantic_role_and_current_evidence_only",
+  "fixed_cadence": false,
+  "minimum_event_quota": false,
+  "random_rotation": false,
+  "product_card_default": false,
+  "recipes": [
+    {
+      "recipe_id": "PBM-01", "name": "luminous_phrase_pulse",
+      "semantic_roles": ["mark", "explain", "resolve"], "energy_tiers": ["micro", "meso"],
+      "component": "luminousPhrasePulse", "hierarchy": "pulse_to_phrase_to_focus",
+      "layout": "open_phrase_without_container", "camera": "source_locked",
+      "choreography": "dot_orbit_outline_fill_beam", "supporting_layers": ["ambient_light_field", "orbit_particles"],
+      "required_capabilities": ["dom", "svg", "gsap"], "required_evidence": ["approved_copy", "word_boundary", "safe_regions"],
+      "contraindications": ["full_sentence", "dense_hand_overlap", "low_information_copy"],
+      "fallback": {"kind": "existing_portrait_typography", "target": "portrait_outline_to_fill"},
+      "phases": ["entrance:pulse_seed", "explain:orbit_phrase_fill", "hold:focus_beam", "exit:source_clear"],
+      "reduced_motion": "opacity_weight_focus_only", "seek_safe": true, "post_exit": "source_only"
+    },
+    {
+      "recipe_id": "PBM-02", "name": "speaker_depth_phrase",
+      "semantic_roles": ["explain", "resolve"], "energy_tiers": ["meso"],
+      "component": "speakerDepthPhrase", "hierarchy": "speaker_phrase_depth_pair",
+      "layout": "subject_relative_open_plane", "camera": "shallow_parallax",
+      "choreography": "side_plane_depth_cross_return", "supporting_layers": ["ambient_light_field", "focus_vignette"],
+      "required_capabilities": ["dom", "svg", "gsap", "subject_tracking"], "required_evidence": ["approved_copy", "subject_region", "safe_regions"],
+      "contraindications": ["large_head_motion", "insufficient_negative_space", "unverified_occlusion"],
+      "fallback": {"kind": "portrait_recipe", "target": "PBM-01"},
+      "phases": ["entrance:side_plane", "explain:depth_cross", "hold:subject_phrase_balance", "exit:depth_return_clear"],
+      "reduced_motion": "side_phrase_opacity_only", "seek_safe": true, "post_exit": "source_only"
+    },
+    {
+      "recipe_id": "PBM-03", "name": "gesture_echo",
+      "semantic_roles": ["mark", "sequence"], "energy_tiers": ["micro"],
+      "component": "gestureEcho", "hierarchy": "verified_hand_path_to_phrase",
+      "layout": "gesture_relative_arc", "camera": "source_locked",
+      "choreography": "trace_apex_burst_land", "supporting_layers": ["orbit_particles"],
+      "required_capabilities": ["svg", "gsap", "hand_tracking"], "required_evidence": ["approved_copy", "gesture_track", "safe_regions"],
+      "contraindications": ["hand_hidden", "ambiguous_limb", "unstable_crop"],
+      "fallback": {"kind": "portrait_recipe", "target": "PBM-01"},
+      "phases": ["entrance:gesture_trace", "explain:apex_burst", "hold:copy_land", "exit:path_retract_clear"],
+      "reduced_motion": "apex_dot_and_copy_only", "seek_safe": true, "post_exit": "source_only"
+    },
+    {
+      "recipe_id": "PBM-04", "name": "thought_contrast_planes",
+      "semantic_roles": ["relate"], "energy_tiers": ["meso"],
+      "component": "thoughtContrastPlanes", "hierarchy": "person_between_two_concepts",
+      "layout": "two_open_planes_no_cards", "camera": "source_locked",
+      "choreography": "split_reveal_focus_transfer_relation", "supporting_layers": ["ambient_light_field", "focus_vignette"],
+      "required_capabilities": ["dom", "svg", "gsap"], "required_evidence": ["two_approved_concepts", "relation_intent", "safe_regions"],
+      "contraindications": ["more_than_two_concepts", "unrelated_labels", "crowded_subject_regions"],
+      "fallback": {"kind": "portrait_recipe", "target": "PBM-01"},
+      "phases": ["entrance:split_planes", "explain:focus_transfer", "hold:relation_resolved", "exit:planes_dissolve_clear"],
+      "reduced_motion": "static_split_with_focus_weight", "seek_safe": true, "post_exit": "source_only"
+    },
+    {
+      "recipe_id": "PBM-05", "name": "cinematic_camera_phrase",
+      "semantic_roles": ["explain", "transition"], "energy_tiers": ["meso", "macro"],
+      "component": "cinematicCameraPhrase", "hierarchy": "subject_reframe_with_phrase",
+      "layout": "crop_safe_negative_space_phrase", "camera": "restrained_push_pan_reframe",
+      "choreography": "push_focus_phrase_settle_release", "supporting_layers": ["ambient_light_field", "focus_vignette"],
+      "required_capabilities": ["dom", "svg", "gsap", "media_transform", "subject_tracking"], "required_evidence": ["approved_copy", "subject_track", "crop_safe_target", "safe_regions"],
+      "contraindications": ["face_crop_risk", "unstable_handheld", "insufficient_resolution"],
+      "fallback": {"kind": "portrait_recipe", "target": "PBM-01"},
+      "phases": ["entrance:camera_prepare", "explain:push_phrase_sync", "hold:reframe_settle", "exit:camera_restore_clear"],
+      "reduced_motion": "no_camera_phrase_weight_only", "seek_safe": true, "post_exit": "source_transform_identity"
+    },
+    {
+      "recipe_id": "PBM-06", "name": "semantic_cutaway_window",
+      "semantic_roles": ["explain", "prove", "relate"], "energy_tiers": ["meso"],
+      "component": "semanticCutawayWindow", "hierarchy": "person_plus_evidence_window",
+      "layout": "integrated_mask_window_not_full_frame", "camera": "source_locked_depth_window",
+      "choreography": "mask_open_evidence_focus_mask_close", "supporting_layers": ["ambient_light_field", "micro_grain"],
+      "required_capabilities": ["dom", "svg", "gsap", "asset_adapter"], "required_evidence": ["approved_copy", "asset_provenance", "topic_fit", "safe_regions"],
+      "contraindications": ["subtitle_repetition", "unrelated_asset", "white_background_mismatch", "anatomy_failure"],
+      "fallback": {"kind": "portrait_recipe", "target": "PBM-01"},
+      "phases": ["entrance:depth_window_open", "explain:evidence_focus", "hold:person_evidence_balance", "exit:window_close_clear"],
+      "reduced_motion": "static_evidence_window_fade", "seek_safe": true, "post_exit": "source_only"
+    },
+    {
+      "recipe_id": "PBM-07", "name": "luminous_chapter_bridge",
+      "semantic_roles": ["transition"], "energy_tiers": ["macro"],
+      "component": "luminousChapterBridge", "hierarchy": "chapter_boundary_to_next_state",
+      "layout": "edge_to_edge_light_field_no_panel", "camera": "source_locked",
+      "choreography": "orbit_expand_mask_temperature_shift_reveal", "supporting_layers": ["ambient_light_field", "micro_grain"],
+      "required_capabilities": ["svg", "gsap"], "required_evidence": ["chapter_boundary", "clean_source_window", "safe_regions"],
+      "contraindications": ["ordinary_sentence_boundary", "dense_speech", "repeated_short_chapter"],
+      "fallback": {"kind": "quiet_source", "target": "chapter_boundary_cut"},
+      "phases": ["entrance:orbit_expand", "explain:light_field_bridge", "hold:next_chapter_reveal", "exit:field_clear"],
+      "reduced_motion": "color_temperature_crossfade", "seek_safe": true, "post_exit": "source_only"
+    },
+    {
+      "recipe_id": "PBM-08", "name": "emotional_resolution_bloom",
+      "semantic_roles": ["resolve"], "energy_tiers": ["meso", "macro"],
+      "component": "emotionalResolutionBloom", "hierarchy": "person_phrase_warm_release",
+      "layout": "local_light_and_upward_phrase", "camera": "subtle_release",
+      "choreography": "warm_bloom_phrase_rise_resolve_clear", "supporting_layers": ["ambient_light_field", "micro_grain"],
+      "required_capabilities": ["dom", "svg", "gsap"], "required_evidence": ["approved_copy", "emotional_turn", "safe_regions"],
+      "contraindications": ["unsupported_sentiment", "neutral_explanation", "dialogue_audio_conflict"],
+      "fallback": {"kind": "portrait_recipe", "target": "PBM-01"},
+      "phases": ["entrance:warm_seed", "explain:phrase_rise", "hold:resolution_bloom", "exit:release_clear"],
+      "reduced_motion": "warm_opacity_and_phrase_weight", "seek_safe": true, "post_exit": "source_only"
+    }
+  ]
+}

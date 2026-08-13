@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "candidate_id": "hongrun-portrait-brand-motion-v2-design-freeze-2026-08-12",
+  "status": "pending_user_approval",
+  "created_at": "2026-08-12T00:00:00-07:00",
+  "repository": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor",
+    "branch": "main",
+    "head_at_design_start": "1b74d8370d1fb985f21c7e8b6e5dfbb3aa5a42b4"
+  },
+  "canonical_objective": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\portrait-brand-motion-v2\\goal-objective.md",
+    "sha256": "593da5b11bc07c5188b24fd9e0a2e010472ec60c21677efb94c60a14674407d6",
+    "resume_rule": "After task recovery, context compaction, or model change, fully read the canonical objective before continuing."
+  },
+  "design_decision": {
+    "requirement_status": "real",
+    "recommended_direction": "luminous_intelligence",
+    "alternatives": [
+      "high_energy_creator",
+      "humanist_cinema"
+    ],
+    "portrait_recipe_ids": [
+      "PBM-01",
+      "PBM-02",
+      "PBM-03",
+      "PBM-04",
+      "PBM-05",
+      "PBM-06",
+      "PBM-07",
+      "PBM-08"
+    ],
+    "sonic_family_ids": [
+      "PBM-S01",
+      "PBM-S02",
+      "PBM-S03",
+      "PBM-S04",
+      "PBM-S05"
+    ],
+    "migration_target": "additive_project_schema_v11",
+    "default_behavior": "disabled_for_migrated_third_party_non_hongrun_and_nonportrait_projects",
+    "first_real_gate": "three_aligned_30_to_45_second_style_reels",
+    "production_default_gate": "two_materially_different_hongrun_portrait_topics_with_named_user_approval"
+  },
+  "frozen_boundaries": {
+    "director": "system_of_record",
+    "video_use": "words_edl_output_timeline_captions",
+    "hyperframes": "full_composition_motion_owner",
+    "ffmpeg": "final_media_mechanics_audio_mix_caption_burn_encode_decode",
+    "remotion": "optional_named_event_only",
+    "named_user": "brand_taste_and_repeat_use_approval",
+    "product_card_default_for_portrait": "forbidden",
+    "fixed_cadence_or_event_quota": "forbidden",
+    "proprietary_template_copying": "forbidden"
+  },
+  "artifact_inventory": [
+    {"path": "README.md", "sha256": "389d7c13847e751d16edd82cfc0b2d4630b015ffab7cf49851e44c1de6e1ceeb"},
+    {"path": "goal-objective.md", "sha256": "593da5b11bc07c5188b24fd9e0a2e010472ec60c21677efb94c60a14674407d6"},
+    {"path": "requirements-traceability.md", "sha256": "ef66e4fe4cd32a86d54d218f185879bca40b8edc0f227e25d9dfc7553411799b"},
+    {"path": "brand-aesthetic-spec.md", "sha256": "122f97d28343c3ded187d5a84a59c249e107405f2e14a78faaa385218f39f1e0"},
+    {"path": "motion-language-v2.md", "sha256": "4d9369d4e2e83f3a3b86d55ba71be518c9b2f400c807fab469c29e36e8689a28"},
+    {"path": "sonic-language-v2.md", "sha256": "b1baa98de8bf603bcc65b604d888d98a682ff26ea98e161dc90836b6f4d82790"},
+    {"path": "architecture-and-tool-boundaries.md", "sha256": "c7b7f9959916dd66ec94197d8bb476b5ed117968d3601476efe0bf74b1784560"},
+    {"path": "machine-contracts.md", "sha256": "82a57fbd6ead32f84fce90d85543025516fdf91b2ee51cdebb5cbe353c53015d"},
+    {"path": "style-reel-plan.md", "sha256": "b78b19bdd05421fb7bc2f257a8795e105aa2fe43e16ab08ac239654473912ec8"},
+    {"path": "acceptance-matrix.md", "sha256": "7ecb5a6cb152be6ef779f7173ef657ef376c222d7e126bd9f401a7fdb5965364"},
+    {"path": "migration-and-rollback.md", "sha256": "d959948d9d0abdbb32b11f3be70f8944e55608f5042beba644f10c1187e5e80c"},
+    {"path": "implementation-plan.md", "sha256": "cbf5838edb028b2ced5a676791c2312961c9cdc9a34af4cf9c17ab75ffb985e3"},
+    {"path": "risk-and-cost-ledger.md", "sha256": "4ceb276d2457a57e70d8a87f3f66858bab5ae936bae59d5f802ab989b37ae19c"},
+    {"path": "design-review-report.md", "sha256": "b6626f72d0f7b046f0fbf4f40a0d7d58d72a1f849ab966c6f14b322ddfcc3f90"},
+    {"path": "schemas/portrait-brand-profile.schema.json", "sha256": "9569461d57a784ae24d12213e0005172b2cdb9c9b4d72317e97e84a3ae8fa679"},
+    {"path": "schemas/portrait-energy-map.schema.json", "sha256": "59c69c65a94960a1e8ea1993201ad8a4e41882f0300474e3c8e546c2d66cded2"},
+    {"path": "schemas/portrait-motion-contract.schema.json", "sha256": "5a067a55a4ffd835f76221aa8dc8c6ab38003f8fa188be3e2fa34bacceccb9a7"},
+    {"path": "schemas/portrait-sonic-plan.schema.json", "sha256": "9f9d316fea7c9ebf8def2ee170b668f717fa5781eba542643db488452edcc7cb"},
+    {"path": "schemas/style-reel-plan.schema.json", "sha256": "64ebb5c486a6d2781f8019a7207cac35a3cf236939189eaaad645ce344f0024e"},
+    {"path": "schemas/style-reel-review.schema.json", "sha256": "6e9af3a75c46e1ec486c071d13cdde4245042b31ea634558810bfe076fe34981"}
+  ],
+  "validation": {
+    "draft_2020_12_schema_count": 6,
+    "schema_meta_validation": "pass",
+    "representative_positive_instances": "pass_6_of_6",
+    "representative_negative_cases": {
+      "wrong_identity": "rejected",
+      "fixed_cadence": "rejected",
+      "non_portrait_recipe": "rejected",
+      "full_render_authority": "rejected",
+      "agent_brand_approval": "rejected"
+    },
+    "requirement_ids": "PBM-RQ-001_through_PBM-RQ-018_present",
+    "current_portrait_evidence_reviewed": true,
+    "current_brand_taste": "rejected",
+    "design_review": "pass_with_real_style_reel_and_named_user_gates_pending"
+  },
+  "not_authorized_by_approval": [
+    "production_code_or_test_implementation",
+    "long_or_full_video_render",
+    "publication_or_deployment",
+    "paid_or_cloud_provider_call",
+    "upstream_source_change",
+    "git_commit_or_push"
+  ],
+  "approval_request": {
+    "decision": "pending",
+    "required_actor": "HongRun",
+    "approval_phrase": "批准 portrait-brand-motion-v2 design-freeze-candidate，按照实施计划进入下一阶段实现。"
+  }
+}

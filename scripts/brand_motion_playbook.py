@@ -10,6 +10,7 @@ from typing import Any
 import yaml
 
 from director_contracts import read_json, sha256_file, write_json
+from portrait_brand_contracts import validate_portrait_contract_schema
 
 
 FIELD_MAPPING = {
@@ -21,6 +22,15 @@ FIELD_MAPPING = {
     "shadow.css": "tokens.shadow",
     "typography.font_family": "tokens.font_family",
     "safe_zones": "tokens.safe_zones",
+}
+PORTRAIT_ROLE_MOTION_GRAMMAR = {
+    "mark": "pulse_dot_orbit_phrase",
+    "explain": "speaker_depth_phrase",
+    "relate": "open_contrast_planes",
+    "sequence": "gesture_or_phrase_sequence",
+    "prove": "integrated_semantic_cutaway",
+    "resolve": "warm_resolution_bloom",
+    "transition": "luminous_chapter_bridge",
 }
 
 
@@ -109,6 +119,38 @@ def compile_playbook(
             "the compiler never rewrites those records."
         ),
     }
+    portrait_config = (project.get("motion_quality") or {}).get("portrait_brand") or {}
+    if portrait_config.get("enabled") is True:
+        profile_errors = validate_portrait_contract_schema(
+            "portrait-brand-profile", profile
+        )
+        if profile_errors:
+            raise ValueError("invalid portrait brand profile: " + "; ".join(profile_errors))
+        if orientation != "portrait":
+            raise ValueError("portrait brand playbook requires portrait design geometry")
+        if (project.get("identity") or {}).get("mode") != "self":
+            raise ValueError("portrait brand playbook requires identity.mode self")
+        if (project.get("source") or {}).get("content_type") != "talking_head":
+            raise ValueError("portrait brand playbook requires talking_head content")
+        direction = portrait_config.get("style_direction")
+        if direction != profile.get("direction"):
+            raise ValueError("portrait brand profile direction differs from project selection")
+        playbook["portrait_brand"] = {
+            "grammar_id": "hongrun-portrait-expressive-v2",
+            "grammar_version": 2,
+            "direction": direction,
+            "profile_id": profile.get("profile_id"),
+            "profile_version": profile.get("profile_version"),
+            "profile_sha256": profile_binding["sha256"],
+            "signature_primitives": list(profile.get("signature_primitives") or []),
+            "role_motion_grammar": PORTRAIT_ROLE_MOTION_GRAMMAR,
+            "sonic_family_ids": list(profile.get("sonic_family_ids") or []),
+            "forbidden_defaults": list(profile.get("forbidden_defaults") or []),
+            "fixed_cadence": False,
+            "random_rotation": False,
+            "product_card_default": False,
+            "named_user_brand_approval_required": True,
+        }
     output_dir = output_dir.resolve()
     playbook_path = output_dir / "brand-motion-playbook.json"
     css_path = output_dir / "brand-motion-tokens.css"
@@ -179,4 +221,23 @@ def validate_playbook(
         {key: value for key, value in playbook.items() if key != "integrity_sha256"}
     ):
         errors.append("brand motion integrity hash is stale")
+    portrait = playbook.get("portrait_brand")
+    if portrait is not None:
+        if not isinstance(portrait, dict):
+            errors.append("portrait brand playbook must be a mapping")
+        else:
+            if portrait.get("grammar_id") != "hongrun-portrait-expressive-v2":
+                errors.append("portrait brand grammar ID is invalid")
+            if portrait.get("grammar_version") != 2:
+                errors.append("portrait brand grammar version must be 2")
+            if portrait.get("role_motion_grammar") != PORTRAIT_ROLE_MOTION_GRAMMAR:
+                errors.append("portrait brand role motion grammar is drifted")
+            if portrait.get("fixed_cadence") is not False:
+                errors.append("portrait brand playbook must not use fixed cadence")
+            if portrait.get("random_rotation") is not False:
+                errors.append("portrait brand playbook must not use random rotation")
+            if portrait.get("product_card_default") is not False:
+                errors.append("portrait brand playbook must not default to product cards")
+            if portrait.get("named_user_brand_approval_required") is not True:
+                errors.append("portrait brand playbook must retain the named-user gate")
     return errors

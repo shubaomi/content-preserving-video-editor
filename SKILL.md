@@ -50,8 +50,9 @@ moving projects.
 
 Load legacy project YAML through the versioned in-memory migrator. Never rewrite
 an existing `project.yaml` merely to add defaults. New projects use project
-schema version 10; migrated legacy projects receive disabled optional adapters, disabled manual finishing, and
-the current preview/render parity tolerances in memory.
+schema version 11; migrated v1-v10 projects receive disabled optional adapters,
+disabled manual finishing, disabled HongRun portrait-brand v2, and the current
+preview/render parity tolerances in memory.
 
 ## Use the single entry
 
@@ -78,10 +79,10 @@ python scripts/director.py import-metrics --project <project.yaml> --input <user
 
 `init-project` never overwrites an existing project. `doctor` and `preflight`
 are read-only and never install tools, expose environment-variable values, or
-approve a gate. Interactive review is default-off, loopback-only, and requires
-`DIRECTOR_REVIEW_TOKEN` plus `DIRECTOR_REVIEW_CSRF_TOKEN`; the browser writes
-only pending hash-bound proposals. The static page asks for both tokens at
-submission time and never stores them in HTML. A `file://` page may reach only
+approve a gate. Interactive review is default-off and loopback-only. When it is
+explicitly enabled, Director generates short-lived in-memory session nonces;
+users do not create, configure, type, or retain a key. The browser writes only
+pending hash-bound proposals. A `file://` page may reach only
 the explicitly enabled loopback proposal endpoint; CORS preflight never bypasses
 Bearer, CSRF, project-path, or SHA-256 checks. Only `apply-correction` may append an
 explicitly approved correction ledger entry.
@@ -277,10 +278,14 @@ target-relative focus boxes, connectors, comparison panels, and process rails.
 Portrait talking-head footage uses a separate expressive grammar built from
 face-safe kinetic typography, rhythmic word emphasis, side rails, depth/light
 accents, semantic cutaways, and chapter energy changes; it must not fall back to
-floating dashboard cards merely because those templates exist. This grammar is
-`fixture_validated`, not a promise of CapCut/Jianying-equivalent taste. A real
-portrait sample can be technically publishable while still failing the user's
-brand-taste gate; record that reservation and do not promote it away.
+floating dashboard cards merely because those templates exist. The generic
+content-format grammar remains `fixture_validated`. The opt-in HongRun v2 route
+is currently `fixture_validated` and `action_required`: two materially different
+portrait topics exist, but the second topic still needs an explicit face/hand/
+product/caption visual-review answer before `real_project_validated`; this is not a
+promise of CapCut/Jianying-equivalent taste and does not make it a production
+default. A technically publishable sample may still fail the user's brand-taste
+gate; record that reservation and do not promote it away.
 
 Record a separate opening-hook decision for every video. Select a duplicated
 2–6 second cold open only when a transcript- and frame-backed excerpt is
@@ -518,7 +523,7 @@ identity review, final audio plan and provenance, final aesthetic snapshots, a
 full decode report, and two platform reports that validate the same universal
 file hash.
 
-Schema v10 migrates v1–v9 projects in memory without rewriting user YAML. It
+Schema v11 migrates v1–v10 projects in memory without rewriting user YAML. It
 requires explicit `identity.mode`, keeps `motion_quality` and advanced runtimes
 off for migrated projects, and records `delivery.required_assets`. Before
 `delivery_qa`, reject any required stage that is only `contract_ready`.
@@ -533,6 +538,80 @@ files are hash-bound. Record unavailable optional BGM separately from an
 explicit disabled choice. A cover is blocking only when configured/produced or
 required by an enabled publish package; otherwise its absence remains truthful
 and does not create a second video deliverable.
+
+Schema v11 adds `motion_quality.portrait_brand` as an explicit, default-off
+HongRun/self talking-head capability. It requires grammar version 2, one frozen
+Style Reel direction, a configured profile path, and the named-user brand gate.
+It rejects third-party/generic/screen-tutorial enablement, fixed-cadence fields,
+unknown portrait options, altered A/B/C direction sets, and attempts to disable
+user approval. Its six additive portrait schemas and cross-contract rules are
+validated by contract fixtures with absolute current file/hash references,
+exact semantic/render event inheritance, deterministic non-card fallbacks,
+sonic decision coverage, aligned Style Reel inputs, and HongRun-only approval.
+Style Reel audition evidence is event-specific: bind the current audio/sonic
+plans and authorized cue, decode PCM, prove the off track is the exact voice
+window, prove the on track retains it plus an audible matching cue, reject any
+unplanned residual energy outside that cue window, and display only those
+receipt-bound tracks. The lexical project `assets/sfx` root and every child must
+remain inside the project and may not be replaced by a Junction or symlink.
+Synthetic phase-image comparison must match the frozen deterministic geometry
+for its named direction and reject direction-set rotation, palette-only,
+tiny-marker-only, static-phase, or non-clean-exit evidence;
+it remains technical fixture evidence, never brand-aesthetic approval.
+WP0 is therefore a default-off contract/migration foundation, not evidence that
+all six contracts are already consumed by the Director. WP1/WP2 consume the
+profile, energy map, and motion contracts. WP3 additionally compiles the exact
+PBM-S01 through PBM-S05 sonic decisions into the existing audio plan, copies
+only current rights-bound local motif assets, binds every decision back through
+the current sonic-library manifest and frozen registry, and leaves FFmpeg/audio
+QA as the sole mix owner. Audibility may attenuate the compiled starting gain,
+but only a freshly decoded and remeasured off/on audition may authorize that
+change. Cue-bearing portrait samples always require the current full-sample mix
+and receipt, including on resume; all nested library, rights, audition, and mix
+bytes are stage inputs. Its short-media evidence proves technical identity,
+timing, audibility, and receipt validation only. WP4 adds a deterministic Style
+Reel planner and a separate `portrait-style-review.html`: one current authority
+manifest transitively binds source, validation EDL, source/output word
+transcripts, semantic brief, captions, voice stem, audio policy, subject
+evidence, profile, and ordered event set. The exact 30–45 second window must be
+covered by the current video-use EDL; PBM-07 requires a typed independent
+in-window chapter boundary. Three isolated HyperFrames-owned render requests
+remain blocked until a current explicit HongRun window-confirmation receipt,
+bound by SHA-256 to the reviewed files, exists. Completed fixture reels must have the same duration, exactly
+one video and one audio stream with matching geometry, distinct current bytes,
+exact direction contracts, and four decodable event-phase images per event.
+Every event exposes current voice/SFX-off and SFX-on auditions. The review page
+synchronizes baseline plus A/B/C, exposes semantic rationale and audio
+auditions, and can submit only pending correction proposals protected by
+Director-generated short-lived local session nonces. Synthetic fixtures remain
+`pending` and cannot record brand approval
+or authorize renders. A real-project `awaiting_user` review additionally needs
+the later WP6 HyperFrames runtime, caption-last, voice/mix, and parity evidence
+gate. The first named-user taste approval and second-topic repeat-use answer are
+retained, but the current route remains `fixture_validated` until the second
+topic also has the required explicit visual-review answer. Production-default maturity remains a separate explicit
+promotion that is not implemented in this release. Repeat-use willingness is
+not sufficient, and a future promotion must first define a separately trusted,
+current-evidence-bound HongRun approval authority.
+
+For the first real portrait Style Reel, keep the reviewed `pending` JSON
+immutable and let `wp6-review-package.json` carry the `awaiting_user` state.
+`record_style_reel_user_decision` may accept that pair only after it freshly
+revalidates the entire WP6 package and writes a separate explicit-decision
+receipt whose SHA-256 detects later file drift. This is an integrity record, not
+encryption or identity authentication. A selected direction creates a project-local provisional
+portrait Golden plus a pending preference candidate. The Golden binds the
+exact profile snapshot, selected contract/media/phases, HyperFrames technical
+evidence, audio identity, project configuration, decision receipt, current Git
+base, and scripts/tests source-tree hash. It records one of two required real
+validations, keeps `production_default=false`, and never treats the user's
+general approval reason as permission to infer additional taste preferences.
+Any source-tree or bound-artifact drift invalidates it. A second materially
+different HongRun portrait topic and another named-user repeat-use approval are
+required for `real_project_validated`; promotion from that state to
+`production_default` is deliberately unavailable in this release. It requires
+a separately designed trusted approval authority, current implementation and
+real-project evidence bindings, and a new explicit HongRun decision.
 
 Before creative planning, require the schema-v8 governance chain:
 `provider_governance` chooses only configured providers and writes a scored
@@ -599,6 +678,18 @@ mixed preview. When at least two cues are selected, cap one SFX family's share
 (default 0.5) so transposed copies of the same motif cannot masquerade as
 variety. Do not accept a nominal volume value as proof that a cue survives
 continuous speech.
+
+For an explicitly enabled HongRun portrait-brand v2 project, compile only the
+versioned PBM-S01 crystal pulse, PBM-S02 orbit sweep, PBM-S03 contrast dyad,
+PBM-S04 chapter lift, and PBM-S05 warm resolve families. Each technically ready
+family needs at least two current, rights-bound, perceptually distinct variants;
+pitch-only copies do not count. Map word landings within 80 ms, gesture peaks
+within 120 ms after source-to-output EDL mapping, and chapter leads within
+180 ms. A missing or stale authorized variant becomes event-specific
+`intentionally_silent`; it must not select a different visual recipe. Explicit
+SFX disablement also produces complete silent decisions. Do not call these
+motifs brand-approved or production-ready until the real Style Reel and named
+user gates pass.
 
 Do not treat `has_existing_bgm: true` or an audio stream as proof of audible
 background music. Require measured source-presence evidence; long near-silent

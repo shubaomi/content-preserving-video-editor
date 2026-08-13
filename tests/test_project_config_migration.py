@@ -16,6 +16,13 @@ from director_contracts import load_project_context  # noqa: E402
 from project_config import CURRENT_PROJECT_SCHEMA_VERSION, migrate_project_config  # noqa: E402
 
 
+DIRECTIONS = [
+    "luminous_intelligence",
+    "high_energy_creator",
+    "humanist_cinema",
+]
+
+
 class ProjectConfigMigrationTests(unittest.TestCase):
     def test_rejects_boolean_or_non_finite_numeric_configuration(self) -> None:
         for version in (True, 1.5, "1"):
@@ -56,6 +63,22 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         })
         self.assertFalse(migrated["motion_quality"]["enabled"])
         self.assertFalse(migrated["motion_quality"]["advanced_runtimes"]["enabled"])
+        self.assertEqual(migrated["motion_quality"]["portrait_brand"], {
+            "enabled": False,
+            "profile_path": None,
+            "grammar_version": 2,
+            "style_direction": None,
+            "require_user_brand_approval": True,
+            "style_reel": {
+                "enabled": False,
+                "target_duration_seconds": 38.0,
+                "directions": [
+                    "luminous_intelligence",
+                    "high_energy_creator",
+                    "humanist_cinema",
+                ],
+            },
+        })
         self.assertEqual(migrated["identity"]["mode"], "generic")
         self.assertNotIn("audio", original)
 
@@ -83,7 +106,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "size_px": 4.0,
             "time_seconds": 0.05,
         })
-        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 10)
+        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 11)
         self.assertTrue(migrated["workflow"]["production_contract"]["enabled"])
         self.assertEqual(migrated["provider_governance"]["max_evidence_age_days"], 30)
         self.assertTrue(migrated["qa"]["visual_dynamics"]["enabled"])
@@ -195,8 +218,8 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "manual_finish.backend"):
             migrate_project_config(project)
 
-    def test_all_v1_through_v9_configs_migrate_to_v10_without_mutation(self) -> None:
-        for version in range(1, 10):
+    def test_all_v1_through_v10_configs_migrate_to_v11_without_mutation(self) -> None:
+        for version in range(1, 11):
             original = {
                 "schema_version": version,
                 "version": version,
@@ -206,12 +229,110 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             with self.subTest(version=version):
                 migrated = migrate_project_config(original)
                 self.assertEqual(original, before)
-                self.assertEqual(migrated["schema_version"], 10)
-                self.assertEqual(migrated["version"], 10)
+                self.assertEqual(migrated["schema_version"], 11)
+                self.assertEqual(migrated["version"], 11)
                 self.assertEqual(migrated["identity"]["mode"], "generic")
                 self.assertFalse(migrated["motion_quality"]["enabled"])
+                self.assertFalse(migrated["motion_quality"]["portrait_brand"]["enabled"])
 
-    def test_v7_migrates_to_v10_without_mutating_the_source_mapping(self) -> None:
+    def test_portrait_brand_v2_requires_explicit_self_talking_head_configuration(self) -> None:
+        base = {
+            "schema_version": 11,
+            "version": 11,
+            "identity": {"mode": "self"},
+            "source": {"content_type": "talking_head"},
+            "motion_quality": {
+                "enabled": True,
+                "portrait_brand": {
+                    "enabled": True,
+                    "profile_path": "profiles/hongrun-portrait-brand-v2.json",
+                    "grammar_version": 2,
+                    "style_direction": "luminous_intelligence",
+                    "require_user_brand_approval": True,
+                    "style_reel": {
+                        "enabled": True,
+                        "target_duration_seconds": 38,
+                        "directions": list(DIRECTIONS),
+                    },
+                },
+            },
+        }
+        migrated = migrate_project_config(base)
+        self.assertTrue(migrated["motion_quality"]["portrait_brand"]["enabled"])
+
+        cases = (
+            ("identity", {**base, "identity": {"mode": "third_party"}}),
+            ("talking_head", {**base, "source": {"content_type": "screen_tutorial"}}),
+            ("profile_path", copy.deepcopy(base)),
+            ("motion_quality.enabled", copy.deepcopy(base)),
+        )
+        cases[2][1]["motion_quality"]["portrait_brand"]["profile_path"] = None
+        cases[3][1]["motion_quality"]["enabled"] = False
+        for message, project in cases:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                migrate_project_config(project)
+
+    def test_portrait_brand_v2_rejects_unsafe_or_non_deterministic_options(self) -> None:
+        invalid = (
+            {"grammar_version": 1},
+            {"require_user_brand_approval": False},
+            {"style_direction": "random"},
+            {"style_reel": {"directions": ["luminous_intelligence"]}},
+            {"style_reel": {"target_duration_seconds": 60}},
+            {"fixed_cadence_seconds": 5},
+        )
+        for override in invalid:
+            block = {
+                "enabled": False,
+                "profile_path": None,
+                "grammar_version": 2,
+                "style_direction": None,
+                "require_user_brand_approval": True,
+                "style_reel": {
+                    "enabled": False,
+                    "target_duration_seconds": 38,
+                    "directions": list(DIRECTIONS),
+                },
+            }
+            for key, value in override.items():
+                if key == "style_reel":
+                    block["style_reel"].update(value)
+                else:
+                    block[key] = value
+            with self.subTest(override=override), self.assertRaisesRegex(ValueError, "portrait_brand"):
+                migrate_project_config({
+                    "schema_version": 11,
+                    "version": 11,
+                    "motion_quality": {"enabled": False, "portrait_brand": block},
+                })
+
+    def test_legacy_non_hongrun_and_nonportrait_modes_remain_unchanged_by_default(self) -> None:
+        projects = (
+            {"schema_version": 10, "version": 10, "identity": {"mode": "third_party"}},
+            {"schema_version": 10, "version": 10, "identity": {"mode": "generic"}},
+            {
+                "schema_version": 10,
+                "version": 10,
+                "identity": {"mode": "self"},
+                "source": {"content_type": "screen_tutorial"},
+                "motion_quality": {"enabled": True},
+            },
+            {
+                "schema_version": 10,
+                "version": 10,
+                "identity": {"mode": "self"},
+                "workflow": {"input_mode": "polish_existing"},
+            },
+        )
+        for project in projects:
+            before = copy.deepcopy(project)
+            with self.subTest(project=project):
+                migrated = migrate_project_config(project)
+                self.assertEqual(project, before)
+                self.assertFalse(migrated["motion_quality"]["portrait_brand"]["enabled"])
+                self.assertIsNone(migrated["motion_quality"]["portrait_brand"]["profile_path"])
+
+    def test_v7_migrates_to_v11_without_mutating_the_source_mapping(self) -> None:
         original = {
             "schema_version": 7,
             "version": 7,
@@ -222,17 +343,17 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         migrated = migrate_project_config(original)
 
         self.assertEqual(original, before)
-        self.assertEqual(migrated["schema_version"], 10)
+        self.assertEqual(migrated["schema_version"], 11)
         self.assertTrue(migrated["assets"]["media_catalog"]["enabled"])
         self.assertFalse(migrated["assets"]["local_semantic_corpus"]["enabled"])
         self.assertEqual(migrated["delivery"]["openmontage_handoff"]["backend"], "openmontage")
 
-    def test_v8_migrates_to_v10_without_rewriting_user_configuration(self) -> None:
+    def test_v8_migrates_to_v11_without_rewriting_user_configuration(self) -> None:
         original = {"schema_version": 8, "version": 8, "render": {"cache": {"enabled": True}}}
         before = copy.deepcopy(original)
         migrated = migrate_project_config(original)
         self.assertEqual(original, before)
-        self.assertEqual(migrated["schema_version"], 10)
+        self.assertEqual(migrated["schema_version"], 11)
         self.assertTrue(migrated["render"]["cache"]["enabled"])
         self.assertFalse(migrated["render"]["cache"]["event_level"]["enabled"])
 

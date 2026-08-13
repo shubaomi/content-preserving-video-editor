@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -21,7 +22,7 @@ import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from aesthetic_qa import validate as validate_aesthetic_review
 from asr_router import (
@@ -37,6 +38,7 @@ from audio_production import (
     materialize_sample_audio_evidence,
     materialize_sample_review_mix,
     produce_audio_assets,
+    sample_audio_evidence_artifacts,
     validate_sample_audio_evidence,
     validate_sample_review_mix_receipt,
 )
@@ -118,6 +120,36 @@ from optional_media_adapter import authorize_optional_adapter
 from post_publish_metrics import import_metrics as import_post_publish_metrics
 from feedback_loop import analyze_feedback_snapshots
 from podcast_pipeline import build_podcast_manifest, validate_podcast_manifest
+from portrait_brand_contracts import validate_portrait_contract_schema
+from portrait_brand_engine import (
+    PortraitBrandCompilationError,
+    build_portrait_energy_authorities,
+    compile_portrait_energy_map,
+    derive_portrait_chapters,
+    evaluate_portrait_eligibility,
+)
+from portrait_motion_recipes import (
+    DEFAULT_PORTRAIT_RECIPE_REGISTRY,
+    PORTRAIT_COMPONENT_CSS,
+    PORTRAIT_COMPONENT_JS,
+    build_portrait_renderer_payload,
+    compile_portrait_motion_contracts,
+    load_portrait_recipe_registry,
+    materialize_portrait_component_assets,
+    portrait_choreography_by_event,
+    validate_storyboard_portrait_binding,
+)
+from portrait_sonic import (
+    DEFAULT_PORTRAIT_SONIC_REGISTRY,
+    portrait_sonic_plan_artifacts,
+    validate_portrait_sonic_projection,
+)
+from portrait_style_reel import DIRECTIONS as PORTRAIT_STYLE_DIRECTIONS
+from portrait_style_reel import generate_style_reel_dashboard
+from validate_portrait_components_runtime import (
+    replay_portrait_runtime_gate,
+    validate_portrait_runtime_evidence,
+)
 from platform_occlusion_gate import evaluate_geometry as evaluate_platform_occlusion
 from preview_render_parity import validate as validate_preview_render_parity
 from production_contract import build_contract, validate_contract
@@ -210,6 +242,11 @@ def _json_sha256(value: Any) -> str:
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _json_file_content_sha256(path: Path) -> str:
+    """Hash JSON meaning rather than serialization whitespace or key order."""
+    return _json_sha256(read_json(path))
 
 
 def _semantic_inheritance_contract(
@@ -482,14 +519,14 @@ def _cover_delivery_gate(review: dict[str, Any]) -> tuple[list[str], bool]:
 
 def _audio_plan_asset_files(plan: dict[str, Any], base_dir: Path) -> list[Path]:
     """Return materialized cue/BGM assets so Director state binds their bytes."""
-    cue_values = [
-        row.get("asset") for row in (
-            (plan.get("motion_sfx") or {}).get("event_decisions") or []
-        ) if isinstance(row, dict) and row.get("decision") == "cue"
-    ]
-    values: list[tuple[Any, Path | None]] = [
-        (value, (base_dir / "assets" / "sfx").resolve()) for value in cue_values
-    ]
+    values: list[tuple[Any, Path | None]] = []
+    authorized_sfx_root = (base_dir / "assets" / "sfx").resolve()
+    for row in (plan.get("motion_sfx") or {}).get("event_decisions") or []:
+        if not isinstance(row, dict) or row.get("decision") != "cue":
+            continue
+        values.append((row.get("asset"), authorized_sfx_root))
+        if row.get("rights_evidence") is not None:
+            values.append((row.get("rights_evidence"), authorized_sfx_root))
     background = plan.get("background_music") or {}
     if background.get("mode") == "authorized_asset":
         values.append((background.get("source"), None))
@@ -894,6 +931,61 @@ class Director:
             raise DirectorContractError(f"unknown motion-design scope: {scope}")
         return self.root / "motion-design" / scope
 
+    def portrait_renderer_payload_path(self, scope: str) -> Path:
+        return self.motion_design_dir(scope) / "portrait-renderer-payload.json"
+
+    def portrait_runtime_evidence_path(self, scope: str) -> Path:
+        if scope not in {"sample", "full"}:
+            raise DirectorContractError(f"unknown portrait runtime scope: {scope}")
+        return self.motion_design_dir(scope) / "portrait-runtime" / "runtime-evidence.json"
+
+    def _validate_portrait_runtime_gate(self, scope: str) -> list[Path]:
+        payload_path = self.portrait_renderer_payload_path(scope)
+        evidence_path = self.portrait_runtime_evidence_path(scope)
+        if not evidence_path.is_file():
+            raise DirectorContractError(
+                f"{scope} portrait runtime evidence is missing: {evidence_path}"
+            )
+        try:
+            evidence = read_json(evidence_path)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            raise DirectorContractError(
+                f"{scope} portrait runtime evidence is unreadable: {error}"
+            ) from error
+        assert_valid(
+            validate_portrait_runtime_evidence(evidence, payload_path),
+            f"{scope} portrait runtime evidence",
+        )
+        assert_valid(
+            replay_portrait_runtime_gate(evidence, payload_path),
+            f"{scope} portrait runtime browser replay",
+        )
+        referenced: list[Path] = [evidence_path, payload_path]
+        for field in ("capture_tool", "runtime_engine", "fixture"):
+            row = evidence.get(field)
+            if isinstance(row, Mapping):
+                referenced.append(Path(str(row.get("path") or "")).resolve())
+        for row in evidence.get("component_assets") or []:
+            if isinstance(row, Mapping):
+                referenced.append(Path(str(row.get("path") or "")).resolve())
+        for recipe in evidence.get("recipes") or []:
+            if not isinstance(recipe, Mapping):
+                continue
+            repeat = recipe.get("seek_repeat_snapshot")
+            if isinstance(repeat, Mapping):
+                referenced.append(Path(str(repeat.get("path") or "")).resolve())
+            for phase in recipe.get("phases") or []:
+                snapshot = phase.get("snapshot") if isinstance(phase, Mapping) else None
+                if isinstance(snapshot, Mapping):
+                    referenced.append(Path(str(snapshot.get("path") or "")).resolve())
+        payload = read_json(payload_path)
+        for event in payload.get("events") or []:
+            bindings = event.get("bindings") if isinstance(event, Mapping) else None
+            render_asset = bindings.get("renderAssetRef") if isinstance(bindings, Mapping) else None
+            if isinstance(render_asset, Mapping):
+                referenced.append(Path(str(render_asset.get("path") or "")).resolve())
+        return list(dict.fromkeys(referenced))
+
     def renderer_evidence_contract_path(self, scope: str) -> Path:
         project = (
             self.sample_hyperframes_project if scope == "sample"
@@ -977,6 +1069,66 @@ class Director:
     @property
     def creative_review_dashboard_path(self) -> Path:
         return self.root / "review" / "creative-review.html"
+
+    @property
+    def portrait_style_reel_dir(self) -> Path:
+        return self.root / "style-reel"
+
+    @property
+    def portrait_style_reel_plan_path(self) -> Path:
+        return self.portrait_style_reel_dir / "style-reel-plan.json"
+
+    @property
+    def portrait_style_reel_authority_manifest_path(self) -> Path:
+        return self.portrait_style_reel_dir / "style-reel-authorities.json"
+
+    @property
+    def portrait_style_reel_review_path(self) -> Path:
+        return self.portrait_style_reel_dir / "style-reel-review.json"
+
+    @property
+    def portrait_style_reel_context_path(self) -> Path:
+        return self.portrait_style_reel_dir / "style-reel-context.json"
+
+    @property
+    def portrait_style_reel_dashboard_path(self) -> Path:
+        return self.root / "review" / "portrait-style-review.html"
+
+    def portrait_style_reel_contract_paths(self) -> dict[str, Path]:
+        return {
+            direction: self.portrait_style_reel_dir / "contracts" / f"{direction}.json"
+            for direction in PORTRAIT_STYLE_DIRECTIONS
+        }
+
+    def _generate_portrait_style_reel_dashboard_if_ready(
+        self, *, interactive_api_url: str | None = None,
+        interactive_session: Mapping[str, str] | None = None,
+    ) -> Path | None:
+        required = (
+            self.portrait_style_reel_plan_path,
+            self.portrait_style_reel_authority_manifest_path,
+            self.portrait_style_reel_review_path,
+            self.portrait_style_reel_context_path,
+            *self.portrait_style_reel_contract_paths().values(),
+        )
+        if not any(path.is_file() for path in required):
+            return None
+        missing = [str(path) for path in required if not path.is_file()]
+        if missing:
+            raise DirectorContractError(
+                "portrait Style Reel review artifacts are incomplete: " + ", ".join(missing)
+            )
+        generate_style_reel_dashboard(
+            plan_path=self.portrait_style_reel_plan_path,
+            authority_manifest_path=self.portrait_style_reel_authority_manifest_path,
+            review_path=self.portrait_style_reel_review_path,
+            context_path=self.portrait_style_reel_context_path,
+            contract_paths=self.portrait_style_reel_contract_paths(),
+            output=self.portrait_style_reel_dashboard_path,
+            interactive_api_url=interactive_api_url,
+            interactive_session=interactive_session,
+        )
+        return self.portrait_style_reel_dashboard_path
 
     @property
     def sample_baseline_raw_path(self) -> Path:
@@ -2076,6 +2228,18 @@ class Director:
         if not self.semantic_brief_path.is_file():
             bundle = read_json(self.evidence_bundle_path) if self.evidence_bundle_path.is_file() else {}
             packet = self.root / "semantic-brief-request.json"
+            portrait_config = (
+                (self.project.get("motion_quality") or {}).get("portrait_brand") or {}
+            )
+            portrait_enabled = portrait_config.get("enabled") is True
+            transcript_payload = read_json(transcript) if transcript.is_file() else {}
+            subject_track_path = self.root / "evidence" / "subject-track.json"
+            subject_track = read_json(subject_track_path) if subject_track_path.is_file() else None
+            portrait_authorities = build_portrait_energy_authorities(
+                transcript=transcript_payload,
+                evidence_bundle=bundle,
+                subject_track=subject_track,
+            ) if portrait_enabled else None
             write_json(packet, {
                 "schema_version": 3 if motion_quality_enabled else 2,
                 "owner": "director_with_llm",
@@ -2116,6 +2280,31 @@ class Director:
                         "source/output window", "viewer takeaway", "frame evidence",
                     ],
                 } if motion_quality_enabled else {}),
+                **({
+                    "portrait_brand_motion_v2": {
+                        "enabled": True,
+                        "profile_path": portrait_config.get("profile_path"),
+                        "style_direction": portrait_config.get("style_direction"),
+                        "energy_authorities": portrait_authorities,
+                        "required_event_field": "portrait_energy_intent",
+                        "required_intent_fields": [
+                            "chapter_id", "tier", "transition_intent",
+                            "max_attention_layers", "rationale", "evidence_refs",
+                            "fallback_tier", "signals",
+                        ],
+                        "energy_tiers": ["quiet", "micro", "meso", "macro"],
+                        "selection_rules": [
+                            "author every tier from semantics and current evidence",
+                            "macro requires a bound chapter boundary evidence ID",
+                            "gesture treatment requires a bound subject-track evidence ID",
+                            "quiet requires zero attention layers",
+                        ],
+                        "forbidden": [
+                            "fixed cadence", "minimum event quota", "keyword scoring",
+                            "random rotation", "SFX availability as semantic selector",
+                        ],
+                    },
+                } if portrait_enabled else {}),
             })
             self._action_required(
                 "semantic_brief",
@@ -2507,7 +2696,14 @@ class Director:
                     if not path.is_file()
                 ]}],
             )
-        profile_value = self.project.get("profile")
+        portrait_config = (
+            (self.project.get("motion_quality") or {}).get("portrait_brand") or {}
+        )
+        profile_value = (
+            portrait_config.get("profile_path")
+            if portrait_config.get("enabled") is True
+            else self.project.get("profile")
+        )
         profile_path = self._project_path(profile_value) if profile_value else None
         outputs = compile_playbook(
             project=self.project,
@@ -2520,7 +2716,111 @@ class Director:
             validate_playbook(read_json(outputs[0]), project=self.project),
             "brand motion playbook",
         )
-        self._complete("brand_motion_playbook", list(outputs))
+        artifacts = list(outputs)
+        if portrait_config.get("enabled") is True:
+            if profile_path is None or not profile_path.is_file():
+                self._action_required(
+                    "brand_motion_playbook",
+                    "Portrait brand motion v2 requires the configured HongRun profile",
+                    [{"owner": "HongRun", "expected_artifact": str(profile_path or "")}],
+                )
+            profile = read_json(profile_path)
+            assert_valid(
+                validate_portrait_contract_schema("portrait-brand-profile", profile),
+                "portrait brand profile",
+            )
+            source_media = self._motion_source_media()
+            eligibility = evaluate_portrait_eligibility(
+                project=self.project, profile=profile, source_media=source_media,
+            )
+            eligibility_path = output_dir / "portrait-eligibility.json"
+            write_json(eligibility_path, eligibility)
+            artifacts.append(eligibility_path)
+            if eligibility["status"] != "eligible":
+                self._action_required(
+                    "brand_motion_playbook",
+                    "Portrait brand motion v2 eligibility failed",
+                    [{"owner": "director", "report": str(eligibility_path)}],
+                )
+            transcript = (
+                self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
+            )
+            edl = self.video_use_dir / "edl.json"
+            required = [transcript, edl, self.evidence_bundle_path, self.semantic_brief_path]
+            missing = [str(path) for path in required if not path.is_file()]
+            if missing:
+                self._action_required(
+                    "brand_motion_playbook",
+                    "Portrait energy compilation requires current editorial authorities",
+                    [{"owner": "director", "missing_artifacts": missing}],
+                )
+            subject_track_path = self.root / "evidence" / "subject-track.json"
+            authorities = build_portrait_energy_authorities(
+                transcript=read_json(transcript),
+                evidence_bundle=read_json(self.evidence_bundle_path),
+                subject_track=(
+                    read_json(subject_track_path) if subject_track_path.is_file() else None
+                ),
+                semantic_brief=read_json(self.semantic_brief_path),
+                edl=read_json(edl),
+                source_hashes={
+                    "transcript": sha256_file(transcript),
+                    "evidence_bundle": sha256_file(self.evidence_bundle_path),
+                    "semantic_brief": sha256_file(self.semantic_brief_path),
+                    "edl": sha256_file(edl),
+                    **({"subject_track": sha256_file(subject_track_path)} if subject_track_path.is_file() else {}),
+                },
+            )
+            authority_path = output_dir / "portrait-energy-authorities.json"
+            write_json(authority_path, authorities)
+            try:
+                chapters = derive_portrait_chapters(
+                    read_json(self.semantic_brief_path),
+                    evidence_authorities=authorities["evidence_by_id"],
+                )
+                compiled = compile_portrait_energy_map(
+                    project_id=str(self.project.get("video_id") or self.context.root.name),
+                    semantic_brief=read_json(self.semantic_brief_path),
+                    source_media={
+                        "path": source_media["path"], "sha256": source_media["sha256"],
+                    },
+                    input_hashes={
+                        "edl": sha256_file(edl),
+                        "transcript": sha256_file(transcript),
+                        "semantic_brief": _json_file_content_sha256(self.semantic_brief_path),
+                        "evidence_bundle": sha256_file(self.evidence_bundle_path),
+                    },
+                    chapters=chapters,
+                    evidence_authorities=authorities["evidence_by_id"],
+                )
+            except PortraitBrandCompilationError as error:
+                request = output_dir / "portrait-energy-revision-request.json"
+                write_json(request, {
+                    "schema_version": 1,
+                    "status": "action_required",
+                    "reason": str(error),
+                    "semantic_brief": str(self.semantic_brief_path.resolve()),
+                    "energy_authorities": str(authority_path.resolve()),
+                    "required_action": "revise explicit portrait_energy_intent without cadence or filler",
+                })
+                self._action_required(
+                    "brand_motion_playbook",
+                    "Portrait energy intent is missing, stale, or unsupported",
+                    [{"owner": "director_with_llm", "request": str(request),
+                      "expected_artifact": str(self.semantic_brief_path)}],
+                )
+            energy_path = output_dir / "portrait-energy-map.json"
+            report_path = output_dir / "portrait-energy-compile-report.json"
+            write_json(energy_path, compiled["energy_map"])
+            write_json(report_path, {key: value for key, value in compiled.items() if key != "energy_map"})
+            assert_valid(
+                validate_portrait_contract_schema("portrait-energy-map", read_json(energy_path)),
+                "portrait energy map",
+            )
+            artifacts.extend([profile_path, authority_path, energy_path, report_path])
+            if subject_track_path.is_file():
+                artifacts.append(subject_track_path)
+        self._complete("brand_motion_playbook", artifacts)
 
     def _motion_source_media(self) -> dict[str, Any]:
         evidence = read_json(self.evidence_bundle_path)
@@ -2561,6 +2861,74 @@ class Director:
             "orientation": orientation,
             "source_type": source_type,
         }
+
+    @property
+    def portrait_brand_enabled(self) -> bool:
+        return (
+            ((self.project.get("motion_quality") or {}).get("portrait_brand") or {})
+            .get("enabled") is True
+        )
+
+    def _ensure_scoped_portrait_energy(
+        self, *, brief_path: Path, output_dir: Path,
+    ) -> tuple[Path, list[Path]]:
+        transcript = (
+            self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
+        )
+        edl = self.video_use_dir / "edl.json"
+        required = [transcript, edl, self.evidence_bundle_path, brief_path]
+        missing = [str(path) for path in required if not path.is_file()]
+        if missing:
+            raise DirectorContractError(
+                "portrait energy compilation requires current inputs: " + ", ".join(missing)
+            )
+        subject_track_path = self.root / "evidence" / "subject-track.json"
+        authorities = build_portrait_energy_authorities(
+            transcript=read_json(transcript),
+            evidence_bundle=read_json(self.evidence_bundle_path),
+            subject_track=(read_json(subject_track_path) if subject_track_path.is_file() else None),
+            semantic_brief=read_json(brief_path),
+            edl=read_json(edl),
+            source_hashes={
+                "transcript": sha256_file(transcript),
+                "evidence_bundle": sha256_file(self.evidence_bundle_path),
+                "semantic_brief": sha256_file(brief_path),
+                "edl": sha256_file(edl),
+                **({"subject_track": sha256_file(subject_track_path)} if subject_track_path.is_file() else {}),
+            },
+        )
+        output_dir.mkdir(parents=True, exist_ok=True)
+        authority_path = output_dir / "portrait-energy-authorities.json"
+        energy_path = output_dir / "portrait-energy-map.json"
+        report_path = output_dir / "portrait-energy-compile-report.json"
+        write_json(authority_path, authorities)
+        try:
+            brief = read_json(brief_path)
+            compiled = compile_portrait_energy_map(
+                project_id=str(self.project.get("video_id") or self.context.root.name),
+                semantic_brief=brief,
+                source_media={
+                    "path": str(self.context.source_video.resolve()),
+                    "sha256": sha256_file(self.context.source_video),
+                },
+                input_hashes={
+                    "edl": sha256_file(edl), "transcript": sha256_file(transcript),
+                    "semantic_brief": _json_file_content_sha256(brief_path),
+                    "evidence_bundle": sha256_file(self.evidence_bundle_path),
+                },
+                chapters=derive_portrait_chapters(
+                    brief, evidence_authorities=authorities["evidence_by_id"],
+                ),
+                evidence_authorities=authorities["evidence_by_id"],
+            )
+        except PortraitBrandCompilationError as error:
+            raise DirectorContractError(f"portrait energy compilation failed: {error}") from error
+        write_json(energy_path, compiled["energy_map"])
+        write_json(report_path, {key: value for key, value in compiled.items() if key != "energy_map"})
+        artifacts = [authority_path, energy_path, report_path]
+        if subject_track_path.is_file():
+            artifacts.append(subject_track_path)
+        return energy_path, artifacts
 
     def _ensure_motion_design(
         self, *, scope: str, brief_path: Path, binding_dir: Path,
@@ -2619,12 +2987,81 @@ class Director:
         )
         write_json(contract_path, compiled["contract"])
         write_json(report_path, {key: value for key, value in compiled.items() if key != "contract"})
-        write_json(
-            choreography_path,
-            build_hyperframes_choreography(
-                compiled["contract"], advanced_runtime=compiled["advanced_runtime"],
-            ),
+        choreography = build_hyperframes_choreography(
+            compiled["contract"], advanced_runtime=compiled["advanced_runtime"],
         )
+        portrait_artifacts: list[Path] = []
+        if self.portrait_brand_enabled:
+            portrait_config = (
+                (self.project.get("motion_quality") or {}).get("portrait_brand") or {}
+            )
+            profile_path = self._project_path(portrait_config.get("profile_path"))
+            energy_path, energy_artifacts = self._ensure_scoped_portrait_energy(
+                brief_path=brief_path, output_dir=output_dir,
+            )
+            portrait_bundle = compile_portrait_motion_contracts(
+                semantic_brief=read_json(brief_path),
+                base_motion_contract=compiled["contract"],
+                profile_path=profile_path,
+                energy_map_path=energy_path,
+                registry_path=DEFAULT_PORTRAIT_RECIPE_REGISTRY,
+                brand_playbook_path=brand_path,
+            )
+            portrait_path = output_dir / "portrait-motion-contracts.json"
+            write_json(portrait_path, portrait_bundle)
+            portrait_registry = load_portrait_recipe_registry()
+            portrait_by_event = portrait_choreography_by_event(
+                portrait_bundle, portrait_registry,
+            )
+            for event in choreography.get("events") or []:
+                event.update(portrait_by_event[str(event["semantic_event_id"])])
+            component_project = (
+                self.sample_hyperframes_project if scope == "sample"
+                else self.full_hyperframes_project
+            )
+            portrait_renderer_payload = build_portrait_renderer_payload(
+                portrait_bundle, portrait_registry, project_root=component_project,
+            )
+            renderer_payload_path = self.portrait_renderer_payload_path(scope)
+            write_json(renderer_payload_path, portrait_renderer_payload)
+            component_manifest = materialize_portrait_component_assets(component_project)
+            component_manifest_path = output_dir / "portrait-component-assets.json"
+            write_json(component_manifest_path, component_manifest)
+            choreography["portrait_brand"] = {
+                "grammar_id": "hongrun-portrait-expressive-v2",
+                "portrait_contracts": {
+                    "path": str(portrait_path.resolve()),
+                    "sha256": sha256_file(portrait_path),
+                },
+                "recipe_registry": {
+                    "path": str(DEFAULT_PORTRAIT_RECIPE_REGISTRY.resolve()),
+                    "sha256": sha256_file(DEFAULT_PORTRAIT_RECIPE_REGISTRY),
+                },
+                "component_assets": component_manifest,
+                "renderer_payload": {
+                    "path": str(renderer_payload_path.resolve()),
+                    "sha256": sha256_file(renderer_payload_path),
+                },
+                "runtime_evidence": {
+                    "path": str(self.portrait_runtime_evidence_path(scope).resolve()),
+                    "status": "required_before_storyboard_completion",
+                },
+                "named_user_brand_approval_required": True,
+            }
+            portrait_artifacts = [
+                *energy_artifacts, portrait_path, profile_path,
+                DEFAULT_PORTRAIT_RECIPE_REGISTRY, PORTRAIT_COMPONENT_JS,
+                PORTRAIT_COMPONENT_CSS,
+                component_manifest_path,
+                renderer_payload_path,
+                *[
+                    Path(row["bindings"]["renderAssetRef"]["path"])
+                    for row in portrait_renderer_payload["events"]
+                    if "renderAssetRef" in row["bindings"]
+                ],
+                *[Path(row["output"]["path"]) for row in component_manifest["outputs"]],
+            ]
+        write_json(choreography_path, choreography)
         assert_valid(
             validate_motion_design_contract(
                 read_json(contract_path), artifact_paths=artifacts,
@@ -2634,6 +3071,7 @@ class Director:
         )
         return read_json(contract_path), [
             contract_path, report_path, choreography_path, DEFAULT_RECIPE_REGISTRY,
+            *portrait_artifacts,
         ]
 
     def _motion_design_request(
@@ -2657,7 +3095,7 @@ class Director:
             for recipe_id in selected_recipe_ids
         )
         choreography = read_json(choreography_path)
-        return {
+        request = {
             "selection_owner": "director_motion_quality_engine",
             "renderer_authority": "typed_choreography_only",
             "contract": str(contract_path.resolve()),
@@ -2681,6 +3119,43 @@ class Director:
                 "renderer-invented visible copy", "renderer-guessed target geometry",
             ],
         }
+        if self.portrait_brand_enabled:
+            portrait_path = output_dir / "portrait-motion-contracts.json"
+            component_manifest_path = output_dir / "portrait-component-assets.json"
+            request["portrait_brand_motion_v2"] = {
+                "grammar_id": "hongrun-portrait-expressive-v2",
+                "contracts": str(portrait_path.resolve()),
+                "contracts_sha256": sha256_file(portrait_path),
+                "recipe_registry": str(DEFAULT_PORTRAIT_RECIPE_REGISTRY.resolve()),
+                "recipe_registry_sha256": sha256_file(DEFAULT_PORTRAIT_RECIPE_REGISTRY),
+                "component_assets": str(component_manifest_path.resolve()),
+                "component_assets_sha256": sha256_file(component_manifest_path),
+                "renderer_payload": str(self.portrait_renderer_payload_path(scope).resolve()),
+                "renderer_payload_sha256": sha256_file(
+                    self.portrait_renderer_payload_path(scope)
+                ),
+                "runtime_evidence": str(self.portrait_runtime_evidence_path(scope).resolve()),
+                "runtime_capture_tool": str(
+                    (Path(__file__).resolve().parent / "validate_portrait_components_runtime.py")
+                ),
+                "runtime_capture_requires": [
+                    "current compiler renderer payload",
+                    "installed HyperFrames GSAP runtime",
+                    "browser resolved through HyperFrames",
+                ],
+                "required_dom_attributes": [
+                    "data-event-id", "data-portrait-recipe-id", "data-phase",
+                ],
+                "product_card_default": False,
+                "fixed_cadence": False,
+                "named_user_brand_approval_required": True,
+            }
+            request["forbidden"].extend([
+                "generic rounded product card fallback",
+                "portrait recipe reselection",
+                "project-specific copy hardcoded in reusable component assets",
+            ])
+        return request
 
     def _write_renderer_evidence_contract(
         self, *, scope: str, motion_contract: dict[str, Any], storyboard_path: Path,
@@ -2691,10 +3166,22 @@ class Director:
         )
         project_artifact = project / "index.html"
         contract_path = self.motion_design_dir(scope) / "motion-design-contract.json"
+        portrait_path = self.motion_design_dir(scope) / "portrait-motion-contracts.json"
+        portrait_by_event = {}
+        if self.portrait_brand_enabled and portrait_path.is_file():
+            portrait_by_event = {
+                str(row.get("semantic_event_id")): row
+                for row in (read_json(portrait_path).get("contracts") or [])
+                if isinstance(row, dict)
+            }
         selected = [
             {
                 "event_id": row["semantic_event_id"],
                 "recipe_id": row["recipe_id"],
+                **({
+                    "portrait_contract_id": portrait_by_event[row["semantic_event_id"]]["contract_id"],
+                    "portrait_recipe_id": portrait_by_event[row["semantic_event_id"]]["primary_recipe_id"],
+                } if row["semantic_event_id"] in portrait_by_event else {}),
                 "approved_visible_copy": list(row.get("approved_visible_copy") or []),
                 "target_binding_ids": list(row.get("target_binding_ids") or []),
                 "required_phases": ["entrance", "mid", "pre_exit", "post_exit"],
@@ -3119,6 +3606,30 @@ class Director:
                 validate_storyboard_bindings(storyboard, self.sample_target_binding_dir),
                 "sample target bindings",
             )
+            if self.portrait_brand_enabled:
+                portrait_bundle = read_json(
+                    self.motion_design_dir("sample") / "portrait-motion-contracts.json"
+                )
+                assert_valid(
+                    validate_storyboard_portrait_binding(storyboard, portrait_bundle),
+                    "sample portrait motion binding",
+                )
+                portrait_runtime = self.portrait_runtime_evidence_path("sample")
+                if not portrait_runtime.is_file():
+                    self._action_required(
+                        "hyperframes_storyboard",
+                        "Compiler-bound portrait component runtime evidence is required",
+                        [{
+                            "owner": "hyperframes",
+                            "capability": "portrait component browser runtime and seek verification",
+                            "tool": str((Path(__file__).resolve().parent / "validate_portrait_components_runtime.py")),
+                            "renderer_payload": str(self.portrait_renderer_payload_path("sample")),
+                            "expected_artifact": str(portrait_runtime),
+                        }],
+                    )
+                renderer_evidence_artifacts.extend(
+                    self._validate_portrait_runtime_gate("sample")
+                )
             binding_artifacts = sorted(self.sample_target_binding_dir.glob("*.json"))
             renderer_evidence_artifacts.append(self._write_renderer_evidence_contract(
                 scope="sample", motion_contract=motion_contract or {},
@@ -3185,14 +3696,42 @@ class Director:
         storyboard = self.sample_hyperframes_project / "storyboard.json"
         audio_plan = self.sample_hyperframes_project / "audio-plan.json"
         production_request = self.root / "audio-production-request.json"
-        if audio_plan.is_file():
+        portrait_audio_recompile = (
+            self.portrait_brand_enabled
+            and self.execute_external
+            and self.project.get("audio", {}).get("production", {}).get("enabled") is True
+            and storyboard.is_file()
+        )
+        if audio_plan.is_file() and not portrait_audio_recompile:
             artifacts.append(audio_plan)
         elif (self.project.get("audio", {}).get("production", {}).get("enabled") is True
               and storyboard.is_file() and self.execute_external):
+            portrait_motion_contracts = None
+            portrait_profile = None
+            if self.portrait_brand_enabled:
+                portrait_motion_contracts = (
+                    self.motion_design_dir("sample") / "portrait-motion-contracts.json"
+                )
+                portrait_config = (
+                    (self.project.get("motion_quality") or {}).get("portrait_brand") or {}
+                )
+                portrait_profile = self._project_path(portrait_config.get("profile_path"))
+                missing_portrait_audio = [
+                    str(item) for item in (portrait_motion_contracts, portrait_profile)
+                    if not item.is_file()
+                ]
+                if missing_portrait_audio:
+                    self._action_required(
+                        "audio",
+                        "Portrait sonic compilation requires the current profile and motion contracts",
+                        [{"owner": "director_audio", "missing_artifacts": missing_portrait_audio}],
+                    )
             producer = lambda: produce_audio_assets(
                 storyboard=storyboard, project=self.project, project_root=self.context.root,
                 output_dir=self.context.edit_dir / "audio", source_audio=self.context.source_video,
                 runner=self.adapter_runner, semantic_brief=self.semantic_brief_path,
+                portrait_motion_contracts=portrait_motion_contracts,
+                portrait_profile=portrait_profile,
             )
             bgm = self.project.get("audio", {}).get("bgm", {})
             bgm_enabled = bgm.get("enabled", bgm.get("enabled_by_default", True)) is True
@@ -3216,6 +3755,11 @@ class Director:
                 artifacts.extend(self._metered_provider_call(("bgm",), producer, stage="audio"))
             else:
                 artifacts.extend(producer())
+            if self.portrait_brand_enabled:
+                artifacts.extend([
+                    DEFAULT_PORTRAIT_SONIC_REGISTRY,
+                    Path(__file__).resolve().parent / "portrait_sonic.py",
+                ])
         else:
             write_json(production_request, {
                 "schema_version": 1,
@@ -3360,13 +3904,52 @@ class Director:
                     audio_plan_payload, storyboard_payload, self.project,
                     base_dir=self.sample_hyperframes_project,
                 ))
+                if self.portrait_brand_enabled:
+                    portrait_sonic_plan = (
+                        self.motion_design_dir("sample") / "portrait-sonic-plan.json"
+                    )
+                    portrait_motion_contracts = (
+                        self.motion_design_dir("sample") / "portrait-motion-contracts.json"
+                    )
+                    if not portrait_sonic_plan.is_file():
+                        validation_errors.append(
+                            "portrait sonic plan is missing; generic audio cannot satisfy portrait brand v2"
+                        )
+                    elif not portrait_motion_contracts.is_file():
+                        validation_errors.append("portrait sonic motion contracts are missing")
+                    else:
+                        portrait_sonic_payload = read_json(portrait_sonic_plan)
+                        validation_errors.extend(validate_portrait_sonic_projection(
+                            portrait_sonic_payload, audio_plan_payload,
+                            base_dir=self.sample_hyperframes_project,
+                            motion_contracts_path=portrait_motion_contracts,
+                            storyboard=storyboard_payload,
+                        ))
+                        artifacts.extend([
+                            portrait_sonic_plan,
+                            portrait_motion_contracts,
+                            DEFAULT_PORTRAIT_SONIC_REGISTRY,
+                            Path(__file__).resolve().parent / "portrait_sonic.py",
+                        ])
+                        try:
+                            artifacts.extend(portrait_sonic_plan_artifacts(
+                                portrait_sonic_payload,
+                            ))
+                        except (OSError, ValueError, json.JSONDecodeError) as error:
+                            validation_errors.append(
+                                f"portrait sonic authority chain is stale: {error}"
+                            )
+                        report = portrait_sonic_plan.parent / "portrait-sonic-compile-report.json"
+                        if report.is_file():
+                            artifacts.append(report)
                 decisions = ((audio_plan_payload.get("motion_sfx") or {}).get(
                     "event_decisions"
                 ) or [])
-                if any(
-                    isinstance(row, dict) and row.get("decision") == "cue"
-                    for row in decisions
-                ):
+                cue_decisions = [
+                    row for row in decisions
+                    if isinstance(row, dict) and row.get("decision") == "cue"
+                ]
+                if cue_decisions:
                     audibility = ((audio_plan_payload.get("motion_sfx") or {}).get(
                         "mix_audibility_check"
                     ) or {})
@@ -3376,7 +3959,7 @@ class Director:
                         evidence_path.resolve() if evidence_path.is_absolute()
                         else (audio_plan.parent / evidence_path).resolve()
                     )
-                    validation_errors.extend(validate_sample_audio_evidence(
+                    evidence_errors = validate_sample_audio_evidence(
                         audio_plan=audio_plan, storyboard=storyboard,
                         candidate_media=self.sample_candidate_raw_path,
                         evidence_path=evidence_path,
@@ -3385,7 +3968,41 @@ class Director:
                             self.creative_review_audio_dir.parent / "mix-audibility.json"
                         ),
                         declared_evidence_sha256=str(audibility.get("evidence_sha256") or ""),
-                    ))
+                    )
+                    validation_errors.extend(evidence_errors)
+                    if not evidence_errors:
+                        try:
+                            artifacts.extend(sample_audio_evidence_artifacts(evidence_path))
+                        except (OSError, ValueError, json.JSONDecodeError) as error:
+                            validation_errors.append(
+                                f"sample audio evidence artifact inventory is stale: {error}"
+                            )
+                    if self.portrait_brand_enabled:
+                        if (
+                            not self.sample_candidate_sfx_path.is_file()
+                            or not self.sample_review_mix_receipt_path.is_file()
+                        ):
+                            validation_errors.append(
+                                "portrait sonic full-sample mix output or receipt is missing"
+                            )
+                        else:
+                            try:
+                                mix_errors = validate_sample_review_mix_receipt(
+                                    read_json(self.sample_review_mix_receipt_path),
+                                    candidate_media=self.sample_candidate_raw_path,
+                                    audio_plan=audio_plan,
+                                    output=self.sample_candidate_sfx_path,
+                                )
+                            except (OSError, ValueError, json.JSONDecodeError) as error:
+                                mix_errors = [
+                                    f"portrait sonic full-sample mix receipt is unreadable: {error}"
+                                ]
+                            validation_errors.extend(mix_errors)
+                            if not mix_errors:
+                                artifacts.extend([
+                                    self.sample_candidate_sfx_path,
+                                    self.sample_review_mix_receipt_path,
+                                ])
                 if not validation_errors:
                     audio_assets = _audio_plan_asset_files(
                         audio_plan_payload, self.sample_hyperframes_project,
@@ -3996,6 +4613,30 @@ class Director:
                 validate_storyboard_bindings(storyboard, self.full_target_binding_dir),
                 "full target bindings",
             )
+            if self.portrait_brand_enabled:
+                portrait_bundle = read_json(
+                    self.motion_design_dir("full") / "portrait-motion-contracts.json"
+                )
+                assert_valid(
+                    validate_storyboard_portrait_binding(storyboard, portrait_bundle),
+                    "full portrait motion binding",
+                )
+                portrait_runtime = self.portrait_runtime_evidence_path("full")
+                if not portrait_runtime.is_file():
+                    self._action_required(
+                        "full_hyperframes_storyboard",
+                        "Compiler-bound portrait component runtime evidence is required",
+                        [{
+                            "owner": "hyperframes",
+                            "capability": "portrait component browser runtime and seek verification",
+                            "tool": str((Path(__file__).resolve().parent / "validate_portrait_components_runtime.py")),
+                            "renderer_payload": str(self.portrait_renderer_payload_path("full")),
+                            "expected_artifact": str(portrait_runtime),
+                        }],
+                    )
+                renderer_evidence_artifacts.extend(
+                    self._validate_portrait_runtime_gate("full")
+                )
             binding_artifacts = sorted(self.full_target_binding_dir.glob("*.json"))
             renderer_evidence_artifacts.append(self._write_renderer_evidence_contract(
                 scope="full", motion_contract=motion_contract or {},
@@ -6317,14 +6958,19 @@ def _dispatch(args: argparse.Namespace) -> int:
         output = Path(args.output).resolve() if args.output else director.root / "review" / "index.html"
         server = None
         interactive_api_url = None
+        interactive_session = None
         if args.interactive:
             host = args.host or str(interactive.get("host") or "127.0.0.1")
             port = args.port if args.port is not None else int(interactive.get("port", 8765))
+            interactive_session = {
+                "authorization": secrets.token_urlsafe(32),
+                "csrf": secrets.token_urlsafe(32),
+            }
             config = ReviewServerConfig(
                 root=director.context.root,
                 proposal_dir=director.root / "review" / "proposals",
-                auth_token=os.environ.get("DIRECTOR_REVIEW_TOKEN", ""),
-                csrf_token=os.environ.get("DIRECTOR_REVIEW_CSRF_TOKEN", ""),
+                auth_token=interactive_session["authorization"],
+                csrf_token=interactive_session["csrf"],
                 max_body_bytes=int(interactive.get("max_body_bytes", 64 * 1024)),
                 allow_file_origin=True,
             )
@@ -6332,6 +6978,10 @@ def _dispatch(args: argparse.Namespace) -> int:
             url_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
             interactive_api_url = f"http://{url_host}:{server.server_port}/api/proposals"
         try:
+            style_reel_dashboard = director._generate_portrait_style_reel_dashboard_if_ready(
+                interactive_api_url=interactive_api_url,
+                interactive_session=interactive_session,
+            )
             dashboard = generate_dashboard(
                 project_root=director.context.root, director_root=director.root, output=output,
                 creative_review_path=(
@@ -6342,9 +6992,13 @@ def _dispatch(args: argparse.Namespace) -> int:
                     if (director.motion_design_dir("sample") / "motion-design-contract.json").is_file()
                     else None
                 ),
+                style_reel_dashboard_path=style_reel_dashboard,
                 interactive_api_url=interactive_api_url,
+                interactive_session=interactive_session,
             )
             print(dashboard)
+            if style_reel_dashboard is not None:
+                print(style_reel_dashboard)
             if server is not None:
                 print(interactive_api_url)
                 server.serve_forever()
