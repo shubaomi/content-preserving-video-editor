@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-preserving-video-editor.local/schemas/nle-handoff-package-v2.json",
+  "title": "NLE handoff package v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "kind", "status", "package_profile", "package_level",
+    "package_root", "authorities", "capability_claims", "assets", "timeline",
+    "rights_manifest", "compatibility_report", "validation_report",
+    "complete_file_inventory"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "kind": {"const": "manual_nle_package"},
+    "status": {"enum": ["action_required", "pass", "failed", "stale"]},
+    "package_profile": {"const": "jianying_desktop_compatible_v1"},
+    "package_level": {"enum": ["reference_only", "balanced", "max_editable"]},
+    "package_root": {"type": "string", "minLength": 1},
+    "authorities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "source", "automatic_master", "edl", "implementation"],
+      "properties": {
+        "project": {"$ref": "#/$defs/fileRef"},
+        "source": {"$ref": "#/$defs/fileRef"},
+        "automatic_master": {"$ref": "#/$defs/fileRef"},
+        "edl": {"$ref": "#/$defs/fileRef"},
+        "implementation": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "capability_claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["native_draft", "editor_api", "editor_cli", "headless_render"],
+      "properties": {
+        "native_draft": {"const": false},
+        "editor_api": {"const": false},
+        "editor_cli": {"const": false},
+        "headless_render": {"const": false}
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "https://content-preserving-video-editor.local/schemas/nle-layer-asset-v2.json"}
+    },
+    "timeline": {"$ref": "#/$defs/fileRef"},
+    "rights_manifest": {"$ref": "#/$defs/fileRef"},
+    "compatibility_report": {"$ref": "#/$defs/fileRef"},
+    "validation_report": {"$ref": "#/$defs/fileRef"},
+    "import_guide": {"$ref": "#/$defs/fileRef"},
+    "complete_file_inventory": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/fileRef"}
+    },
+    "integrity_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "fileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

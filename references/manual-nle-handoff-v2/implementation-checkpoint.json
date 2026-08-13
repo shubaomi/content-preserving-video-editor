@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "kind": "manual_nle_handoff_v2_implementation_checkpoint",
+  "status": "action_required",
+  "design_candidate": "approved",
+  "implementation_scope": "WP0-WP5_without_native_draft_or_full_video_render",
+  "work_packages": {
+    "WP0": "complete",
+    "WP1": "complete_for_current_available_assets",
+    "WP2": "contract_and_unavailable_state_complete",
+    "WP3": "complete",
+    "WP4": "complete",
+    "WP5": "technical_canary_complete_human_jianying_gate_pending",
+    "WP6": "out_of_scope"
+  },
+  "current_maturity": "director_integrated",
+  "default_enabled": false,
+  "production_default": false,
+  "native_jianying_draft": false,
+  "full_video_rendered": false,
+  "automated_validation": {
+    "full_suite": {
+      "status": "pass",
+      "tests": 933,
+      "failed": 0,
+      "skipped": 0,
+      "source_tree_sha256": "e3093dbe1439e0ebc9adb9b9e894203260649f3dcfb4aae13c7bf523f492eb21"
+    },
+    "current_golden": "pass",
+    "real_short_package_validator": "pass",
+    "real_short_full_decode": "pass"
+  },
+  "real_short_canary": "../validation/manual-nle-handoff-v2-canary.json",
+  "remaining_human_gate": "HongRun must import the current package in Jianying Desktop and record the five-task compatibility/usability result.",
+  "delivery": {
+    "commit_created": false,
+    "push_performed": false,
+    "note": "Git delivery is performed only after final diff verification."
+  }
+}

@@ -199,9 +199,13 @@ class CapabilityRegistryTests(unittest.TestCase):
         self.assertTrue(by_name["design_tokens"]["enabled"])
         self.assertFalse(by_name["otio_timeline"]["enabled"])
         self.assertIn(by_name["otio_timeline"]["maturity"], CAPABILITY_LEVELS)
+        self.assertEqual(by_name["manual_nle_package_v2"]["maturity"], "documented")
+        self.assertFalse(by_name["manual_nle_package_v2"]["enabled"])
         minimum = CAPABILITY_LEVELS.index("director_integrated")
-        self.assertTrue(all(CAPABILITY_LEVELS.index(row["maturity"]) >= minimum
-                            for row in by_name.values()))
+        self.assertTrue(all(
+            CAPABILITY_LEVELS.index(row["maturity"]) >= minimum
+            for name, row in by_name.items() if name != "manual_nle_package_v2"
+        ))
 
     @patch("portrait_golden.validate_retained_real_project_portrait_validation")
     @patch("test_acceptance_report.validate_report", return_value=[])

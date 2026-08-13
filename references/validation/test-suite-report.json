@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "passed": true,
-  "test_count": 923,
+  "test_count": 933,
   "failed": 0,
   "skipped": 0,
   "exit_code": 0,
@@ -28,9 +28,9 @@
     "test_media_catalog_adapter.MediaCatalogAdapterTests.test_concurrent_identical_request_set_serializes_manifest_creation",
     "test_director.DirectorTests.test_platform_validation_rebuilds_reports_when_cover_bytes_change"
   ],
-  "source_tree_sha256": "e899399a464ce4d0f4a1a4540c5d0517bf8d983b4fd2a82ecca11ef0dece0939",
+  "source_tree_sha256": "e3093dbe1439e0ebc9adb9b9e894203260649f3dcfb4aae13c7bf523f492eb21",
   "runner_implementation": "scripts/test_acceptance_report.py",
   "runner_implementation_sha256": "38b2a07010d581ea080b0bb0092697d57a23a1b4b7a89bf520f824bc46a9d3a7",
   "log": "test-suite.log",
-  "log_sha256": "41951bd3219feeb4465363030a0b031e0a21accf9fc60442fb7086d9ece7e51d"
+  "log_sha256": "cb045afc4f2d98b29cb1a8f66618fcce8b353432bb51b9f6330048b2ab4ae4ca"
 }

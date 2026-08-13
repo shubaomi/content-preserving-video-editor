@@ -4,8 +4,8 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 11. New projects write both
-`schema_version: 11` and `version: 11`. Legacy projects from v1 through v10 are
+The current project schema is version 12. New projects write both
+`schema_version: 12` and `version: 12`. Legacy projects from v1 through v11 are
 deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
@@ -399,6 +399,15 @@ delivery:
       bgm_stem: null
       sfx_stems: []
       cover: null
+    nle_package:
+      enabled: false
+      profile: jianying_desktop_compatible_v1
+      level: balanced # reference_only | balanced | max_editable
+      include:
+        motion_layers: true
+        ip_assets: true
+        modular_outro: true
+        event_sfx: true
 ```
 
 Keep it disabled by default. `enabled: false` or backend `none` leaves the
@@ -408,6 +417,17 @@ CLI, MCP, or headless integration. Resolve declared asset and return paths from
 `paths.root`. The returned path must differ from the automatic master path.
 Missing optional assets are legal and must be represented as `unavailable` in
 the handoff manifest.
+
+`nle_package.enabled: true` additionally builds the editor-neutral layered
+package under `work/director/manual-finish/nle-package-v2/`. It copies only
+current materialized assets, writes an EDL-authoritative zero-based timeline,
+SRT/ASS-reference handoff, audio/media layer inventory, compatibility report,
+and deterministic Jianying Desktop import guide. It never writes a Jianying
+native draft and all `native_draft`, editor API/CLI, and headless-render claims
+remain false. `balanced` requires a current clean A-roll and `master.srt`;
+unmaterialized motion, IP, audio, cover, or outro layers stay explicitly
+`unavailable`. Compatibility remains pending until the five-task named-user
+Jianying Desktop canary is recorded.
 
 An OpenMontage-oriented handoff may alternatively set:
 

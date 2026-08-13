@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "kind": "manual_nle_handoff_v2_real_short_canary",
+  "status": "action_required",
+  "maturity": "director_integrated",
+  "canary_role": "portrait_product_talking_head_short",
+  "duration_seconds": 55.48,
+  "canvas": {
+    "width": 544,
+    "height": 960,
+    "frame_rate": 25.0
+  },
+  "implementation_sha256": "519855f06b489e4719361969af3ccbf26a14df880c340abfb807ac60a677c120",
+  "package": {
+    "path": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\work\\director\\manual-nle-handoff-v2-canary\\nle-package-v2\\10-evidence\\nle-handoff-package.json",
+    "sha256": "faac66d74aa3412214c4de48699ae280c74950aaed8453ca3029f0b383cfcd03",
+    "validation_errors": [],
+    "complete_file_inventory_count": 24
+  },
+  "current_media": {
+    "automatic_master_sha256": "744d8c4d160eec9ea0802700585b318637b9ed7ce803774774b2d20d40197d96",
+    "clean_a_roll_sha256": "74401f46c9ddfa675a4b104e1aaae0cfd8ad8fe2cf05d73f17abea01a1c1f322",
+    "dialogue_wav_sha256": "72cdc82bfa150264e55e9bbf440935b860867933c5ea8535975869cf57f712ef",
+    "master_srt_sha256": "1a75cf9ea484046de80586aaa2446e8517c33613dc935fdfbaa05117c2fdb7d5",
+    "caption_ass_reference_sha256": "84f9abfd7d42f892e4ddbff6c2d1977923789723979a33853bf1ff7e2b9aea01",
+    "caption_emphasis_plan_sha256": "09bf980c15f3326f9c56bd246f37306deeb222963327948e982cb1c72edd5f22",
+    "full_decode": "pass"
+  },
+  "available_layers": {
+    "automatic_master": 1,
+    "clean_a_roll": 1,
+    "dialogue_stem": 1,
+    "caption_srt": 1,
+    "caption_ass_reference": 1,
+    "caption_style_plan": 1,
+    "event_sfx": 3,
+    "editorial_authority": 8
+  },
+  "unavailable_layers": [
+    "motion_full_duration",
+    "motion_event",
+    "ip_source",
+    "ip_rendered",
+    "bgm_stem",
+    "sfx_grouped",
+    "outro_background",
+    "outro_overlay",
+    "outro_copy",
+    "outro_reference",
+    "outro_icon",
+    "cover",
+    "evidence"
+  ],
+  "capability_claims": {
+    "native_jianying_draft": false,
+    "editor_api": false,
+    "editor_cli": false,
+    "headless_render": false,
+    "jianying_compatibility_validated": false
+  },
+  "human_gate": {
+    "actor": "HongRun",
+    "status": "pending",
+    "next_action": "Import the package into the current Jianying Desktop and complete the five frozen edit tasks.",
+    "tasks": [
+      "correct one subtitle and change its emphasis styling",
+      "move or remove one event motion overlay when a real motion layer becomes available",
+      "mute one SFX while preserving dialogue",
+      "reposition or remove one personal-IP asset when available",
+      "change CTA copy and hide one CTA icon when the modular outro becomes available"
+    ]
+  },
+  "boundary": "This receipt proves current package assembly and technical validation only. It does not prove Jianying import, native editability, alpha compatibility, or user usefulness. No full-length video was rendered."
+}

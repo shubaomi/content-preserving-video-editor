@@ -100,6 +100,12 @@ from manual_finish import (
     build_handoff_manifest,
     validate_returned_final_qa,
 )
+from nle_handoff_v2 import (
+    NleHandoffError,
+    build_nle_handoff_package,
+    probe_video_frame_rate,
+    validate_nle_handoff_package,
+)
 from media_catalog_adapter import run_media_catalog
 from motion_contracts import (
     DEFAULT_RECIPE_REGISTRY,
@@ -1369,6 +1375,11 @@ class Director:
         )
 
     @property
+    def manual_nle_package_config(self) -> dict[str, Any]:
+        value = self.manual_finish_config.get("nle_package") or {}
+        return value if isinstance(value, dict) else {}
+
+    @property
     def manual_return_output(self) -> Path:
         configured = self.manual_finish_config.get("returned_final")
         if configured:
@@ -1392,6 +1403,10 @@ class Director:
             else "handoff-manifest.json"
         )
         return self.manual_finish_dir / name
+
+    @property
+    def manual_nle_package_root(self) -> Path:
+        return self.manual_finish_dir / "nle-package-v2"
 
     def _legacy_script_audit(self) -> Path:
         scripts_dir = self.context.root / str(self.project.get("paths", {}).get("scripts", "scripts"))
@@ -5867,6 +5882,33 @@ class Director:
                 stems.append(path)
         return stems
 
+    def _manual_nle_sfx_events(self) -> list[dict[str, Any]]:
+        audio_plan = self.full_hyperframes_project / "audio-plan.json"
+        if not audio_plan.is_file():
+            return []
+        results: list[dict[str, Any]] = []
+        for row in (read_json(audio_plan).get("motion_sfx") or {}).get("event_decisions") or []:
+            if not isinstance(row, dict) or row.get("decision") != "cue":
+                continue
+            path = self._optional_project_path(row.get("asset"), base=self.full_hyperframes_project)
+            try:
+                start = float(row["start"])
+                duration = float(row["duration_seconds"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if path and path.is_file() and math.isfinite(start) and math.isfinite(duration) and start >= 0 and duration > 0:
+                results.append({
+                    "path": path,
+                    "semantic_event_id": str(row.get("semantic_event_id") or row.get("event_id") or ""),
+                    "render_event_id": str(row.get("event_id") or ""),
+                    "timeline": {
+                        "start_seconds": start,
+                        "end_seconds": start + duration,
+                        "frame_rate": probe_video_frame_rate(self.delivery_output),
+                    },
+                })
+        return results
+
     def _write_manual_handoff_manifest(self) -> Path:
         config = self.manual_finish_config
         assets = config.get("assets") or {}
@@ -5905,6 +5947,100 @@ class Director:
             production_contract=self.production_contract_path,
         )
         return path
+
+    def _write_manual_nle_package_v2(self) -> tuple[Path, list[Path]] | None:
+        package = self.manual_nle_package_config
+        if package.get("enabled") is not True:
+            return None
+        assets_config = self.manual_finish_config.get("assets") or {}
+        if not isinstance(assets_config, dict):
+            raise DirectorContractError("manual finish assets must be a mapping")
+        defaults: dict[str, Path] = {
+            "clean_a_roll": self.video_use_dir / "base-preview.mp4",
+            "caption_srt": self.video_use_dir / "master.srt",
+            "caption_ass_reference": self.root / "caption-treatment" / "full" / "master.ass",
+            "caption_style_plan": (
+                self.root / "caption-treatment" / "full" / "caption-emphasis-plan.json"
+            ),
+        }
+        aliases = {
+            "caption_srt": "captions",
+            "caption_ass_reference": "styled_captions",
+            "caption_style_plan": "caption_style_plan",
+            "dialogue_stem": "dialogue_stem",
+            "bgm_stem": "bgm_stem",
+            "sfx_grouped": "sfx_grouped",
+            "motion_full_duration": "transparent_motion_layer",
+            "ip_source": "ip_source",
+            "ip_rendered": "ip_rendered",
+            "outro_background": "outro_background",
+            "outro_overlay": "outro_overlay",
+            "outro_copy": "outro_copy",
+            "outro_reference": "outro_reference",
+            "cover": "cover",
+        }
+        resolved_assets: dict[str, Any] = {}
+        for role in (
+            "clean_a_roll", "caption_srt", "caption_ass_reference", "caption_style_plan",
+            "dialogue_stem", "bgm_stem", "sfx_grouped", "motion_full_duration",
+            "ip_source", "ip_rendered", "outro_background", "outro_overlay",
+            "outro_copy", "outro_reference", "cover",
+        ):
+            configured = assets_config.get(aliases.get(role, role))
+            candidate = self._optional_project_path(configured) if configured else defaults.get(role)
+            if candidate is not None and candidate.is_file():
+                resolved_assets[role] = candidate
+        include = package.get("include") or {}
+        if include.get("motion_layers") is not True:
+            resolved_assets.pop("motion_full_duration", None)
+        if include.get("ip_assets") is not True:
+            resolved_assets.pop("ip_source", None)
+            resolved_assets.pop("ip_rendered", None)
+        if include.get("modular_outro") is not True:
+            for role in ("outro_background", "outro_overlay", "outro_copy", "outro_reference"):
+                resolved_assets.pop(role, None)
+        if include.get("event_sfx") is True:
+            event_sfx = self._manual_nle_sfx_events()
+            if event_sfx:
+                resolved_assets["sfx_event"] = event_sfx
+        editorial = [
+            self.video_use_dir / "captions.json",
+            self.video_use_dir / "edl.json",
+            self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json",
+            self.full_semantic_brief_path,
+            self.full_hyperframes_project / "storyboard.json",
+            self.full_hyperframes_project / "audio-plan.json",
+            self.production_contract_path,
+        ]
+        resolved_assets["editorial_authority"] = [path for path in editorial if path.is_file()]
+        media = self._motion_source_media()
+        try:
+            build_nle_handoff_package(
+                package_root=self.manual_nle_package_root,
+                authorized_root=self.context.root,
+                project_path=self.context.project_file,
+                source_path=self.context.source_video,
+                automatic_master=self.delivery_output,
+                edl_path=self.video_use_dir / "edl.json",
+                implementation_sha256=sha256_file(
+                    Path(__file__).with_name("nle_handoff_v2.py")
+                ),
+                package_level=str(package.get("level") or "balanced"),
+                frame_rate=probe_video_frame_rate(self.delivery_output),
+                width=int(media["width"]),
+                height=int(media["height"]),
+                assets=resolved_assets,
+            )
+        except (NleHandoffError, OSError, ValueError) as error:
+            raise DirectorContractError(f"manual NLE package v2 failed: {error}") from error
+        receipt = self.manual_nle_package_root / "10-evidence" / "nle-handoff-package.json"
+        errors = validate_nle_handoff_package(receipt)
+        if errors:
+            raise DirectorContractError(
+                "manual NLE package v2 is invalid:\n- " + "\n- ".join(errors)
+            )
+        artifacts = sorted(path for path in self.manual_nle_package_root.rglob("*") if path.is_file())
+        return receipt, artifacts
 
     def _ensure_manual_correction_ledger(self) -> Path:
         path = self.manual_finish_dir / "correction-ledger.json"
@@ -6001,6 +6137,9 @@ class Director:
                 [{"owner": "user", "capability": "choose a distinct returned_final path"}],
             )
         manifest_path = self._write_manual_handoff_manifest()
+        nle_package_result = self._write_manual_nle_package_v2()
+        nle_package_receipt = nle_package_result[0] if nle_package_result else None
+        nle_package_artifacts = nle_package_result[1] if nle_package_result else []
         ledger_path = self._ensure_manual_correction_ledger()
         typed_handoff_path: Path | None = None
         if backend in {"opencut", "other_nle", "openmontage"}:
@@ -6024,6 +6163,13 @@ class Director:
                     "correction_ledger": str(ledger_path),
                     "typed_nle_handoff": (
                         str(typed_handoff_path) if typed_handoff_path is not None else None
+                    ),
+                    "layered_nle_package": (
+                        str(nle_package_receipt) if nle_package_receipt is not None else None
+                    ),
+                    "jianying_import_guide": (
+                        str(self.manual_nle_package_root / "08-timeline" / "import-order.md")
+                        if nle_package_receipt is not None else None
                     ),
                     "expected_artifact": str(returned),
                     "capability_boundary": (
@@ -6099,6 +6245,7 @@ class Director:
             decision_path, manifest_path, ledger_path, receipt_path,
             media_report_path, returned_qa_path, final_correctness_path, returned,
             *([typed_handoff_path] if typed_handoff_path is not None else []),
+            *nle_package_artifacts,
         ])
 
     def _build_optional_delivery_packages(

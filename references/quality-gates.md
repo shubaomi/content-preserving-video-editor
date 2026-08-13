@@ -384,6 +384,15 @@ Complete a video only when applicable gates pass.
 - Treat `delivery.openmontage_handoff` as the same human-only boundary. Generate
   a neutral manifest and `action_required`; never claim OpenMontage automation,
   API, MCP, CLI, or headless rendering.
+- Keep layered NLE package v2 default-off. Validate its complete on-disk
+  inventory, current authority hashes, EDL/OTIO timeline, unavailable rows,
+  path containment, and deterministic import guide before exposing it to a
+  human editor. Standard H.264 MP4 must never be labeled as alpha; unverified
+  alpha formats remain pending until the current Jianying Desktop canary.
+- A technical package pass does not prove editability. Require HongRun to import
+  the short canary and complete the five caption/motion/SFX/IP/outro edits before
+  promoting the named compatibility profile. Native draft/API/CLI/headless
+  capabilities remain false.
 
 ## Optional derived outputs
 

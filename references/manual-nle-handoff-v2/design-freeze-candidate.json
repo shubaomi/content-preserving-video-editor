@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "candidate_id": "content-preserving-video-editor-manual-nle-handoff-v2-2026-08-13",
+  "status": "approved",
+  "approved": true,
+  "created_at": "2026-08-13T13:41:44.0296975-07:00",
+  "repository": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor",
+    "branch": "main",
+    "head_at_design_start": "55daea8f0ace60ee76afbb770fc7e10684abe453",
+    "remote": "https://github.com/shubaomi/content-preserving-video-editor.git",
+    "baseline_was_clean": true,
+    "candidate_worktree_scope": [
+      "references/manual-nle-handoff-v2/"
+    ]
+  },
+  "canonical_objective": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\manual-nle-handoff-v2\\goal-objective.md",
+    "sha256": "f05852547ab32dcce6dc1e78e9c4d6fe04a13c87994bc4333844c535603f6b06",
+    "resume_rule": "After task recovery, context compaction, or model change, fully read the canonical objective and verify its SHA-256 before continuing."
+  },
+  "user_approval": {
+    "status": "approved",
+    "approved_by": "HongRun",
+    "approved_at": "2026-08-13T13:45:00-07:00",
+    "approval_evidence": "User message: 批准 manual-nle-handoff-v2 design-freeze-candidate，按照实施计划进入下一阶段实现。"
+  },
+  "implementation_objective": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\manual-nle-handoff-v2\\implementation-goal-objective.md",
+    "sha256": "ee9ec6336f4970482d64276773dce2976b2c391f4336a91fe579183846b592b3",
+    "resume_rule": "After task recovery, context compaction, or model change, fully read the implementation objective and approved design before continuing."
+  },
+  "design_decision": {
+    "requirement_status": "real",
+    "capability_name": "manual_nle_package_v2",
+    "recommended_package_profile": "jianying_desktop_compatible_v1",
+    "recommended_package_level": "balanced",
+    "system_of_record": "Director",
+    "timeline_authority": "video-use-output-timeline",
+    "motion_source_owner": "HyperFrames",
+    "automatic_master": "immutable_reference_and_delivery_fallback",
+    "native_jianying_draft": "future_separately_gated_adapter_only",
+    "normal_operation_requires_user_secret_or_encryption": false
+  },
+  "frozen_package_layers": [
+    "immutable_automatic_master",
+    "clean_edited_a_roll",
+    "editable_utf8_srt",
+    "semantic_emphasis_plan_and_ass_reference",
+    "event_local_alpha_motion_layers",
+    "optional_zero_based_full_duration_motion_layer",
+    "dialogue_bgm_grouped_and_optional_event_sfx_stems",
+    "personal_ip_source_and_rendered_assets",
+    "modular_text_free_cta_outro_kit",
+    "cover_and_source_assets",
+    "typed_timeline_otio_markers_and_import_guide",
+    "hyperframes_project_and_editorial_authorities",
+    "rights_compatibility_validation_and_return_evidence"
+  ],
+  "frozen_boundaries": {
+    "default_enabled": false,
+    "jianying_api_claimed": false,
+    "jianying_cli_claimed": false,
+    "jianying_mcp_claimed": false,
+    "jianying_headless_render_claimed": false,
+    "native_draft_import_claimed": false,
+    "srt_editability_claim": "requires current Jianying Desktop human canary",
+    "alpha_mov_claim": "candidate_only_until_current Jianying Desktop human canary",
+    "alpha_fallback": "png_sequence",
+    "human_return": "requires_full_existing_delivery_revalidation"
+  },
+  "artifact_inventory": [
+    {"path": "README.md", "sha256": "40d6bfad43f29d5b2c4561c5279bec349fdd766c1867afef80a98b3ffa1d0079"},
+    {"path": "goal-objective.md", "sha256": "f05852547ab32dcce6dc1e78e9c4d6fe04a13c87994bc4333844c535603f6b06"},
+    {"path": "requirements-traceability.md", "sha256": "a5f1f212f15090af5f29930a4995ea29e678d34ea43bc077c3039bcf1a154b68"},
+    {"path": "architecture-and-tool-boundaries.md", "sha256": "bc05e8d9ca0c5073e8fa0ccf136f5607d7e3e98b7a95c3d390eb1970c3cc5757"},
+    {"path": "package-and-layer-spec.md", "sha256": "b1d83a5548c1bd0efee002a83386b74648b37d0e71ae83cdd4c1b3de8b7d1532"},
+    {"path": "machine-contracts.md", "sha256": "9bf5d7242b5a0a76b7e3f01af40c4f9eeea0c9befdbdd54f66fc6d3357ecdfc0"},
+    {"path": "acceptance-matrix.md", "sha256": "8c9327e079e8955fea0112fc1adeddd82476b37adcc1a8357a6f1147ea29d64b"},
+    {"path": "migration-and-rollback.md", "sha256": "d720b54f815236fb88a457c92aa1d22a5db75f7e5e56aca952b1ac9cdc5c48f6"},
+    {"path": "implementation-plan.md", "sha256": "aee3fe1d71eedfc90542a134456416805b90f0cc333cc9c963bc9296c41153c6"},
+    {"path": "risk-and-cost-ledger.md", "sha256": "c1fd40477b649bdb222f2909996adadb291a2cb085f7fa5bd04d0bec425af6df"},
+    {"path": "design-review-report.md", "sha256": "c769380ba1b15438428060fb71c5c3039331e5436cb73b0df24364fbab6b2073"},
+    {"path": "schemas/nle-layer-asset.schema.json", "sha256": "6826b0d41cf95b6738e163630851daea59bc28d292cea63949ea2dbe53c4b14d"},
+    {"path": "schemas/nle-layer-timeline.schema.json", "sha256": "35f8f80335e0939a771569441790f05a244b9a84ac7fec334ce6a05459e351ad"},
+    {"path": "schemas/nle-compatibility-report.schema.json", "sha256": "562c7978c3c5a0c6f387bdb0f301cfcf6bb4167c1c2a3c5233e7df180949841f"},
+    {"path": "schemas/nle-return-receipt.schema.json", "sha256": "c9ea4b0cd1bb615795b32759b4d420585e8b24717d41c579c920efa4fd75f926"},
+    {"path": "schemas/nle-handoff-package.schema.json", "sha256": "a569abf0af25fce3059eb0772adebcc651969d31be2d1e3a4192dd936e42dc67"}
+  ],
+  "external_capability_research": {
+    "checked_at": "2026-08-13T13:41:44.0296975-07:00",
+    "primary_sources": [
+      "https://www.capcut.com/help/how-to-import-subtitles",
+      "https://www.capcut.com/help/import-a-previous-project-into-the-current-project",
+      "https://www.capcut.com/help/can-not-local-assets-be-recognized-during-import",
+      "https://www.capcut.com/create/transparent-video-export-alpha-channels"
+    ],
+    "verified_boundary": "Desktop/Web subtitle import is documented; exported flattened media does not restore individual layers; direct cross-draft import is not supported; alpha compatibility remains format/version dependent and requires a current canary."
+  },
+  "validation": {
+    "required_document_inventory": "pass_11_documents",
+    "requirement_ids": "NLE-RQ-001_through_NLE-RQ-022_present",
+    "json_parse": "pass",
+    "draft_2020_12_schema_count": 5,
+    "schema_meta_validation": "pass_5_of_5",
+    "representative_positive_instances": "pass_5_of_5",
+    "representative_negative_instances": "rejected_4_of_4",
+    "git_diff_check": "pass",
+    "design_review": {
+      "status": "pass_as_candidate",
+      "unresolved_blockers": 0,
+      "unresolved_highs": 0
+    },
+    "production_code": "not_implemented_by_phase_boundary",
+    "media_render": "not_run_by_phase_boundary",
+    "jianying_import_canary": "not_run_by_phase_boundary"
+  },
+  "phase_boundaries": {
+    "production_code_implemented": false,
+    "long_or_full_video_rendered": false,
+    "native_jianying_draft_generated": false,
+    "upstream_source_modified": false,
+    "git_commit_created": false,
+    "git_push_performed": false,
+    "implementation_authorized": true,
+    "next_phase_requires_explicit_user_approval": false
+  },
+  "maturity": {
+    "this_candidate": "documented",
+    "promotion_statement": "This design candidate does not promote manual NLE handoff v2, Jianying compatibility, alpha import, real-project validation, or production-default maturity."
+  },
+  "approval_request": {
+    "decision": "approved",
+    "required_actor": "HongRun",
+    "approval_phrase": "批准 manual-nle-handoff-v2 design-freeze-candidate，按照实施计划进入下一阶段实现。"
+  },
+  "candidate_manifest_excludes_self_hash": true,
+  "next_action": "Execute WP0 through WP5 from implementation-goal-objective.md; keep WP6 separately gated and stop at the Jianying Desktop human import/editability gate."
+}

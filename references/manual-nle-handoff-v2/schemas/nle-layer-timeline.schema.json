@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-preserving-video-editor.local/schemas/nle-layer-timeline-v2.json",
+  "title": "NLE layer timeline v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "authority", "origin_seconds", "duration_seconds",
+    "frame_rate", "canvas", "tracks", "markers"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "authority": {"const": "video-use-output-timeline"},
+    "origin_seconds": {"const": 0},
+    "duration_seconds": {"type": "number", "exclusiveMinimum": 0},
+    "frame_rate": {"type": "number", "exclusiveMinimum": 0},
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1}
+      }
+    },
+    "tracks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["track_id", "role", "order", "clips"],
+        "properties": {
+          "track_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"},
+          "role": {
+            "enum": ["reference", "base_video", "motion", "ip", "captions", "dialogue", "bgm", "sfx", "outro"]
+          },
+          "order": {"type": "integer", "minimum": 0},
+          "clips": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["clip_id", "asset_id", "timeline_start", "timeline_end", "source_start", "source_end"],
+              "properties": {
+                "clip_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"},
+                "asset_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"},
+                "timeline_start": {"type": "number", "minimum": 0},
+                "timeline_end": {"type": "number", "exclusiveMinimum": 0},
+                "source_start": {"type": "number", "minimum": 0},
+                "source_end": {"type": "number", "exclusiveMinimum": 0},
+                "semantic_event_id": {"type": ["string", "null"]},
+                "opacity": {"type": "number", "minimum": 0, "maximum": 1},
+                "gain": {"type": "number", "minimum": 0}
+              }
+            }
+          }
+        }
+      }
+    },
+    "markers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["marker_id", "kind", "time_seconds", "label"],
+        "properties": {
+          "marker_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"},
+          "kind": {"enum": ["chapter", "caption", "motion", "product_focus", "soft_occlusion", "outro"]},
+          "time_seconds": {"type": "number", "minimum": 0},
+          "label": {"type": "string", "minLength": 1},
+          "semantic_event_id": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "otio": {"type": ["object", "null"]},
+    "loss_report": {"type": ["object", "null"]}
+  }
+}

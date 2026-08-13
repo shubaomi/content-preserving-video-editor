@@ -785,6 +785,18 @@ an absolute path and current SHA-256 plus type, purpose, and provenance. Mark a
 missing optional asset `unavailable`; never invent a file or hash. Continue to
 deliver only one universal MP4.
 
+When schema-v12 `delivery.manual_finish.nle_package.enabled` is explicitly true,
+also build the editor-neutral `nle-package-v2` from current, hash-bound assets.
+At minimum `balanced` contains the immutable automatic reference, clean A-roll,
+UTF-8 SRT, available semantic-caption references, layer timeline/OTIO, rights and
+compatibility receipts, and a deterministic Jianying Desktop import guide.
+Package motion, personal-IP, audio, cover, and modular text-free outro layers
+only when their real current artifacts and rights evidence exist; otherwise mark
+them unavailable. Never generate or claim a Jianying native draft, API, CLI,
+MCP, or headless renderer. Technical package validation remains separate from
+the five-task HongRun import/editability canary, and no long-video render is
+required to build or validate this handoff.
+
 Record every approved adjustment in `correction-ledger.json` with event ID,
 file/selector target, property, before/after values, reason, approver, approval
 time, and related file hashes. The ledger tooling must validate its before-value

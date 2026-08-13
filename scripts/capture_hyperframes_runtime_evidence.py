@@ -113,7 +113,12 @@ def resolve_browser_executable(
                 errors="replace", timeout=60, check=False,
             )
             return completed.returncode, completed.stdout, completed.stderr
-    exit_code, stdout, _stderr = runner(command)
+    exit_code = 1
+    stdout = ""
+    for _attempt in range(2):
+        exit_code, stdout, _stderr = runner(command)
+        if exit_code == 0:
+            break
     if exit_code != 0:
         raise RuntimeError(
             "HyperFrames browser resolution failed; renderer evidence is action_required"

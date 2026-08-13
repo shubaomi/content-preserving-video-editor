@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "kind": "design_freeze_approval",
+  "status": "approved",
+  "candidate": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\manual-nle-handoff-v2\\design-freeze-candidate.json",
+    "sha256": "5c0201e71ba959fc6a6d5d6cb475631d07b0e23e5e972c25aae982eee8c5974b"
+  },
+  "implementation_objective": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\manual-nle-handoff-v2\\implementation-goal-objective.md",
+    "sha256": "ee9ec6336f4970482d64276773dce2976b2c391f4336a91fe579183846b592b3"
+  },
+  "approved_by": "HongRun",
+  "approved_at": "2026-08-13T13:45:00-07:00",
+  "approval_evidence": "User message: 批准 manual-nle-handoff-v2 design-freeze-candidate，按照实施计划进入下一阶段实现。",
+  "authorized_work_packages": ["WP0", "WP1", "WP2", "WP3", "WP4", "WP5"],
+  "excluded_work_packages": ["WP6_native_jianying_draft_adapter"],
+  "long_or_full_video_render_authorized": false,
+  "git_delivery_authorized_after_verification": true
+}

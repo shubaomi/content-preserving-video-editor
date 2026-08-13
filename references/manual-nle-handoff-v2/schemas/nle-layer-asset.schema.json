@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-preserving-video-editor.local/schemas/nle-layer-asset-v2.json",
+  "title": "NLE layer asset v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "asset_id", "role", "status", "editability_class",
+    "purpose", "provenance", "rights_status"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "asset_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"},
+    "role": {
+      "enum": [
+        "automatic_master", "clean_a_roll", "caption_srt", "caption_ass_reference",
+        "caption_style_plan", "motion_event", "motion_full_duration", "ip_source",
+        "ip_rendered", "dialogue_stem", "bgm_stem", "sfx_grouped", "sfx_event",
+        "outro_background", "outro_overlay", "outro_icon", "outro_copy",
+        "outro_reference", "cover", "hyperframes_project", "editorial_authority",
+        "evidence"
+      ]
+    },
+    "status": {"enum": ["available", "unavailable"]},
+    "editability_class": {
+      "enum": [
+        "native_editable", "media_layer_editable", "source_project_editable",
+        "reference_only", "unavailable"
+      ]
+    },
+    "path": {"type": ["string", "null"]},
+    "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "size_bytes": {"type": ["integer", "null"], "minimum": 0},
+    "media_type": {"type": ["string", "null"]},
+    "purpose": {"type": "string", "minLength": 1},
+    "provenance": {"type": "string", "minLength": 1},
+    "rights_status": {
+      "enum": ["project_authorized", "redistribution_authorized", "reference_only", "unavailable"]
+    },
+    "reason": {"type": ["string", "null"]},
+    "semantic_event_id": {"type": ["string", "null"]},
+    "render_event_id": {"type": ["string", "null"]},
+    "timeline": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["start_seconds", "end_seconds", "frame_rate"],
+      "properties": {
+        "start_seconds": {"type": "number", "minimum": 0},
+        "end_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "frame_rate": {"type": "number", "exclusiveMinimum": 0},
+        "handle_in_seconds": {"type": "number", "minimum": 0},
+        "handle_out_seconds": {"type": "number", "minimum": 0}
+      }
+    },
+    "video": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["width", "height", "pixel_format", "alpha_status"],
+      "properties": {
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "pixel_format": {"type": "string", "minLength": 1},
+        "alpha_status": {"enum": ["verified", "not_applicable", "unverified"]},
+        "decode_receipt": {"type": ["object", "null"]}
+      }
+    },
+    "audio": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["sample_rate", "channels", "duration_seconds"],
+      "properties": {
+        "sample_rate": {"const": 48000},
+        "channels": {"type": "integer", "minimum": 1, "maximum": 8},
+        "duration_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "decode_receipt": {"type": ["object", "null"]}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "available"}}},
+      "then": {
+        "required": ["path", "sha256", "size_bytes", "media_type"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "size_bytes": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "unavailable"}}},
+      "then": {
+        "required": ["reason"],
+        "properties": {
+          "path": {"type": "null"},
+          "sha256": {"type": "null"},
+          "size_bytes": {"type": "null"},
+          "editability_class": {"const": "unavailable"},
+          "rights_status": {"const": "unavailable"},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  ]
+}

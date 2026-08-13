@@ -144,6 +144,16 @@ missing optional assets remain explicit `unavailable` records. The correction
 ledger stores approved before/after property changes with related file hashes and
 a drift guard so structured corrections are auditable and replayable.
 
+Schema-v12 projects may explicitly enable `manual_finish.nle_package`. Director
+then assembles `nle-package-v2` after final compose, while retaining the v1
+manifest and correction ledger. The package is editor-neutral: automatic master,
+clean A-roll, editable SRT, ASS/style references, available media/audio/IP/outro
+layers, OTIO/layer timeline, rights evidence, and an import guide are copied into
+a complete hash inventory. It neither creates nor mutates a Jianying draft.
+Every nested package file is a Director stage artifact, so deletion or drift
+reopens manual finishing. The stage still remains `action_required` until a
+distinct human-returned export passes the existing full return QA.
+
 On return, the director records the returned file's hash, size, and mtime, resets
 old delivery QA, and performs a full FFmpeg decode plus ffprobe. The stage remains
 `action_required` until caption, audio, visual, and video-use

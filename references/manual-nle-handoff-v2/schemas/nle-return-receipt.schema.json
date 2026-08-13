@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://content-preserving-video-editor.local/schemas/nle-return-receipt-v2.json",
+  "title": "NLE returned final receipt v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "package", "automatic_master", "returned_final",
+    "correction_summary", "qa"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+    "status": {"enum": ["action_required", "pass", "failed", "stale"]},
+    "package": {"$ref": "#/$defs/fileRef"},
+    "automatic_master": {"$ref": "#/$defs/fileRef"},
+    "returned_final": {"$ref": "#/$defs/fileRef"},
+    "correction_summary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target", "change", "reason"],
+        "properties": {
+          "target": {"type": "string", "minLength": 1},
+          "change": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "qa": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["full_decode", "captions", "audio", "visual", "edit_correctness", "platforms"],
+      "properties": {
+        "full_decode": {"$ref": "#/$defs/fileRef"},
+        "captions": {"$ref": "#/$defs/fileRef"},
+        "audio": {"$ref": "#/$defs/fileRef"},
+        "visual": {"$ref": "#/$defs/fileRef"},
+        "edit_correctness": {"$ref": "#/$defs/fileRef"},
+        "platforms": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"$ref": "#/$defs/fileRef"}
+        }
+      }
+    },
+    "integrity_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "fileRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

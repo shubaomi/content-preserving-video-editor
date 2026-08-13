@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 11
+CURRENT_PROJECT_SCHEMA_VERSION = 12
 IDENTITY_MODES = {"self", "third_party", "generic"}
 REQUIRED_ASSET_APPLICABILITY = {"required", "optional", "not_applicable"}
 DELIVERABLE_READINESS = {"ready", "asset_ready", "not_applicable"}
@@ -19,6 +19,17 @@ MANUAL_FINISH_DEFAULTS: dict[str, Any] = {
     "returned_final": None,
     "modifications": [],
     "assets": {},
+    "nle_package": {
+        "enabled": False,
+        "profile": "jianying_desktop_compatible_v1",
+        "level": "balanced",
+        "include": {
+            "motion_layers": True,
+            "ip_assets": True,
+            "modular_outro": True,
+            "event_sfx": True,
+        },
+    },
 }
 PREVIEW_RENDER_PARITY_TOLERANCE_DEFAULTS: dict[str, float] = {
     "position_px": 4.0,
@@ -448,6 +459,42 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("delivery.manual_finish.modifications must be a list")
     if not isinstance(manual.get("assets"), dict):
         raise ValueError("delivery.manual_finish.assets must be a mapping")
+    nle_package = manual.get("nle_package")
+    if not isinstance(nle_package, dict):
+        raise ValueError("delivery.manual_finish.nle_package must be a mapping")
+    nle_defaults = MANUAL_FINISH_DEFAULTS["nle_package"]
+    allowed_nle_keys = set(nle_defaults)
+    unknown_nle_keys = set(nle_package) - allowed_nle_keys
+    if unknown_nle_keys:
+        raise ValueError(
+            "delivery.manual_finish.nle_package has unsupported fields: "
+            + ", ".join(sorted(unknown_nle_keys))
+        )
+    for key in ("enabled", "profile", "level"):
+        nle_package.setdefault(key, deepcopy(nle_defaults[key]))
+    nle_include = nle_package.setdefault("include", deepcopy(nle_defaults["include"]))
+    if not isinstance(nle_package.get("enabled"), bool):
+        raise ValueError("delivery.manual_finish.nle_package.enabled must be a boolean")
+    if nle_package.get("profile") != "jianying_desktop_compatible_v1":
+        raise ValueError(
+            "delivery.manual_finish.nle_package.profile must be "
+            "jianying_desktop_compatible_v1"
+        )
+    if nle_package.get("level") not in {"reference_only", "balanced", "max_editable"}:
+        raise ValueError(
+            "delivery.manual_finish.nle_package.level must be reference_only, balanced, "
+            "or max_editable"
+        )
+    if not isinstance(nle_include, dict):
+        raise ValueError("delivery.manual_finish.nle_package.include must be a mapping")
+    for key, value in nle_defaults["include"].items():
+        nle_include.setdefault(key, value)
+    allowed_nle_include = {"motion_layers", "ip_assets", "modular_outro", "event_sfx"}
+    if set(nle_include) != allowed_nle_include:
+        raise ValueError("delivery.manual_finish.nle_package.include has unknown or missing keys")
+    for key in sorted(allowed_nle_include):
+        if not isinstance(nle_include.get(key), bool):
+            raise ValueError(f"delivery.manual_finish.nle_package.include.{key} must be a boolean")
     openmontage = delivery.setdefault("openmontage_handoff", {})
     if not isinstance(openmontage, dict):
         raise ValueError("delivery.openmontage_handoff must be a mapping")

@@ -1721,6 +1721,52 @@ class DirectorTests(unittest.TestCase):
         ))
         self.assertFalse(typed["capability_report"]["editor_api_verified"])
 
+    def test_enabled_layered_nle_package_is_built_and_nested_drift_is_trackable(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["manual_finish"] = {
+            "enabled": True,
+            "backend": "other_nle",
+            "modifications": [],
+            "nle_package": {
+                "enabled": True,
+                "profile": "jianying_desktop_compatible_v1",
+                "level": "balanced",
+            },
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director.video_use_dir.mkdir(parents=True, exist_ok=True)
+        (director.video_use_dir / "base-preview.mp4").write_bytes(b"clean")
+        (director.video_use_dir / "master.srt").write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\n字幕\n", encoding="utf-8",
+        )
+        (director.video_use_dir / "edl.json").write_text(json.dumps({
+            "owner": "video-use", "sources": {"input": str(director.context.source_video)},
+            "ranges": [{"id": "c1", "source": "input", "start": 0.0,
+                        "end": 1.0, "timeline_start": 0.0}],
+            "gaps": [], "transitions": [], "metadata": {"video_id": "sample"},
+        }), encoding="utf-8")
+        director.delivery_output.parent.mkdir(parents=True)
+        director.delivery_output.write_bytes(b"automatic")
+
+        director._start("manual_finish_handoff")
+        with patch("director.probe_video_frame_rate", return_value=25.0), patch.object(
+            director, "_motion_source_media",
+            return_value={"width": 1080, "height": 1920, "duration_seconds": 1.0},
+        ):
+            with self.assertRaisesRegex(DirectorContractError, "human manual finishing"):
+                director.stage_manual_finish_handoff()
+
+        receipt = director.manual_nle_package_root / "10-evidence" / "nle-handoff-package.json"
+        self.assertTrue(receipt.is_file())
+        action = json.loads(director.action_path.read_text(encoding="utf-8"))
+        self.assertEqual(action["actions"][0]["layered_nle_package"], str(receipt))
+        nested = sorted(path for path in director.manual_nle_package_root.rglob("*") if path.is_file())
+        records = _artifact_records(nested)
+        self.assertTrue(_artifact_records_current(records))
+        (director.manual_nle_package_root / "02-captions" / "master.srt").unlink()
+        self.assertFalse(_artifact_records_current(records))
+
     def test_optional_media_adapters_create_no_artifact_when_disabled(self) -> None:
         director = Director(self.project)
         director._start("semantic_brief")

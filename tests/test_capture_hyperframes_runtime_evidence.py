@@ -116,6 +116,33 @@ class CaptureHyperFramesRuntimeEvidenceTests(unittest.TestCase):
         self.assertEqual(resolved, hyperframes_browser.resolve())
         self.assertEqual(calls, [["npx", "hyperframes", "browser", "path"]])
 
+    def test_hyperframes_browser_resolution_retries_one_transient_failure(self) -> None:
+        hyperframes_browser = ROOT / "tests" / "fake-retried-hyperframes-chrome.exe"
+        hyperframes_browser.write_bytes(b"browser")
+        self.addCleanup(hyperframes_browser.unlink)
+        calls: list[list[str]] = []
+
+        def runner(command):
+            calls.append(list(command))
+            if len(calls) == 1:
+                return 1, "", "transient npx failure"
+            return 0, str(hyperframes_browser), ""
+
+        resolved = resolve_browser_executable(
+            None,
+            ROOT / "tests" / "missing-playwright-chrome.exe",
+            runner=runner,
+        )
+
+        self.assertEqual(resolved, hyperframes_browser.resolve())
+        self.assertEqual(
+            calls,
+            [
+                ["npx", "hyperframes", "browser", "path"],
+                ["npx", "hyperframes", "browser", "path"],
+            ],
+        )
+
     def test_default_browser_command_resolves_windows_cmd_shim(self) -> None:
         hyperframes_browser = ROOT / "tests" / "fake-hyperframes-chrome.exe"
         hyperframes_browser.write_bytes(b"browser")

@@ -100,13 +100,24 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "returned_final": None,
             "modifications": [],
             "assets": {},
+            "nle_package": {
+                "enabled": False,
+                "profile": "jianying_desktop_compatible_v1",
+                "level": "balanced",
+                "include": {
+                    "motion_layers": True,
+                    "ip_assets": True,
+                    "modular_outro": True,
+                    "event_sfx": True,
+                },
+            },
         })
         self.assertEqual(migrated["qa"]["preview_render_parity"]["tolerances"], {
             "position_px": 4.0,
             "size_px": 4.0,
             "time_seconds": 0.05,
         })
-        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 11)
+        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 12)
         self.assertTrue(migrated["workflow"]["production_contract"]["enabled"])
         self.assertEqual(migrated["provider_governance"]["max_evidence_age_days"], 30)
         self.assertTrue(migrated["qa"]["visual_dynamics"]["enabled"])
@@ -252,8 +263,8 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "manual_finish.backend"):
             migrate_project_config(project)
 
-    def test_all_v1_through_v10_configs_migrate_to_v11_without_mutation(self) -> None:
-        for version in range(1, 11):
+    def test_all_v1_through_v11_configs_migrate_to_v12_without_mutation(self) -> None:
+        for version in range(1, 12):
             original = {
                 "schema_version": version,
                 "version": version,
@@ -263,11 +274,49 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             with self.subTest(version=version):
                 migrated = migrate_project_config(original)
                 self.assertEqual(original, before)
-                self.assertEqual(migrated["schema_version"], 11)
-                self.assertEqual(migrated["version"], 11)
+                self.assertEqual(migrated["schema_version"], 12)
+                self.assertEqual(migrated["version"], 12)
                 self.assertEqual(migrated["identity"]["mode"], "generic")
                 self.assertFalse(migrated["motion_quality"]["enabled"])
                 self.assertFalse(migrated["motion_quality"]["portrait_brand"]["enabled"])
+                self.assertFalse(migrated["delivery"]["manual_finish"]["nle_package"]["enabled"])
+
+    def test_manual_nle_package_v2_defaults_off_and_rejects_unsupported_claims(self) -> None:
+        migrated = migrate_project_config({
+            "schema_version": 11,
+            "version": 11,
+            "delivery": {"manual_finish": {"enabled": True, "backend": "other_nle"}},
+        })
+        package = migrated["delivery"]["manual_finish"]["nle_package"]
+        self.assertFalse(package["enabled"])
+        self.assertEqual(package["profile"], "jianying_desktop_compatible_v1")
+        self.assertEqual(package["level"], "balanced")
+
+        bad = {
+            "schema_version": 12, "version": 12,
+            "delivery": {"manual_finish": {
+                "enabled": True, "backend": "other_nle",
+                "nle_package": {"enabled": True, "profile": "native_jianying_draft"},
+            }},
+        }
+        with self.assertRaisesRegex(ValueError, "nle_package.profile"):
+            migrate_project_config(bad)
+
+        for unsupported in ("native_draft", "secret", "editor_api"):
+            with self.subTest(unsupported=unsupported), self.assertRaisesRegex(
+                ValueError, "nle_package has unsupported fields"
+            ):
+                migrate_project_config({
+                    "schema_version": 12, "version": 12,
+                    "delivery": {"manual_finish": {
+                        "enabled": True, "backend": "other_nle",
+                        "nle_package": {
+                            "enabled": True,
+                            "profile": "jianying_desktop_compatible_v1",
+                            unsupported: True,
+                        },
+                    }},
+                })
 
     def test_portrait_brand_v2_requires_explicit_self_talking_head_configuration(self) -> None:
         base = {
@@ -366,7 +415,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
                 self.assertFalse(migrated["motion_quality"]["portrait_brand"]["enabled"])
                 self.assertIsNone(migrated["motion_quality"]["portrait_brand"]["profile_path"])
 
-    def test_v7_migrates_to_v11_without_mutating_the_source_mapping(self) -> None:
+    def test_v7_migrates_to_current_without_mutating_the_source_mapping(self) -> None:
         original = {
             "schema_version": 7,
             "version": 7,
@@ -377,17 +426,17 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         migrated = migrate_project_config(original)
 
         self.assertEqual(original, before)
-        self.assertEqual(migrated["schema_version"], 11)
+        self.assertEqual(migrated["schema_version"], 12)
         self.assertTrue(migrated["assets"]["media_catalog"]["enabled"])
         self.assertFalse(migrated["assets"]["local_semantic_corpus"]["enabled"])
         self.assertEqual(migrated["delivery"]["openmontage_handoff"]["backend"], "openmontage")
 
-    def test_v8_migrates_to_v11_without_rewriting_user_configuration(self) -> None:
+    def test_v8_migrates_to_current_without_rewriting_user_configuration(self) -> None:
         original = {"schema_version": 8, "version": 8, "render": {"cache": {"enabled": True}}}
         before = copy.deepcopy(original)
         migrated = migrate_project_config(original)
         self.assertEqual(original, before)
-        self.assertEqual(migrated["schema_version"], 11)
+        self.assertEqual(migrated["schema_version"], 12)
         self.assertTrue(migrated["render"]["cache"]["enabled"])
         self.assertFalse(migrated["render"]["cache"]["event_level"]["enabled"])
 
