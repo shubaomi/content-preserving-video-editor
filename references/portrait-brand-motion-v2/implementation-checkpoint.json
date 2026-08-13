@@ -6,8 +6,10 @@
     "path": "E:\\Projects\\Skills\\content-preserving-video-editor",
     "branch": "main",
     "base_head": "1b74d8370d1fb985f21c7e8b6e5dfbb3aa5a42b4",
-    "commit_created": false,
-    "push_performed": false
+    "commit_created": true,
+    "push_performed": true,
+    "delivered_feature_commit": "386155cf425e42b93e5cb70b2b0d8f859e90bab9",
+    "remote_branch": "origin/main"
   },
   "authorities": {
     "design_objective_sha256": "593da5b11bc07c5188b24fd9e0a2e010472ec60c21677efb94c60a14674407d6",
@@ -182,7 +184,11 @@
         "thread_id": "019f521d-3972-7dd2-a666-9b84e7aa921e"
       }
     },
-    "WP9": {"status": "action_required", "next_gate": "explicit_second_topic_visual_review_then_refresh_receipts_review_commit_push"}
+    "WP9": {
+      "status": "release_closure_complete",
+      "capability_gate": "action_required",
+      "next_gate": "explicit_second_topic_visual_review_then_refresh_real_project_receipts"
+    }
   },
   "validation": {
     "focused_tests": {"status": "pass", "tests": 26, "failed": 0, "skipped": 0, "coverage": "WP9 promotion, capability, completion, renderer observation, and regression failures"},
@@ -201,7 +207,7 @@
     "The HyperFrames keyframe parser reports dynamic loop targets as __unresolved__; browser runtime and render parity provide the binding evidence instead."
   ],
   "resume": {
-    "next_package": "WP9_release_closure",
-    "rule": "Re-read all five implementation authorities and this checkpoint, verify hashes and Git status, require no user-configured key, preserve the already stated second-topic repeat-use choice, request explicit visual-occlusion confirmation if it is still absent, regenerate and revalidate only evidence that does not invent that answer, keep production_default unavailable, then refresh the zero-skip suite, Current Golden, fixture receipts, capability inventory and completion audit, finish mandatory reviews, and create one focused commit with a non-force push. Do not render a full user video, publish, deploy, create a Release, PR, or modify upstream projects."
+    "next_package": "second_topic_explicit_visual_review",
+    "rule": "The no-key implementation and Git delivery are complete. On a future explicit HongRun visual-review answer, re-read the authorities and this checkpoint, verify current hashes and Git status, preserve the existing repeat-use choice, regenerate only the affected second-topic live and retained receipts, keep production_default unavailable, and do not rerender a full user video unless separately authorized."
   }
 }
