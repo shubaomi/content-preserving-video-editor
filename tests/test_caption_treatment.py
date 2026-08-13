@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 import tempfile
 import unittest
@@ -52,8 +53,19 @@ class CaptionTreatmentTests(unittest.TestCase):
         self.assertIn("Style: CaptionBase", ass)
         self.assertIn("\\b1", ass)
         self.assertIn("\\fscx116", ass)
-        self.assertIn("亮度很自然", ass)
-        self.assertIn("这款便携补光灯", ass)
+        self.assertIn(self.captions[0]["text"], re.sub(r"\{[^}]*\}", "", ass))
+        self.assertIn(self.semantic["events"][0]["anchor"], ass)
+
+    def test_long_caption_wraps_display_without_changing_authoritative_text(self) -> None:
+        text = "这是一段超过十三字的长字幕用于验证换行可读性"
+        plan = build_semantic_emphasis_plan(
+            [{"start": 0.0, "end": 3.0, "text": text}], {"events": []}, self.options,
+        )
+        ass = render_ass(plan, width=544, height=960)
+        dialogue = next(line for line in ass.splitlines() if line.startswith("Dialogue: "))
+        rendered = dialogue.rsplit(",,", 1)[1].replace("\\N", "")
+        self.assertEqual(rendered, text)
+        self.assertIn("\\N", dialogue)
 
     def test_unapproved_or_non_matching_copy_cannot_create_highlight(self) -> None:
         semantic = {"events": [{

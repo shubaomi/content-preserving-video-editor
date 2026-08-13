@@ -14,6 +14,7 @@ from safe_generated_output import atomic_write_text, safe_generated_target
 
 
 HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+MAX_DISPLAY_CHARACTERS_PER_LINE = 13
 
 
 class CaptionTreatmentError(ValueError):
@@ -240,22 +241,51 @@ def _ass_escape(text: str) -> str:
     return normalized.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}").replace("\n", "\\N")
 
 
+def _display_line_break_positions(text: str) -> set[int]:
+    """Add display-only ASS line breaks without changing caption authority text."""
+    # An authority-supplied line break already controls the visual grouping.
+    # Do not insert another one inside it (and never turn a malicious CR/LF
+    # payload into additional semantic-looking fragments).
+    if "\n" in text or "\r" in text:
+        return set()
+    positions: set[int] = set()
+    line_start = 0
+    for index, character in enumerate(text):
+        if character == "\n":
+            line_start = index + 1
+            continue
+        if index - line_start >= MAX_DISPLAY_CHARACTERS_PER_LINE:
+            positions.add(index)
+            line_start = index
+    return positions
+
+
+def _ass_escape_slice(text: str, start: int, end: int, line_breaks: set[int]) -> str:
+    output: list[str] = []
+    for index in range(start, end):
+        if index in line_breaks:
+            output.append("\\N")
+        output.append(_ass_escape(text[index]))
+    return "".join(output)
+
+
 def _styled_text(row: Mapping[str, Any], scale: int) -> str:
     text = str(row["text"])
+    line_breaks = _display_line_break_positions(text)
     output: list[str] = []
     cursor = 0
     for emphasis in row.get("emphasis") or []:
         start, end = int(emphasis["start_char"]), int(emphasis["end_char"])
-        output.append(_ass_escape(text[cursor:start]))
+        output.append(_ass_escape_slice(text, cursor, start, line_breaks))
         color = _ass_color(str(emphasis["color"]))
         output.append(
             "{\\b1\\c" + color + f"\\fscx{scale}\\fscy{scale}"
             + f"\\t(0,160,\\fscx{min(scale + 4, 120)}\\fscy{min(scale + 4, 120)})}}"
         )
-        output.append(_ass_escape(text[start:end]))
+        output.append(_ass_escape_slice(text, start, end, line_breaks))
         output.append("{\\rCaptionBase}")
         cursor = end
-    output.append(_ass_escape(text[cursor:]))
+    output.append(_ass_escape_slice(text, cursor, len(text), line_breaks))
     return "".join(output)
 
 

@@ -515,7 +515,9 @@ The default caption asset remains video-use `master.srt`. An explicitly enabled
 the current semantic brief into a deterministic `master.ass` plus
 `caption-emphasis-plan.json`. It may emphasize at most two source-matching
 semantic anchors per phrase with bounded brand colors, weight, and 105–120%
-scale. Each anchor must be an exact `approved_visible_copy`. Before rendering,
+scale. For narrow portrait canvases it may add deterministic display-only ASS
+line breaks for long phrases; the authoritative text and timing do not change.
+Each anchor must be an exact `approved_visible_copy`. Before rendering,
 `captions.json` must match `master.srt` text, segmentation, and millisecond
 timing; completion rebuilds the canonical ASS and plan byte-for-byte from
 current project inputs, measured canvas, and config. Enabled styling cannot
