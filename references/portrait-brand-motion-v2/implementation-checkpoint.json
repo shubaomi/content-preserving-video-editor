@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
-  "checkpoint_id": "portrait-brand-motion-v2-wp9-release-closure-2026-08-12",
-  "created_at": "2026-08-12T21:07:54-07:00",
+  "checkpoint_id": "portrait-brand-motion-v2-wp9-real-project-validation-2026-08-13",
+  "created_at": "2026-08-13T09:26:06-07:00",
   "repository": {
     "path": "E:\\Projects\\Skills\\content-preserving-video-editor",
     "branch": "main",
-    "base_head": "1b74d8370d1fb985f21c7e8b6e5dfbb3aa5a42b4",
-    "commit_created": true,
-    "push_performed": true,
-    "delivered_feature_commit": "386155cf425e42b93e5cb70b2b0d8f859e90bab9",
+    "base_head": "afa66003822ca48550e61a88bc98e53003cf1770",
+    "checkpoint_worktree_state": "validated_before_delivery_commit",
+    "commit_created_at_checkpoint": false,
+    "push_performed_at_checkpoint": false,
+    "delivery_record": "Git commit and push status are reported after this checkpoint; a commit cannot truthfully embed its own final hash.",
     "remote_branch": "origin/main"
   },
   "authorities": {
@@ -104,7 +105,7 @@
       "status": "complete",
       "maturity": "fixture_validated",
       "evidence": [
-        "source-bound full-suite receipt passes 893 tests with zero failures and zero skips",
+        "source-bound full-suite receipt passes 923 tests with zero failures and zero skips",
         "six structured video-type fixtures and six retained short-media technical fixtures remain current and passing",
         "Current Golden deterministically revalidates against the current source, fixtures, and six-media manifest",
         "portrait v2 remains default-off and existing portrait-v1, landscape/product, third-party, migrated, manual-finish, universal-delivery, caption, and audio regression paths remain passing",
@@ -149,8 +150,8 @@
       "preference_candidate": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-farewell-2025\\farewell-2025-p0-portrait\\work\\director\\style-reel\\wp7-provisional-golden\\portrait-preference-candidate.json"
     },
     "WP8": {
-      "status": "action_required",
-      "maturity": "second_topic_technical_and_repeat_use_evidence_only",
+      "status": "complete",
+      "maturity": "real_project_validated_second_topic",
       "source_topic": "physical_open_ear_headphone_product_demo",
       "selected_direction_id": "luminous_intelligence",
       "source_window": {
@@ -173,7 +174,7 @@
         "The 17 source-preserving phrase captions are burned in last; caption, sonic projection, full-sample SFX mix, and full A/V decode receipts revalidate with zero errors.",
         "The current implementation passes 109 focused ASR, evidence, phrase-caption, portrait compiler, sonic, audio-production, and caption-delivery tests.",
         "HongRun explicitly recorded repeat_use_willingness=yes, preference=candidate, and reason 效果还可以 for the exact second-topic candidate.",
-        "The second-topic technical and repeat-use evidence is retained, but it does not promote maturity until HongRun explicitly answers the separate face/hand/product/caption visual-review gate."
+        "HongRun explicitly approved face, hands, physical product, and caption occlusion for the exact candidate, while clarifying that one bounded face-or-hand soft overlap is acceptable only in independently approved product-first explanation windows; product and captions remain hard protected."
       ],
       "user_gate": {
         "status": "approved",
@@ -181,33 +182,34 @@
         "repeat_use_willingness": "yes",
         "preference": "candidate",
         "reason": "效果还可以",
+        "visual_review": "yes",
         "thread_id": "019f521d-3972-7dd2-a666-9b84e7aa921e"
       }
     },
     "WP9": {
-      "status": "release_closure_complete",
-      "capability_gate": "action_required",
-      "next_gate": "explicit_second_topic_visual_review_then_refresh_real_project_receipts"
+      "status": "complete",
+      "capability_gate": "real_project_validated",
+      "next_gate": "separate_explicit_production_default_approval"
     }
   },
   "validation": {
-    "focused_tests": {"status": "pass", "tests": 26, "failed": 0, "skipped": 0, "coverage": "WP9 promotion, capability, completion, renderer observation, and regression failures"},
-    "retained_full_suite_receipt": {"status": "pass_current", "tests": 893, "failed": 0, "skipped": 0},
+    "focused_tests": {"status": "pass", "tests": 53, "failed": 0, "skipped": 0, "coverage": "caption treatment, semantic product occlusion, completion, renderer observation, and regression failures"},
+    "retained_full_suite_receipt": {"status": "pass_current", "tests": 923, "failed": 0, "skipped": 0},
     "compileall": "pass",
     "git_diff_check": "pass_with_windows_line_ending_warnings_only",
-    "independent_reviews": "Final code and Python reviews approved with zero blocker, high, or medium findings after no-key review, canonical renderer binding, truthful maturity, non-finite runtime observation, fast action-required capability downgrade, receipt integrity, root/child Junction, and atomic-write replay"
+    "independent_reviews": "Python review approved the final implementation; code review found only stale Git-delivery metadata in this checkpoint, which was corrected before commit. Final Git delivery is reported outside this checkpoint."
   },
   "explicit_non_claims": [
     "No real HongRun footage was rendered in WP0-WP2.",
     "The shared proposed profile was not mutated; only the exact luminous_intelligence Style Reel received first-project brand-taste approval.",
-    "Two materially different HongRun topics have technical and repeat-use evidence, but the route remains fixture_validated/action_required until the second-topic visual-review answer is explicit.",
+    "Two materially different HongRun topics now have current technical evidence and explicit named-user decisions; the exact opt-in luminous_intelligence route is real_project_validated.",
     "WP3 proves technical audio production and real-source audibility only; it does not approve the motifs as HongRun brand taste.",
     "WP4 proves only deterministic synthetic comparison wiring and technical audition truth; it does not prove real HyperFrames direction aesthetics.",
-    "WP5 fixture closure and both real named-user choices are complete, but second-topic face/hand/product/caption occlusion still needs an explicit user answer before WP9 can refresh receipts; no cryptographic key is required.",
+    "The second-topic face/hand/product/caption review is explicit and no cryptographic key is required; production_default remains unavailable without a separately designed trusted approval authority.",
     "The HyperFrames keyframe parser reports dynamic loop targets as __unresolved__; browser runtime and render parity provide the binding evidence instead."
   ],
   "resume": {
-    "next_package": "second_topic_explicit_visual_review",
-    "rule": "The no-key implementation and Git delivery are complete. On a future explicit HongRun visual-review answer, re-read the authorities and this checkpoint, verify current hashes and Git status, preserve the existing repeat-use choice, regenerate only the affected second-topic live and retained receipts, keep production_default unavailable, and do not rerender a full user video unless separately authorized."
+    "next_package": "future_production_default_separate_gate",
+    "rule": "The no-key implementation and two-topic real-project validation are complete. Keep production_default unavailable until a separately designed trusted approval authority and new explicit HongRun decision are implemented; do not rerender a full user video unless separately authorized."
   }
 }

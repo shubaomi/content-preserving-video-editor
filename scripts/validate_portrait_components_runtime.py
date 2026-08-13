@@ -55,6 +55,18 @@ NEGATIVE_ERROR_MARKERS = {
 CAPTURE_TOOL = Path(__file__).resolve()
 
 
+class _QuietStaticHandler(SimpleHTTPRequestHandler):
+    """Serve local capture assets without corrupting unittest result lines."""
+
+    def log_message(self, format: str, *args: object) -> None:
+        return
+
+
+class _QuietThreadingHTTPServer(ThreadingHTTPServer):
+    def handle_error(self, request: object, client_address: object) -> None:
+        return
+
+
 def _stable_hash(value: Any) -> str:
     return hashlib.sha256(json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
@@ -64,8 +76,8 @@ def _stable_hash(value: Any) -> str:
 
 @contextmanager
 def _serve_directory(root: Path):
-    handler = partial(SimpleHTTPRequestHandler, directory=str(root))
-    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    handler = partial(_QuietStaticHandler, directory=str(root))
+    server = _QuietThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

@@ -23,6 +23,7 @@ from completion_audit import (  # noqa: E402
     build,
 )
 from capability_registry import build_capability_inventory, build_toolchain_report  # noqa: E402
+from caption_treatment import materialize as materialize_caption_treatment  # noqa: E402
 from brand_motion_playbook import compile_playbook  # noqa: E402
 from aesthetic_qa import REQUIRED_CRITERIA  # noqa: E402
 from director_contracts import STAGES, VISUAL_VOCABULARY, sha256_file  # noqa: E402
@@ -155,6 +156,191 @@ class CompletionAuditTests(unittest.TestCase):
             self.assertTrue(any("source path" in error for error in errors), errors)
             self.assertTrue(any("source hash" in error for error in errors), errors)
             self.assertTrue(any("subtitles filter" in error for error in errors), errors)
+
+    def test_styled_caption_delivery_keeps_master_srt_as_text_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            captions = root / "master.srt"
+            styled_dir = root / "caption-treatment" / "full"
+            styled = styled_dir / "master.ass"
+            treatment_plan = styled_dir / "caption-emphasis-plan.json"
+            captions_json = root / "captions.json"
+            semantic = root / "full-semantic-brief.json"
+            captions.write_text("1\n00:00:00,000 --> 00:00:01,000\n字幕\n", encoding="utf-8")
+            captions_json.write_text(json.dumps({"segments": [{
+                "start": 0.0, "end": 1.0, "text": "字幕",
+            }]}), encoding="utf-8")
+            semantic.write_text(json.dumps({"events": []}), encoding="utf-8")
+            materialize_caption_treatment(
+                captions_path=captions_json, semantic_brief_path=semantic,
+                master_srt_path=captions, output_ass=styled,
+                output_plan=treatment_plan, authorized_root=root,
+                width=1080, height=1920, options={
+                    "font_family": "Microsoft YaHei UI", "base_color": "#F7F8FA",
+                    "accent_colors": ["#51E3C2"],
+                    "max_emphasis_terms_per_caption": 2, "max_scale_percent": 116,
+                },
+            )
+            plan = root / "final-compose-command.json"
+            plan.write_text(json.dumps({
+                "caption_delivery": {
+                    "mode": "burned_in_last", "source": str(styled.resolve()),
+                    "source_sha256": sha256_file(styled),
+                    "text_authority": {"path": str(captions.resolve()),
+                                       "sha256": sha256_file(captions)},
+                    "treatment_plan": {"path": str(treatment_plan.resolve()),
+                                       "sha256": sha256_file(treatment_plan)},
+                },
+                "argv": ["ffmpeg", "-vf", (
+                    "subtitles=filename='" + styled.resolve().as_posix().replace(":", "\\:")
+                    .replace("'", "\\'") + "':charenc=UTF-8"
+                ), "out.mp4"],
+            }), encoding="utf-8")
+            self.assertEqual(
+                _final_caption_delivery_errors(
+                    plan, captions, input_mode="preserve",
+                    caption_treatment_options={
+                        "enabled": True, "mode": "semantic_emphasis",
+                        "font_family": "Microsoft YaHei UI", "base_color": "#F7F8FA",
+                        "accent_colors": ["#51E3C2"],
+                        "max_emphasis_terms_per_caption": 2, "max_scale_percent": 116,
+                    },
+                    caption_canvas={"width": 1080, "height": 1920},
+                ), []
+            )
+            payload = json.loads(plan.read_text(encoding="utf-8"))
+            payload["argv"] = ["ffmpeg", "-vf", "subtitles=evil.ass", "out.mp4"]
+            plan.write_text(json.dumps(payload), encoding="utf-8")
+            wrong_filter = _final_caption_delivery_errors(
+                plan, captions, input_mode="preserve",
+                caption_treatment_options={
+                    "enabled": True, "mode": "semantic_emphasis",
+                    "font_family": "Microsoft YaHei UI", "base_color": "#F7F8FA",
+                    "accent_colors": ["#51E3C2"],
+                    "max_emphasis_terms_per_caption": 2, "max_scale_percent": 116,
+                }, caption_canvas={"width": 1080, "height": 1920},
+            )
+            self.assertTrue(any("canonical subtitles filter" in error for error in wrong_filter),
+                            wrong_filter)
+            payload["argv"] = ["ffmpeg", "-vf", (
+                "subtitles=filename='" + styled.resolve().as_posix().replace(":", "\\:")
+                .replace("'", "\\'") + "':charenc=UTF-8"
+            ), "out.mp4"]
+            plan.write_text(json.dumps(payload), encoding="utf-8")
+            drift = _final_caption_delivery_errors(
+                plan, captions, input_mode="preserve",
+                caption_treatment_options={
+                    "enabled": True, "mode": "semantic_emphasis",
+                    "font_family": "Microsoft YaHei UI", "base_color": "#F7F8FA",
+                    "accent_colors": ["#51E3C2"],
+                    "max_emphasis_terms_per_caption": 2, "max_scale_percent": 117,
+                },
+                caption_canvas={"width": 1080, "height": 1920},
+            )
+            self.assertTrue(any("current project configuration" in error for error in drift), drift)
+
+    def test_enabled_caption_treatment_cannot_silently_deliver_plain_srt(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            captions = root / "master.srt"
+            captions.write_text("1\n00:00:00,000 --> 00:00:01,000\n字幕\n", encoding="utf-8")
+            plan = root / "final-compose-command.json"
+            plan.write_text(json.dumps({
+                "caption_delivery": {
+                    "mode": "burned_in_last", "source": str(captions.resolve()),
+                    "source_sha256": sha256_file(captions),
+                }, "argv": ["ffmpeg", "-vf", "subtitles=master.srt", "out.mp4"],
+            }), encoding="utf-8")
+            errors = _final_caption_delivery_errors(
+                plan, captions, input_mode="preserve",
+                caption_treatment_options={
+                    "enabled": True, "mode": "semantic_emphasis",
+                    "font_family": "Microsoft YaHei UI", "base_color": "#F7F8FA",
+                    "accent_colors": ["#51E3C2"],
+                    "max_emphasis_terms_per_caption": 2, "max_scale_percent": 116,
+                }, caption_canvas={"width": 1080, "height": 1920},
+            )
+            self.assertTrue(any("did not deliver canonical ASS" in error for error in errors), errors)
+
+    def test_malformed_final_caption_delivery_returns_contract_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            captions = root / "master.srt"
+            captions.write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\ncaption\n", encoding="utf-8",
+            )
+            plan = root / "final-compose-command.json"
+            plan.write_text("[]\n", encoding="utf-8")
+            errors = _final_caption_delivery_errors(plan, captions, input_mode="preserve")
+            self.assertTrue(any("object" in error for error in errors), errors)
+
+            plan.write_text("{", encoding="utf-8")
+            errors = _final_caption_delivery_errors(plan, captions, input_mode="preserve")
+            self.assertTrue(any("malformed" in error for error in errors), errors)
+
+            plan.write_text(json.dumps({
+                "caption_delivery": {
+                    "mode": "burned_in_last", "source": str(captions.resolve()),
+                    "source_sha256": sha256_file(captions),
+                }, "argv": 1,
+            }), encoding="utf-8")
+            errors = _final_caption_delivery_errors(plan, captions, input_mode="preserve")
+            self.assertTrue(any("argv" in error for error in errors), errors)
+
+    def test_polish_existing_burned_caption_cannot_bypass_canonical_delivery(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            captions = root / "master.srt"
+            evil = root / "evil.ass"
+            captions.write_text(
+                "1\n00:00:00,000 --> 00:00:01,000\ncaption\n", encoding="utf-8",
+            )
+            evil.write_text("[Script Info]\n[Events]\n", encoding="utf-8")
+            plan = root / "final-compose-command.json"
+            plan.write_text(json.dumps({
+                "caption_delivery": {
+                    "mode": "burned_in_last", "source": str(evil.resolve()),
+                    "source_sha256": "fake",
+                }, "argv": ["ffmpeg", "out.mp4"],
+            }), encoding="utf-8")
+            errors = _final_caption_delivery_errors(
+                plan, captions, input_mode="polish_existing",
+                caption_treatment_options={
+                    "enabled": True, "mode": "semantic_emphasis",
+                    "font_family": "Microsoft YaHei UI", "base_color": "#F7F8FA",
+                    "accent_colors": ["#51E3C2"],
+                    "max_emphasis_terms_per_caption": 2, "max_scale_percent": 116,
+                }, caption_canvas={"width": 1080, "height": 1920},
+            )
+            self.assertTrue(any("source path" in error for error in errors), errors)
+            self.assertTrue(any("canonical subtitles filter" in error for error in errors), errors)
+
+    def test_styled_caption_delivery_rejects_external_or_tampered_ass(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            captions = root / "master.srt"
+            external = root.parent / f"{root.name}-outside.ass"
+            captions.write_text("1\n00:00:00,000 --> 00:00:01,000\n真实字幕\n", encoding="utf-8")
+            external.write_text(
+                "[Script Info]\n[Events]\nDialogue: 0,0:00:00.00,0:00:09.00,X,,0,0,0,,篡改字幕\n",
+                encoding="utf-8",
+            )
+            try:
+                plan = root / "final-compose-command.json"
+                plan.write_text(json.dumps({
+                    "caption_delivery": {
+                        "mode": "burned_in_last", "source": str(external.resolve()),
+                        "source_sha256": sha256_file(external),
+                        "text_authority": {"path": str(captions.resolve()),
+                                           "sha256": sha256_file(captions)},
+                    },
+                    "argv": ["ffmpeg", "-vf", "subtitles=outside.ass", "out.mp4"],
+                }), encoding="utf-8")
+                errors = _final_caption_delivery_errors(plan, captions, input_mode="preserve")
+                self.assertTrue(any("source path" in error for error in errors), errors)
+                self.assertTrue(any("treatment plan" in error for error in errors), errors)
+            finally:
+                external.unlink(missing_ok=True)
 
     def test_generic_cover_review_does_not_require_personal_identity_evidence(self) -> None:
         generic = {
@@ -610,6 +796,8 @@ class CompletionAuditTests(unittest.TestCase):
                 evidence_dir=final_qa / "technical-evidence", true_peak_ceiling=1.0,
             )
             final_compose_plan = director_root / "final-compose-command.json"
+            caption_filter_path = master_srt.resolve().as_posix().replace(":", "\\:")
+            caption_filter_path = caption_filter_path.replace("'", "\\'")
             final_compose_plan.write_text(json.dumps({
                 "schema_version": 1,
                 "caption_delivery": {
@@ -620,7 +808,7 @@ class CompletionAuditTests(unittest.TestCase):
                 },
                 "argv": [
                     "ffmpeg", "-vf",
-                    f"subtitles=filename='{master_srt.resolve()}':charenc=UTF-8",
+                    f"subtitles=filename='{caption_filter_path}':charenc=UTF-8",
                     str(output.resolve()),
                 ],
             }), encoding="utf-8")

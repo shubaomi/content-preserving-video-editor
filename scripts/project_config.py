@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import math
+import re
 from typing import Any
 
 
@@ -136,6 +137,15 @@ PORTRAIT_BRAND_DEFAULTS: dict[str, Any] = {
         "directions": PORTRAIT_BRAND_DIRECTIONS,
     },
 }
+CAPTION_TREATMENT_DEFAULTS: dict[str, Any] = {
+    "enabled": False,
+    "mode": "plain",
+    "font_family": "Microsoft YaHei UI",
+    "base_color": "#F7F8FA",
+    "accent_colors": ["#51E3C2", "#FFD166"],
+    "max_emphasis_terms_per_caption": 2,
+    "max_scale_percent": 116,
+}
 
 
 def _required_asset_defaults(caption_delivery: str) -> dict[str, dict[str, str]]:
@@ -225,6 +235,42 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     caption_delivery = editing.setdefault("caption_delivery", "auto")
     if caption_delivery not in {"auto", "none"}:
         raise ValueError("editing.caption_delivery must be auto or none")
+    caption_treatment = editing.setdefault("caption_treatment", {})
+    if not isinstance(caption_treatment, dict):
+        raise ValueError("editing.caption_treatment must be a mapping")
+    unknown_treatment = set(caption_treatment) - set(CAPTION_TREATMENT_DEFAULTS)
+    if unknown_treatment:
+        raise ValueError("editing.caption_treatment has unsupported fields")
+    for key, value in CAPTION_TREATMENT_DEFAULTS.items():
+        caption_treatment.setdefault(key, deepcopy(value))
+    if not isinstance(caption_treatment.get("enabled"), bool):
+        raise ValueError("editing.caption_treatment.enabled must be a boolean")
+    if caption_treatment.get("mode") not in {"plain", "semantic_emphasis"}:
+        raise ValueError("editing.caption_treatment.mode is unsupported")
+    if caption_treatment["enabled"] and caption_treatment["mode"] != "semantic_emphasis":
+        raise ValueError("editing.caption_treatment enabled mode must be semantic_emphasis")
+    if caption_delivery == "none" and caption_treatment["enabled"]:
+        raise ValueError("editing.caption_treatment cannot be enabled when caption_delivery is none")
+    for color_field in ("base_color",):
+        value = caption_treatment.get(color_field)
+        if not isinstance(value, str) or re.fullmatch(r"#[0-9A-Fa-f]{6}", value) is None:
+            raise ValueError(f"editing.caption_treatment.{color_field} must be #RRGGBB")
+    colors = caption_treatment.get("accent_colors")
+    if (
+        not isinstance(colors, list) or not 1 <= len(colors) <= 3
+        or any(not isinstance(value, str) or re.fullmatch(r"#[0-9A-Fa-f]{6}", value) is None
+               for value in colors)
+    ):
+        raise ValueError("editing.caption_treatment.accent_colors are invalid")
+    font = caption_treatment.get("font_family")
+    if not isinstance(font, str) or not font.strip() or any(char in font for char in "\r\n,;"):
+        raise ValueError("editing.caption_treatment.font_family is invalid")
+    maximum_terms = caption_treatment.get("max_emphasis_terms_per_caption")
+    if isinstance(maximum_terms, bool) or not isinstance(maximum_terms, int) or maximum_terms not in {1, 2}:
+        raise ValueError("editing.caption_treatment.max_emphasis_terms_per_caption must be 1 or 2")
+    maximum_scale = caption_treatment.get("max_scale_percent")
+    if isinstance(maximum_scale, bool) or not isinstance(maximum_scale, int) or not 105 <= maximum_scale <= 120:
+        raise ValueError("editing.caption_treatment.max_scale_percent must be in [105, 120]")
     caption_sync = editing.setdefault("caption_sync_closure", {"enabled": False})
     if not isinstance(caption_sync, dict) or not isinstance(
         caption_sync.setdefault("enabled", False), bool

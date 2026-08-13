@@ -46,6 +46,7 @@ from visual_dynamics_qa import validate_report as validate_visual_dynamics_repor
 from current_golden_regression import validate_report as validate_current_golden_report
 from representative_short_media import validate as validate_representative_short_media
 from delivery_readiness import asset_is_required, validate_required_asset_readiness
+from caption_treatment import validate_materialized as validate_caption_treatment
 
 
 REQUIRED_FIXTURE_TYPES = {
@@ -342,29 +343,120 @@ def _technical_report_errors(report_path: Path, output: Path) -> list[str]:
 def _final_caption_delivery_errors(
     plan_path: Path, captions_path: Path, *, input_mode: str,
     caption_disabled: bool = False,
+    caption_treatment_options: dict[str, Any] | None = None,
+    caption_canvas: dict[str, Any] | None = None,
 ) -> list[str]:
     if not plan_path.is_file():
         return ["final compose caption delivery plan is missing"]
-    plan = read_json(plan_path)
-    delivery = plan.get("caption_delivery") or {}
+    try:
+        plan = read_json(plan_path)
+    except (OSError, json.JSONDecodeError):
+        return ["final compose caption delivery plan is unreadable or malformed"]
+    if not isinstance(plan, dict):
+        return ["final compose caption delivery plan must be an object"]
+    delivery = plan.get("caption_delivery")
+    if not isinstance(delivery, dict):
+        return ["final compose caption delivery must be an object"]
     if caption_disabled:
         return [] if delivery.get("mode") == "disabled_by_project" else [
             "final compose caption delivery does not match the explicit disabled policy"
         ]
-    if input_mode == "preserve":
+    if input_mode == "preserve" or (
+        input_mode == "polish_existing" and delivery.get("mode") == "burned_in_last"
+    ):
         errors: list[str] = []
         if not captions_path.is_file():
             errors.append("video-use master.srt is missing from final caption delivery")
             return errors
         if delivery.get("mode") != "burned_in_last":
             errors.append("source-first final compose did not burn captions last")
-        if delivery.get("source") != str(captions_path.resolve()):
-            errors.append("final caption delivery source path is stale")
-        if delivery.get("source_sha256") != sha256_file(captions_path):
-            errors.append("final caption delivery source hash is stale")
-        argv = [str(value) for value in (plan.get("argv") or [])]
-        if not any("subtitles=" in value for value in argv):
-            errors.append("final compose command lacks the video-use subtitles filter")
+        source = Path(str(delivery.get("source") or "")).resolve()
+        treatment_enabled = (
+            isinstance(caption_treatment_options, dict)
+            and caption_treatment_options.get("enabled") is True
+            and caption_treatment_options.get("mode") == "semantic_emphasis"
+        )
+        treatment_disabled = (
+            caption_treatment_options is None
+            or (
+                isinstance(caption_treatment_options, dict)
+                and caption_treatment_options.get("enabled") is False
+                and caption_treatment_options.get("mode") == "plain"
+            )
+        )
+        if not treatment_enabled and not treatment_disabled:
+            errors.append("caption treatment project configuration is invalid")
+        if source == captions_path.resolve():
+            if treatment_enabled:
+                errors.append("enabled semantic caption treatment did not deliver canonical ASS")
+            if delivery.get("source_sha256") != sha256_file(captions_path):
+                errors.append("final caption delivery source hash is stale")
+        else:
+            authority = delivery.get("text_authority")
+            treatment_plan = delivery.get("treatment_plan")
+            canonical_dir = plan_path.parent / "caption-treatment" / "full"
+            canonical_ass = canonical_dir / "master.ass"
+            canonical_plan = canonical_dir / "caption-emphasis-plan.json"
+            styled_source_valid = (
+                source == canonical_ass.resolve()
+                and source.suffix.lower() == ".ass"
+                and source.is_file()
+            )
+            if not styled_source_valid:
+                errors.append("final caption delivery source path is stale")
+                errors.append("final caption delivery source hash is stale")
+            elif delivery.get("source_sha256") != sha256_file(source):
+                errors.append("final caption delivery source hash is stale")
+            if (
+                not isinstance(authority, dict)
+                or authority.get("path") != str(captions_path.resolve())
+                or authority.get("sha256") != sha256_file(captions_path)
+            ):
+                errors.append("styled caption delivery lacks the current master.srt text authority")
+            if (
+                not isinstance(treatment_plan, dict)
+                or treatment_plan.get("path") != str(canonical_plan.resolve())
+                or not canonical_plan.is_file()
+                or treatment_plan.get("sha256") != sha256_file(canonical_plan)
+            ):
+                errors.append("styled caption delivery lacks the canonical current treatment plan")
+            elif styled_source_valid:
+                if (
+                    not isinstance(caption_treatment_options, dict)
+                    or caption_treatment_options.get("enabled") is not True
+                    or caption_treatment_options.get("mode") != "semantic_emphasis"
+                    or not isinstance(caption_canvas, dict)
+                ):
+                    errors.append("styled caption treatment lacks current project configuration")
+                else:
+                    errors.extend(validate_caption_treatment(
+                        plan_path=canonical_plan,
+                        ass_path=canonical_ass,
+                        expected_master_srt=captions_path,
+                        expected_captions=captions_path.parent / "captions.json",
+                        expected_semantic_brief=plan_path.parent / "full-semantic-brief.json",
+                        expected_canvas=caption_canvas,
+                        expected_options=caption_treatment_options,
+                    ))
+        raw_argv = plan.get("argv")
+        if not isinstance(raw_argv, list) or any(not isinstance(value, str) for value in raw_argv):
+            errors.append("final compose argv must be a list of strings")
+            argv: list[str] = []
+        else:
+            argv = raw_argv
+        caption_filter_path = source.resolve().as_posix().replace(":", "\\:")
+        caption_filter_path = caption_filter_path.replace("'", "\\'")
+        expected_filter = f"subtitles=filename='{caption_filter_path}':charenc=UTF-8"
+        vf_indexes = [index for index, value in enumerate(argv) if value == "-vf"]
+        subtitle_filters = [value for value in argv if "subtitles=" in value]
+        canonical_filter_bound = (
+            len(vf_indexes) == 1
+            and vf_indexes[0] + 1 < len(argv)
+            and argv[vf_indexes[0] + 1] == expected_filter
+            and subtitle_filters == [expected_filter]
+        )
+        if not canonical_filter_bound:
+            errors.append("final compose command lacks the canonical subtitles filter")
         return errors
     if delivery.get("mode") not in {"preserve_verified_existing", "burned_in_last"}:
         return ["polish-existing final compose lacks an explicit caption delivery decision"]
@@ -715,10 +807,19 @@ def build(
         root, full_project, full_commands_path, render_output,
     )
     caption_delivery_plan = root / "final-compose-command.json"
+    caption_evidence_path = root / "evidence" / "evidence-bundle.json"
+    caption_evidence = read_json(caption_evidence_path) if caption_evidence_path.is_file() else {}
+    caption_display = caption_evidence.get("display") if isinstance(caption_evidence, dict) else None
+    caption_canvas = (
+        {"width": caption_display.get("width"), "height": caption_display.get("height")}
+        if isinstance(caption_display, dict) else None
+    )
     caption_delivery_errors = _final_caption_delivery_errors(
         caption_delivery_plan, master_srt_path,
         input_mode=context.input_mode,
         caption_disabled=project.get("editing", {}).get("caption_delivery") == "none",
+        caption_treatment_options=(project.get("editing") or {}).get("caption_treatment"),
+        caption_canvas=caption_canvas,
     ) if stages.get("final_compose", {}).get("status") == "complete" else []
 
     criteria: dict[str, dict[str, Any]] = {}

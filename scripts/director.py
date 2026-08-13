@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -45,6 +46,7 @@ from audio_production import (
 from brand_motion_playbook import compile_playbook, validate_playbook
 from build_motion_snapshot_plan import build_motion_sidecar, build_plan as build_motion_snapshot_plan
 from capability_registry import build_capability_inventory, build_toolchain_report, capability_config
+from caption_treatment import materialize as materialize_caption_treatment
 from clip_factory import build_clip_manifest, validate_clip_manifest
 from correction_ledger import append_correction, new_ledger, validate_ledger
 from creative_review import (
@@ -1202,11 +1204,45 @@ class Director:
             return self.root / "review-media" / "candidate-captioned.mp4"
         return self.sample_candidate_review_raw_path
 
+    def _caption_delivery_asset(self, *, scope: str) -> tuple[Path, list[Path]]:
+        config = (self.project.get("editing") or {}).get("caption_treatment") or {}
+        source_srt = self.video_use_dir / "master.srt"
+        if config.get("enabled") is not True:
+            return source_srt, [source_srt]
+        if config.get("mode") != "semantic_emphasis":
+            raise DirectorContractError("enabled caption treatment must use semantic_emphasis")
+        if scope not in {"sample", "full"}:
+            raise DirectorContractError("caption treatment scope is invalid")
+        brief = self.semantic_brief_path if scope == "sample" else self.full_semantic_brief_path
+        captions_json = self.video_use_dir / "captions.json"
+        required = [source_srt, captions_json, brief, self.evidence_bundle_path]
+        missing = [str(path.resolve()) for path in required if not path.is_file()]
+        if missing:
+            raise DirectorContractError(
+                "semantic caption treatment inputs are missing: " + ", ".join(missing)
+            )
+        media = self._motion_source_media()
+        output_dir = self.root / "caption-treatment" / scope
+        output_ass = output_dir / "master.ass"
+        output_plan = output_dir / "caption-emphasis-plan.json"
+        materialize_caption_treatment(
+            captions_path=captions_json,
+            semantic_brief_path=brief,
+            master_srt_path=source_srt,
+            output_ass=output_ass,
+            output_plan=output_plan,
+            options=config,
+            width=int(media["width"]),
+            height=int(media["height"]),
+            authorized_root=self.root,
+        )
+        return output_ass, [source_srt, captions_json, brief, output_plan, output_ass]
+
     def _ensure_sample_caption_delivery(self) -> list[Path]:
         if not self._sample_requires_caption_delivery():
             return [self.sample_baseline_raw_path, self.sample_candidate_review_raw_path]
 
-        captions = self.video_use_dir / "master.srt"
+        captions, caption_artifacts = self._caption_delivery_asset(scope="sample")
         required = [self.sample_baseline_raw_path, self.sample_candidate_review_raw_path, captions]
         missing = [str(path.resolve()) for path in required if not path.is_file()]
         expected_paths = {
@@ -1279,6 +1315,7 @@ class Director:
             self.sample_baseline_path,
             self.sample_candidate_path,
             self.sample_caption_receipt_path,
+            *caption_artifacts,
         ]
 
     @property
@@ -2298,6 +2335,8 @@ class Director:
                             "macro requires a bound chapter boundary evidence ID",
                             "gesture treatment requires a bound subject-track evidence ID",
                             "quiet requires zero attention layers",
+                            "when the current explanation is explicitly product-first, add "
+                            "occlusion_focus={primary: product, status: approved}; otherwise omit it",
                         ],
                         "forbidden": [
                             "fixed cadence", "minimum event quota", "keyword scoring",
@@ -2825,6 +2864,14 @@ class Director:
     def _motion_source_media(self) -> dict[str, Any]:
         evidence = read_json(self.evidence_bundle_path)
         display = evidence.get("display") or {}
+        if (
+            isinstance(evidence.get("duration_seconds"), bool)
+            or type(display.get("width")) is not int
+            or type(display.get("height")) is not int
+        ):
+            raise DirectorContractError(
+                "motion-design compilation requires measured duration and display dimensions"
+            )
         try:
             duration = float(evidence.get("duration_seconds"))
             width = int(display.get("width"))
@@ -2834,7 +2881,7 @@ class Director:
                 "motion-design compilation requires measured duration and display dimensions"
             )
         orientation = str(display.get("orientation") or "")
-        if duration <= 0 or width <= 0 or height <= 0 or orientation not in {
+        if not math.isfinite(duration) or duration <= 0 or width <= 0 or height <= 0 or orientation not in {
             "landscape", "portrait", "square", "mixed",
         }:
             raise DirectorContractError(
@@ -4495,6 +4542,11 @@ class Director:
                     "evidence_bundle": str(self.evidence_bundle_path),
                     "required_output": str(full_brief_path),
                     "opportunity_model": "decision_complete_v1",
+                    "optional_product_focus_field": {
+                        "name": "occlusion_focus",
+                        "allowed_value": {"primary": "product", "status": "approved"},
+                        "rule": "only present when current evidence makes the product the primary subject",
+                    },
                     "hyperframes_authoring_allowed": False,
                 })
                 self._action_required(
@@ -4979,13 +5031,17 @@ class Director:
                 )
             templates_path = Path(__file__).parents[1] / "references" / "platform-ui-templates.json"
             occlusion_path = qa_dir / "platform-occlusion.json"
+            storyboard_path = self.full_hyperframes_project / "storyboard.json"
             occlusion = evaluate_platform_occlusion(
                 read_json(geometry_path), read_json(templates_path),
+                read_json(self.full_semantic_brief_path), read_json(storyboard_path),
             )
             write_json(occlusion_path, occlusion)
             if occlusion.get("passed") is not True:
                 raise DirectorContractError("platform occlusion, crop, or protected-region QA failed")
-            occlusion_artifacts.extend([geometry_path, occlusion_path])
+            occlusion_artifacts.extend([
+                geometry_path, occlusion_path, self.full_semantic_brief_path, storyboard_path,
+            ])
         evidence_path = qa_dir / "verified-evidence.json"
         write_json(evidence_path, {
             "schema_version": 1,
@@ -5279,6 +5335,7 @@ class Director:
         bgm_config = self.project.get("audio", {}).get("bgm", {})
         caption_delivery: dict[str, Any]
         caption_asset = self.video_use_dir / "master.srt"
+        caption_treatment_artifacts = [caption_asset]
         analysis_path = self.root / "input-mode-analysis.json"
         caption_analysis = {}
         if analysis_path.is_file():
@@ -5298,6 +5355,7 @@ class Director:
             .get("enabled") is True
         )
         if burn_captions:
+            caption_asset, caption_treatment_artifacts = self._caption_delivery_asset(scope="full")
             if not caption_asset.is_file():
                 self._action_required(
                     "final_compose",
@@ -5314,6 +5372,19 @@ class Director:
                 "owner": "video-use",
                 "reason": "no verified existing caption layer; output-timeline captions are applied last",
             }
+            if caption_asset.suffix.lower() == ".ass":
+                caption_delivery["text_authority"] = {
+                    "path": str((self.video_use_dir / "master.srt").resolve()),
+                    "sha256": sha256_file(self.video_use_dir / "master.srt"),
+                }
+                caption_delivery["treatment_plan"] = {
+                    "path": str((self.root / "caption-treatment" / "full" /
+                                 "caption-emphasis-plan.json").resolve()),
+                    "sha256": sha256_file(
+                        self.root / "caption-treatment" / "full" /
+                        "caption-emphasis-plan.json"
+                    ),
+                }
         elif caption_disabled:
             caption_filter = None
             caption_delivery = {
@@ -5617,7 +5688,7 @@ class Director:
             if sync_closure.get("passed") is not True:
                 raise DirectorContractError("final caption synchronization closure did not pass")
             write_json(sync_closure_path, sync_closure)
-        artifacts = [output, command_path, media_report]
+        artifacts = [output, command_path, media_report, *caption_treatment_artifacts]
         if sync_closure_path.is_file() and caption_sync_closure_enabled:
             artifacts.append(sync_closure_path)
         if normalize_enabled:
@@ -6122,6 +6193,10 @@ class Director:
             "hyperframes_frame": self.full_hyperframes_project / "frame.md",
             "captions": self.video_use_dir / "captions.json",
             "subtitles": self.video_use_dir / "master.srt",
+            "styled_subtitles": self.root / "caption-treatment" / "full" / "master.ass",
+            "caption_emphasis_plan": (
+                self.root / "caption-treatment" / "full" / "caption-emphasis-plan.json"
+            ),
             "edl": self.video_use_dir / "edl.json",
             "semantic_brief": self.full_semantic_brief_path,
             "audio_plan": self.full_hyperframes_project / "audio-plan.json",
@@ -6287,7 +6362,7 @@ class Director:
         ):
             final_sync = read_json(final_sync_path)
             composite = final_sync.get("final_composite") or {}
-            caption_source = self.video_use_dir / "master.srt"
+            caption_source = Path(str(composite.get("caption_path") or "")).resolve()
             if (
                 final_sync.get("passed") is not True
                 or composite.get("passed") is not True

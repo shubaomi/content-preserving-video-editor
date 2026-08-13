@@ -204,6 +204,24 @@ class DirectorContractTests(unittest.TestCase):
 
         self.assertTrue(any("approved_visible_copy" in error for error in errors), errors)
 
+    def test_optional_product_occlusion_focus_is_typed_and_approved(self) -> None:
+        brief = decision_complete_brief()
+        brief["events"][0]["occlusion_focus"] = {
+            "primary": "product", "status": "approved",
+        }
+        self.assertEqual(validate_semantic_brief(brief, require_sample_variety=True), [])
+        for invalid in (
+            {"primary": "face", "status": "approved"},
+            {"primary": "product", "status": "draft"},
+            {"primary": "product", "status": "approved", "extra": True},
+            "product",
+        ):
+            with self.subTest(invalid=invalid):
+                bad = decision_complete_brief()
+                bad["events"][0]["occlusion_focus"] = invalid
+                errors = validate_semantic_brief(bad, require_sample_variety=True)
+                self.assertTrue(any("occlusion_focus" in error for error in errors), errors)
+
     def test_storyboard_is_ordered_render_subset_not_all_opportunities(self) -> None:
         brief = decision_complete_brief()
         storyboard = selected_storyboard(brief)

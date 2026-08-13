@@ -208,7 +208,21 @@ class CapabilityRegistryTests(unittest.TestCase):
     def test_action_required_portrait_receipt_skips_expensive_live_validation(
         self, _fixture_validator, retained_validator,
     ) -> None:
-        inventory = build_capability_inventory({})
+        original_read_text = Path.read_text
+        action_required = json.dumps({
+            "schema_version": 1,
+            "kind": "hongrun_portrait_brand_retained_real_project_validation",
+            "status": "action_required",
+            "maturity": "fixture_validated",
+        })
+
+        def isolated_receipt(path: Path, *args, **kwargs):
+            if path.name == "portrait-brand-motion-v2-real-project-validation.json":
+                return action_required
+            return original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", autospec=True, side_effect=isolated_receipt):
+            inventory = build_capability_inventory({})
         retained_validator.assert_not_called()
         portrait = next(
             row for row in inventory["capabilities"]

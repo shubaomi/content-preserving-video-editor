@@ -79,18 +79,36 @@ Complete a video only when applicable gates pass.
 - Avoid sustained one-character flashing.
 - Check technical terms.
 - Avoid faces and critical UI.
+- Treat captions, platform controls, and the current semantic subject as hard
+  protected regions. During an approved product-emphasis explanation, allow at
+  most one bounded face/hand soft overlap only when the overlay is near the
+  product, remains under the overlap and semantic-window duration caps, and its
+  actual post-exit geometry is clean. Bind the approval to the current semantic
+  brief and Storyboard; renderer self-declarations are not authority.
 - Apply captions after the output edit is final and verify output-timeline remapping.
 - For any work, including `polish_existing`, without an independently verified
   existing caption layer,
   require `final-compose-command.json.caption_delivery.mode=burned_in_last`, the
-  current video-use `master.srt` hash, and an FFmpeg subtitles filter. A sidecar
-  SRT alone is not delivered caption evidence.
+  current video-use `master.srt` text-authority hash, the current delivered SRT
+  or semantic-emphasis ASS hash, and an FFmpeg subtitles filter. A sidecar alone
+  is not delivered caption evidence.
+- For semantic-emphasis ASS, require exact `captions.json` ↔ `master.srt` text,
+  segmentation and millisecond timing, exact approved-copy anchors, current
+  configuration, measured canvas, canonical project paths, and deterministic
+  byte-for-byte ASS/plan reconstruction. Enabled styling cannot silently fall
+  back to plain SRT, and default-off projects cannot self-enable styled output.
+  External or self-signed ASS files are not delivery evidence.
 - In Motion Quality sample review, apply the same current `master.srt` to the
   baseline and candidate before human comparison. Require aligned durations,
   distinct raw/derived paths, exact caption/input/output hashes, the recorded
   subtitles filter, and successful full decodes in
   `sample-caption-delivery.json`. Store these derived media outside the
   HyperFrames project so they cannot change its source manifest.
+- Semantic emphasis captions must preserve exact phrase text, timing and
+  segmentation; use only approved anchors that actually occur in the phrase;
+  cap emphasis at two terms, 120% scale and the configured brand palette; and
+  retain `master.srt` as plain-text authority. Reject random color rotation,
+  every-word emphasis, per-character flashing and invented copy.
 - Validate names, product terms, URLs, commands, and technical vocabulary against the project glossary and visible UI.
 - A real-canary pass must be written by
   `scripts/build_real_project_validation.py`, not hand-authored. Require a real

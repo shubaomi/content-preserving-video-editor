@@ -279,11 +279,13 @@ Portrait talking-head footage uses a separate expressive grammar built from
 face-safe kinetic typography, rhythmic word emphasis, side rails, depth/light
 accents, semantic cutaways, and chapter energy changes; it must not fall back to
 floating dashboard cards merely because those templates exist. The generic
-content-format grammar remains `fixture_validated`. The opt-in HongRun v2 route
-is currently `fixture_validated` and `action_required`: two materially different
-portrait topics exist, but the second topic still needs an explicit face/hand/
-product/caption visual-review answer before `real_project_validated`; this is not a
-promise of CapCut/Jianying-equivalent taste and does not make it a production
+content-format grammar remains `fixture_validated`. The exact opt-in HongRun v2
+`luminous_intelligence` route is `real_project_validated` for two materially
+different, explicitly reviewed portrait topics. The second review permits one
+bounded face-or-hand soft overlap only during an independently approved
+product-first explanation window; product, captions, platform UI, and every
+other event remain hard protected. This is not a promise of
+CapCut/Jianying-equivalent taste and does not make the route a production
 default. A technically publishable sample may still fail the user's brand-taste
 gate; record that reservation and do not promote it away.
 
@@ -461,9 +463,18 @@ event; legacy projects retain representative sampling.
 
 Run technical QA and a separate blocking aesthetic review. Tests do not count as
 aesthetic approval. Require direct relevance, additional explanatory value,
-correct keyword focus, layout variety, speech-synchronous motion, no caption/
-face/cursor/UI occlusion, integrated IP visuals, fitting SFX, natural energetic
-cover identity, and no unexplained long visual stagnation.
+correct keyword focus, layout variety, speech-synchronous motion, no caption or
+platform-UI occlusion, no unjustified face/hand/product occlusion, integrated IP
+visuals, fitting SFX, natural energetic cover identity, and no unexplained long
+visual stagnation. In an evidence-bound `product_emphasis` window, one face or
+hand region may be soft-protected instead of absolutely forbidden, but only
+within the configured overlap/time limits, near the hard-protected product,
+with a clean exit proven by post-exit geometry. The current semantic brief and
+Storyboard must resolve the focus ID and output window; a renderer's own
+`approved`, duration, or clean-exit fields are not authority. Count distinct
+region IDs, so two hands are never collapsed into one exception. Captions and
+the current primary product remain hard
+protected; outside that window faces and hands remain hard protected.
 
 Snapshot, connector, and generated-human anatomy evidence must be a real,
 decodable image at reviewable resolution. File existence or placeholder bytes
@@ -491,7 +502,7 @@ raw HyperFrames candidate and does not create a fictional mix.
 
 When captions are required and no existing caption layer is independently
 verified, do not review the raw HyperFrames `sample-preview.mp4`. Apply the same
-hash-bound video-use `master.srt` to both baseline and candidate, write the two
+hash-bound caption asset to both baseline and candidate, write the two
 captioned review files under `work/director/review-media`, fully decode them,
 and bind the exact FFmpeg subtitle filters in
 `sample-qa/sample-caption-delivery.json`. Never write derived review media into
@@ -499,6 +510,19 @@ the HyperFrames project because it would invalidate renderer-source receipts.
 Changing the caption track or either review file invalidates paired approval.
 The candidate input to this caption-last step is the verified full-sample SFX
 mix when cue decisions exist; captions must never be burned before that mix.
+The default caption asset remains video-use `master.srt`. An explicitly enabled
+`editing.caption_treatment.mode=semantic_emphasis` compiles current captions and
+the current semantic brief into a deterministic `master.ass` plus
+`caption-emphasis-plan.json`. It may emphasize at most two source-matching
+semantic anchors per phrase with bounded brand colors, weight, and 105–120%
+scale. Each anchor must be an exact `approved_visible_copy`. Before rendering,
+`captions.json` must match `master.srt` text, segmentation, and millisecond
+timing; completion rebuilds the canonical ASS and plan byte-for-byte from
+current project inputs, measured canvas, and config. Enabled styling cannot
+silently fall back to plain SRT, and default-off projects cannot self-enable it.
+It may not paraphrase, add a claim, highlight a non-matching word, animate
+character-by-character, or change timing/segmentation. `master.srt` remains the
+hash-bound text authority and legacy projects remain `plain`.
 
 Only after the sample passes and the user approves may the director render the
 full HyperFrames motion and final universal media.
@@ -587,9 +611,9 @@ Director-generated short-lived local session nonces. Synthetic fixtures remain
 `pending` and cannot record brand approval
 or authorize renders. A real-project `awaiting_user` review additionally needs
 the later WP6 HyperFrames runtime, caption-last, voice/mix, and parity evidence
-gate. The first named-user taste approval and second-topic repeat-use answer are
-retained, but the current route remains `fixture_validated` until the second
-topic also has the required explicit visual-review answer. Production-default maturity remains a separate explicit
+gate. The first named-user taste approval, second-topic repeat-use answer, and
+explicit second-topic face/hand/product/caption review are retained. The exact
+opt-in route is therefore `real_project_validated`. Production-default maturity remains a separate explicit
 promotion that is not implemented in this release. Repeat-use willingness is
 not sufficient, and a future promotion must first define a separately trusted,
 current-evidence-bound HongRun approval authority.

@@ -2067,6 +2067,41 @@ class DirectorTests(unittest.TestCase):
             director.sample_hyperframes_project
         ))
 
+    def test_semantic_caption_treatment_materializes_ass_from_current_brief(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["editing"] = {"caption_delivery": "auto", "caption_treatment": {
+            "enabled": True, "mode": "semantic_emphasis",
+            "font_family": "Microsoft YaHei UI", "base_color": "#F7F8FA",
+            "accent_colors": ["#51E3C2", "#FFD166"],
+            "max_emphasis_terms_per_caption": 2, "max_scale_percent": 116,
+        }}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        self._write_master_srt(director)
+        (director.video_use_dir / "master.srt").write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\n产品亮度自然\n", encoding="utf-8",
+        )
+        (director.video_use_dir / "captions.json").write_text(json.dumps({"segments": [{
+            "start": 0.0, "end": 1.0, "text": "产品亮度自然",
+            "source_word_start": 0, "source_word_end": 5,
+        }]}), encoding="utf-8")
+        director.semantic_brief_path.write_text(json.dumps({"events": [{
+            "id": "benefit", "decision": "render", "output_start": 0.0, "output_end": 1.0,
+            "anchor": "亮度自然", "transcript_word_ids": ["w1", "w2", "w3", "w4"],
+            "approved_visible_copy": ["亮度自然"],
+        }]}), encoding="utf-8")
+        director.evidence_bundle_path.parent.mkdir(parents=True, exist_ok=True)
+        director.evidence_bundle_path.write_text(json.dumps({
+            "duration_seconds": 10.0,
+            "display": {"width": 1080, "height": 1920, "orientation": "portrait"},
+        }), encoding="utf-8")
+
+        asset, artifacts = director._caption_delivery_asset(scope="sample")
+
+        self.assertEqual(asset.suffix, ".ass")
+        self.assertIn("亮度自然", asset.read_text(encoding="utf-8"))
+        self.assertTrue(any(path.name == "caption-emphasis-plan.json" for path in artifacts))
+
     def test_polish_existing_without_verified_captions_still_burns_master_srt_last(self) -> None:
         director = Director(self.project)
         self._write_master_srt(director)

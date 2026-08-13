@@ -498,13 +498,35 @@ cross-surface repetition blocks the enabled workflow.
 Before Motion Quality sample QA, the Director materializes the actual paired
 review media. If the source has no independently verified caption layer and
 caption delivery is not disabled, `sample_caption_delivery.py` burns the same
-video-use `master.srt` into the raw video-use baseline and raw HyperFrames
+current caption asset into the raw video-use baseline and raw HyperFrames
 candidate. It writes both outputs to `work/director/review-media`, verifies a
 full decode and duration alignment, and records exact inputs, outputs, caption
 hash, and FFmpeg command in `sample-qa/sample-caption-delivery.json`. The raw
 HyperFrames sample remains unchanged; derived MP4 files never enter the
 renderer project manifest. Without a current receipt, `sample_qa` becomes
 `action_required` unless external execution is explicitly enabled.
+
+The caption asset is normally video-use `master.srt`. With explicit semantic
+caption treatment, `caption_treatment.py` first proves `captions.json` exactly
+matches the current `master.srt` text, segmentation, and millisecond timing,
+then joins it to the current sample/full semantic brief, selects only exact
+`approved_visible_copy` anchors, and
+materializes deterministic ASS and a provenance plan under
+`work/director/caption-treatment/{sample|full}`. Sample and final composition
+use that ASS through the same FFmpeg subtitle path. Completion audit requires
+the canonical full path, current config, measured media canvas and all three
+current input hashes, then
+deterministically rebuilds the ASS. Styling therefore cannot replace or rewrite
+the spoken wording.
+
+Platform geometry remains fail-closed. A semantic-priority product event may
+soften exactly one face/hand zone for a bounded time and overlap only when it is
+backed by the current semantic brief and Storyboard, points toward a nearby
+product target, and proves a clean exit using actual post-exit geometry. The
+semantic output window, rather than a renderer-declared duration, enforces the
+time cap. Region IDs are counted independently, so left and right hands are two
+regions. Product, captions and platform controls remain hard zones. This is
+focus-directed composition, not a general permission to cover a person.
 
 `derived_content` is default-off. Clip Factory emits candidates with source and
 output times, word IDs, quotes, titles, independence scores, cut reasons, and
@@ -657,9 +679,11 @@ tree into a project-local provisional Golden. A separate preference candidate
 contains only the explicit direction and six answers; inferred preferences and
 automatic application are forbidden. The shared profile is not rewritten, and
 the first approval alone cannot change defaults. The second product-demo topic
-supplies repeat-use evidence, but its explicit face/hand/product/caption review
-is still absent, so the opt-in `luminous_intelligence` route remains
-`fixture_validated` and `action_required`. The shared proposed
+supplies repeat-use evidence plus an explicit face/hand/product/caption review.
+The exact opt-in `luminous_intelligence` route is therefore
+`real_project_validated`; the semantic occlusion gate permits only one bounded
+face-or-hand soft overlap in an approved product-first window and keeps
+product/captions/platform UI hard protected. The shared proposed
 profile remains unchanged and production default remains false until a separate
 trusted promotion authority is designed and a new HongRun decision is bound to
 the current profile, implementation, and retained real-project evidence. That

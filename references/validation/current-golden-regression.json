@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite_version": "2026.08-p0p1p2",
-  "generated_at": "2026-08-13T09:13:36.243895+00:00",
+  "generated_at": "2026-08-13T18:08:09.246616+00:00",
   "status": "pass",
   "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
   "source": {
@@ -22,12 +22,12 @@
     "project_schema_version": 11,
     "implementation_sha256": {
       "scripts/current_golden_regression.py": "f4792699876268449c49e820040fb4e108df26fa0492b69630737f501fb67405",
-      "scripts/director.py": "759cf9b3b701d9cbd4008ada1b7dc4af136797e4f4b098f3b97fbb91c2109403",
-      "scripts/project_config.py": "476372fb36bc5dbb082e6984a12e58161ed4b88f441117cc3e74103fee622a1b",
+      "scripts/director.py": "7d9f298098be210b242f385ef73aaacdb68991ebcad709a7f2c3fea1352b1b88",
+      "scripts/project_config.py": "7d7da8c502a2ec9e29c9036cb2f6817aafb7fca351eb5e70994bbbbdd09cff91",
       "scripts/delivery_readiness.py": "4a409e9deb1abe2663dfb9e6145fc3334649197266bf072cd7c395349ab7d4ac",
       "scripts/capability_registry.py": "ceed4887182845737925acd16f047c2c1519e739563e1ac12b04c7315e74529c",
       "scripts/production_contract.py": "7ec71315a6a9e87bc2f74cfa015de4e3394a3143a072995efd7f23433b422195",
-      "scripts/completion_audit.py": "ae8a29eb6e738d6f2c616b2869eb087155e44ed2c5e389025e409b862550127b",
+      "scripts/completion_audit.py": "4450b68f45d036ebe9bed7bc08667aeed6e999b0d719d55a91cabf39a81bb5d5",
       "scripts/fixture_acceptance.py": "de36fdd4b468d739c7ef0be06d945f8ca1ca69de71075aca73d49e2ecbe532f5",
       "scripts/asr_router.py": "ce9bcc7bbfb12e985dbd9d45ac5f0ac7239dc11be69feed791f7c52704060fde",
       "scripts/semantic_confidence.py": "12f0126b6fa44e9821e930a1aa46f5c7644c5d36ec5a8761daa14657a1b49027",
@@ -53,7 +53,7 @@
       "scripts/build_motion_snapshot_plan.py": "14c7b3e627b98e8d99ac64d7af17c3c20323f45bceba8061112b3247d8fe9e3a",
       "references/motion-recipes-v1.json": "e0cc533c44db17824aca3c889154659e91d8729126b6470815b3fde381e45b44"
     },
-    "fixture_suite_sha256": "b778b10a491992e0f3e4e2e52d68604e099bf1e606128a6503d4e844f5fbff08"
+    "fixture_suite_sha256": "2b849362f9ead6b5237a13d14f862ebfb07432c79b3abb14ae39422c609ca8dc"
   },
   "cases": [
     {
@@ -549,5 +549,5 @@
       }
     }
   ],
-  "report_integrity_sha256": "86669c0ebefc45355691aa090089ce4ca4effb47542aa09f28b03733cea2a059"
+  "report_integrity_sha256": "451d79fd1b4faafb33056f5f804c649b267b652076bd6c6273a6082ec4dcc1a7"
 }

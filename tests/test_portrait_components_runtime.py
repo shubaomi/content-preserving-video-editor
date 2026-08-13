@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import redirect_stderr
+import io
 import sys
 import tempfile
 import unittest
@@ -7,6 +9,7 @@ import json
 import hashlib
 import os
 import subprocess
+from urllib.request import urlopen
 from pathlib import Path
 from PIL import Image
 
@@ -24,6 +27,7 @@ from validate_portrait_components_runtime import (  # noqa: E402
     CAPTURE_TOOL,
     PHASES,
     SEEK_SEQUENCE,
+    _serve_directory,
     _materialize_http_assets,
     _renderer_payload_errors,
     _fixture_html,
@@ -33,6 +37,19 @@ from validate_portrait_components_runtime import (  # noqa: E402
 
 
 class PortraitComponentsRuntimeTests(unittest.TestCase):
+    def test_loopback_capture_server_does_not_write_access_logs(self) -> None:
+        served = Path(tempfile.mkdtemp(prefix="portrait-server-"))
+        (served / "index.html").write_text("ok", encoding="utf-8")
+        (served / "large.bin").write_bytes(b"x" * 1_000_000)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), _serve_directory(served) as base_url:
+            with urlopen(f"{base_url}/index.html", timeout=5) as response:
+                self.assertEqual(response.read(), b"ok")
+            response = urlopen(f"{base_url}/large.bin", timeout=5)
+            response.read(1)
+            response.close()
+        self.assertEqual(stderr.getvalue(), "")
+
     def _compiled_payload(self) -> tuple[object, dict]:
         from tests import test_portrait_motion_recipes as fixture_module
 

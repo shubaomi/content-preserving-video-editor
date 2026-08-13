@@ -52,7 +52,10 @@ look branded.
 - Preferred techniques: weight interpolation, masked reveal, baseline travel,
   outline-to-fill, local tracking change, and foreground/background depth.
 - Body-caption styling remains owned by the caption system and is not replaced
-  with decorative typography.
+  with decorative typography. The caption system may use phrase-level semantic
+  emphasis: normally zero or one, never more than two, source-matching key terms
+  may receive a brand accent, weight, and a restrained 105–120% pop. The rest of
+  the sentence stays stable and readable; not every word should perform.
 
 ### Shape and surface
 
@@ -136,7 +139,14 @@ correct; every meaningful opportunity still needs a recorded decision.
 - Bright indoor talking head: use dark ink, colored orbit strokes, restrained
   shadow, and negative-space placement.
 - Full-body or gesture-rich frame: prioritize gesture echoes and side-depth
-  placement, with hand tracks when available.
+  placement, with hand tracks when available. When the sentence explicitly
+  teaches a physical product, the product becomes the primary hard-protected
+  subject. A short product callout may partially cross one hand or face region
+  if it remains near the product, stays within the measured cap, and restores a
+  clean person-first frame on exit. The current semantic brief must explicitly
+  approve product priority, the Storyboard window sets the time cap, and actual
+  post-exit geometry proves restoration. Left and right hands remain distinct
+  regions. Captions are never part of this exception.
 - Centered close face: reduce overlay area and favor camera/light/type effects
   that do not compete with the eyes and mouth.
 - Existing strong background design: reduce decorative layers and use source-

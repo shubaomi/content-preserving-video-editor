@@ -43,7 +43,7 @@ from portrait_motion_recipes import (
 )
 from portrait_sonic import validate_portrait_sonic_projection
 from sample_caption_delivery import validate_receipt as validate_caption_receipt
-from validate_portrait_components_runtime import _renderer_payload_errors
+from validate_portrait_components_runtime import _renderer_payload_errors, _serve_directory
 from portrait_style_reel import (
     DIRECTIONS,
     StyleReelError,
@@ -446,7 +446,7 @@ def _fresh_renderer_runtime_errors(
         from playwright.sync_api import sync_playwright
         from capture_hyperframes_runtime_evidence import resolve_browser_executable
 
-        with sync_playwright() as playwright:
+        with sync_playwright() as playwright, _serve_directory(project) as base_url:
             browser_path = resolve_browser_executable(
                 None, playwright.chromium.executable_path,
                 npx_command="npx.cmd" if os.name == "nt" else "npx",
@@ -457,7 +457,8 @@ def _fresh_renderer_runtime_errors(
             )
             try:
                 page = browser.new_page()
-                page.goto(index.resolve().as_uri(), wait_until="load", timeout=30_000)
+                # Loopback HTTP avoids Windows file-URL path limits for nested component assets.
+                page.goto(f"{base_url}/index.html", wait_until="load", timeout=30_000)
                 page.wait_for_function(
                     "() => window.__portraitCandidate && window.__portraitCandidate.payloadSha256",
                     timeout=30_000,

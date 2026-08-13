@@ -144,6 +144,15 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "maximum_onset_error_ms": 80.0,
         })
         self.assertEqual(migrated["editing"]["caption_delivery"], "auto")
+        self.assertEqual(migrated["editing"]["caption_treatment"], {
+            "enabled": False,
+            "mode": "plain",
+            "font_family": "Microsoft YaHei UI",
+            "base_color": "#F7F8FA",
+            "accent_colors": ["#51E3C2", "#FFD166"],
+            "max_emphasis_terms_per_caption": 2,
+            "max_scale_percent": 116,
+        })
         self.assertEqual(migrated["delivery"]["required_assets"], {
             "captions": {
                 "stage": "video_use_timeline",
@@ -179,6 +188,31 @@ class ProjectConfigMigrationTests(unittest.TestCase):
                 "version": 9,
                 "editing": {"caption_delivery": "sometimes"},
             })
+
+    def test_semantic_caption_treatment_is_explicit_and_bounded(self) -> None:
+        migrated = migrate_project_config({
+            "schema_version": 11, "version": 11,
+            "editing": {"caption_treatment": {
+                "enabled": True, "mode": "semantic_emphasis",
+                "accent_colors": ["#51E3C2", "#FFD166"],
+                "max_emphasis_terms_per_caption": 2,
+                "max_scale_percent": 116,
+            }},
+        })
+        self.assertTrue(migrated["editing"]["caption_treatment"]["enabled"])
+        for override in (
+            {"mode": "random_rainbow"},
+            {"accent_colors": ["red"]},
+            {"max_emphasis_terms_per_caption": 4},
+            {"max_scale_percent": 140},
+        ):
+            with self.subTest(override=override), self.assertRaisesRegex(
+                ValueError, "caption_treatment"
+            ):
+                migrate_project_config({
+                    "schema_version": 11, "version": 11,
+                    "editing": {"caption_treatment": {"enabled": True, **override}},
+                })
 
     def test_invalid_sfx_family_dominance_limit_is_rejected(self) -> None:
         for value in (True, 0, 1.1, float("nan")):

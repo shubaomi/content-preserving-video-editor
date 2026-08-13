@@ -49,6 +49,44 @@ an independently verified subtitle stream or burned-caption layer, including
 `none` is the only valid opt-out and must be recorded as
 `disabled_by_project` in the composition plan.
 
+`editing.caption_treatment` is optional and migration defaults it to:
+
+```yaml
+caption_treatment:
+  enabled: false
+  mode: plain
+  font_family: Microsoft YaHei UI
+  base_color: "#F7F8FA"
+  accent_colors: ["#51E3C2", "#FFD166"]
+  max_emphasis_terms_per_caption: 2
+  max_scale_percent: 116
+```
+
+When explicitly enabled, `mode` must be `semantic_emphasis`, caption delivery
+must not be `none`, colors must be one to three `#RRGGBB` tokens, the maximum
+emphasis count is 1–2, and scale is an integer in 105–120. The Director requires
+`captions.json` to match `master.srt` text, segmentation, and millisecond timing,
+then writes ASS plus a source/semantic/config-bound plan for sample and full
+scopes. Every highlighted anchor must be an exact member of the event's
+`approved_visible_copy`. Completion deterministically rebuilds the canonical
+full ASS from current project paths, config and measured canvas. When enabled,
+plain-SRT delivery is rejected; when disabled, a styled ASS is rejected. It
+still keeps `master.srt` as the authoritative
+plain-text subtitle and burns the ASS last.
+No configuration permits arbitrary rainbow rotation or per-character flashing.
+
+`qa.platform_occlusion` keeps its legacy hard-collision behavior unless an
+current semantic brief carries `occlusion_focus={primary: product, status:
+approved}`, the rendered event carries the matching semantic ID and
+`semantic_focus.primary=product`, and it has an explicit
+`occlusion_policy.mode=semantic_priority` with `intent=product_emphasis`. In
+that narrow window, at most one face/hand region may be soft-protected. The
+event must declare finite maximum overlap, duration and product-gap bounds; the
+actual semantic/Storyboard output window determines duration, and post-exit
+geometry—not a self-reported boolean—proves the clean exit. The overlay must
+target and remain near the product. Product, caption and platform-UI regions
+are never softened.
+
 ## Audio
 
 Allow project-level `audio.sfx` and `audio.bgm` settings. Recommended defaults:
@@ -479,9 +517,11 @@ projects must reference it explicitly and the Style Reel gate may later promote
 an exact profile version without mutating older project YAML.
 
 Two current HongRun portrait topics exercise the exact v2.0.0
-`luminous_intelligence` route, but current capability remains
-`fixture_validated`/`action_required` until the second topic receives an explicit
-face/hand/product/caption visual-review answer. The repository profile deliberately
+`luminous_intelligence` route and bind explicit named-user review, so that exact
+opt-in route is `real_project_validated`. Product-first explanation windows may
+authorize one bounded face-or-hand soft overlap only when the current semantic
+brief, Storyboard, event window, product target, and post-exit geometry all
+agree; product, caption, and platform-UI regions remain hard protected. The repository profile deliberately
 remains `status: proposed`, migrated projects remain disabled, and no new project
 inherits this route. `production_default` promotion is not implemented in this
 release; it requires a separately designed trusted approval authority plus a

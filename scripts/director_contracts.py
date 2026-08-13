@@ -84,6 +84,7 @@ NON_VISIBLE_EVENT_STRING_PATHS = {
     "geometry_contract.target_region_contract.source_state_evidence.[].path",
     "geometry_contract.target_region_contract.source_state_evidence.[].sha256",
     "target_binding_ids.[]",
+    "occlusion_focus.primary", "occlusion_focus.status",
 }
 MAX_TARGET_FRAME_DISTANCE_SECONDS = 15.0
 
@@ -431,6 +432,16 @@ def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bo
                 errors.append(f"{prefix} quiet_source treatment requires a quiet_source decision")
             if decision != "render":
                 continue
+            occlusion_focus = event.get("occlusion_focus")
+            if occlusion_focus is not None and (
+                not isinstance(occlusion_focus, dict)
+                or set(occlusion_focus) != {"primary", "status"}
+                or occlusion_focus.get("primary") != "product"
+                or occlusion_focus.get("status") != "approved"
+            ):
+                errors.append(
+                    f"{prefix} occlusion_focus must be exactly an approved product focus"
+                )
             approved_copy = event.get("approved_visible_copy")
             if (
                 not isinstance(approved_copy, list)
