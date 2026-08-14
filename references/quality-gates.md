@@ -389,6 +389,11 @@ Complete a video only when applicable gates pass.
   path containment, and deterministic import guide before exposing it to a
   human editor. Standard H.264 MP4 must never be labeled as alpha; unverified
   alpha formats remain pending until the current Jianying Desktop canary.
+- Generate the Jianying import guide in Chinese, copy the current blank-project
+  screenshots into the package, and hash them in the complete inventory. The
+  guide must distinguish zero-origin full stems from event-local SFX placement,
+  explain that SRT does not preserve ASS per-word styling, and route deep motion
+  edits back to the retained HyperFrames project.
 - A technical package pass does not prove editability. Require HongRun to import
   the short canary and complete the five caption/motion/SFX/IP/outro edits before
   promoting the named compatibility profile. Native draft/API/CLI/headless

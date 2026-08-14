@@ -32,6 +32,12 @@ class NleHandoffError(ValueError):
 
 
 PACKAGE_PROFILE = "jianying_desktop_compatible_v1"
+GUIDE_SCREENSHOT_ROOT = (
+    Path(__file__).resolve().parents[1]
+    / "references"
+    / "manual-nle-handoff-v2"
+    / "screenshots"
+)
 PACKAGE_LEVELS = {"reference_only", "balanced", "max_editable"}
 EDITABILITY = {
     "native_editable", "media_layer_editable", "source_project_editable",
@@ -442,8 +448,145 @@ def _timeline(edl: Mapping[str, Any], assets: list[dict[str, Any]], *, rate: flo
     return payload
 
 
-def _import_guide(level: str) -> str:
-    return f"""# Jianying Desktop manual import guide\n\nPackage profile: `{PACKAGE_PROFILE}`  \nPackage level: `{level}`\n\n1. Create a project using the canvas and frame rate in `layer-timeline.json`.\n2. Import `01-base/clean-a-roll.*` at timeline zero.\n3. Import dialogue, BGM, and SFX stems at zero; mute any duplicate reference audio.\n4. Import motion/IP media as normal media layers at the offsets in `layer-timeline.json`.\n5. Import `02-captions/master.srt` through Desktop caption import; use the ASS and plan only as styling references.\n6. Recreate editable CTA text from `06-outro/copy.json` when those files are available.\n7. Keep `00-reference/automatic-master.*` disabled/locked for A/B comparison.\n\nThis package does not contain or claim a native Jianying draft, API, CLI, or headless renderer.\n"""
+def _copy_guide_screenshots(staging: Path) -> None:
+    for name in (
+        "01-empty-project.png",
+        "02-import-subtitles.png",
+        "03-audio-panel.png",
+        "04-project-settings.png",
+    ):
+        source = GUIDE_SCREENSHOT_ROOT / name
+        if not source.is_file():
+            raise NleHandoffError(f"Jianying guide screenshot is missing: {source}")
+        target = safe_generated_target(
+            staging, Path("08-timeline/screenshots") / name,
+        )
+        atomic_replace_file(source, target)
+
+
+def _import_guide(
+    level: str, *, width: int, height: int, frame_rate: float,
+) -> str:
+    return f"""# 剪映专业版手动导入与调整指南
+
+> 适用配置：`{PACKAGE_PROFILE}`
+>
+> 交接包级别：`{level}`
+>
+> 建议画布：`{width} × {height}`
+>
+> 建议帧率：`{frame_rate:g} fps`
+
+本目录是一套**普通媒体文件 + 字幕 + 时间线说明 + 保留的 HyperFrames 深度编辑入口**，方便在剪映专业版里继续手动调整。它**不包含剪映原生草稿**，也不声称使用了剪映 API、CLI 或无人值守渲染能力。
+
+## 一、先了解各目录
+
+| 目录 | 用途 | 在剪映中的建议 |
+|---|---|---|
+| `00-reference/` | 自动成片参考版 | 放在最上方参考轨，默认锁定并关闭可见性；需要对照时再开启 |
+| `01-base/` | 干净 A-roll、对白音轨 | A-roll 放主视频轨 0 秒；对白放音频轨 0 秒 |
+| `02-captions/` | SRT、ASS 外观参考、重点词计划 | SRT 可直接导入；ASS 和 JSON 用于复刻颜色、加粗、放大等视觉效果 |
+| `03-motion/` | 整段或事件级动效 | 整段素材从 0 秒放置；事件素材按 `layer-timeline.json` 的时间放置 |
+| `04-ip-assets/` | 个人 IP 插画和已渲染层 | 作为普通图片/视频叠加层导入；缺失时不要自行补造 |
+| `05-audio/` | BGM、分组音效、事件音效 | BGM/分组干声通常从 0 秒；**事件音效不能全部放在 0 秒** |
+| `06-outro/` | 关注、点赞、转发等片尾模块 | 背景、图标、文字说明分层导入；按需删改或缩短 |
+| `07-cover/` | 封面参考 | 用于封面导出，不放入正片时间线 |
+| `08-timeline/` | OTIO、JSON 时间线、标记和本说明 | 所有精确入点以 `layer-timeline.json` 为准 |
+| `09-source-project/` | HyperFrames/编辑权威文件 | 需要改动效内部结构时回到 HyperFrames 工程修改 |
+| `10-evidence/` | 清单、哈希、兼容性与验证报告 | 排错和确认文件没有漂移，不导入时间线 |
+
+## 二、创建剪映工程
+
+1. 打开剪映专业版，创建空白草稿。
+2. 进入草稿后，先按本页顶部参数或 `layer-timeline.json` 设置比例、分辨率和帧率。
+3. 若剪映显示的是比例而不是像素：竖屏通常选 `9:16`，横屏通常选 `16:9`；最终仍以包内宽高为准。
+
+![空白工程与素材导入入口](screenshots/01-empty-project.png)
+
+草稿设置入口位于播放器右下方的草稿参数区域；不同版本的按钮位置可能略有变化。
+
+![草稿比例、分辨率与帧率设置](screenshots/04-project-settings.png)
+
+## 三、按顺序导入素材
+
+### 1. 导入主画面和参考成片
+
+1. 在顶部进入 **素材 → 导入**。
+2. 导入 `01-base/clean-a-roll.*`，拖到主视频轨并对齐 `00:00:00.000`。
+3. 导入 `00-reference/automatic-master.*`，放到最上方参考轨，同样从 0 秒开始。
+4. 将参考轨静音、关闭可见性并锁定；只有 A/B 对照时才临时开启。
+
+### 2. 导入对白、BGM 和音效
+
+本地音频文件同样通过 **素材 → 导入** 导入；顶部“音频”页主要用于素材库和音频处理，不是本交接包的唯一导入入口。
+
+![剪映音频面板](screenshots/03-audio-panel.png)
+
+1. `01-base/dialogue.*`：放到独立对白轨，从 0 秒开始。
+2. `05-audio/bgm.*`：放到独立 BGM 轨，从 0 秒开始，并避免盖住对白。
+3. `05-audio/sfx-grouped.*`：若它是完整分组音轨，从 0 秒开始。
+4. `05-audio/sfx-events/*`：逐个查看 `layer-timeline.json` 的 `timeline_start`，放到对应时间；**事件音效不能全部放在 0 秒**。
+5. 如主视频自身带有相同对白或音效，只保留一份，避免重音、回声或响度叠加。
+
+### 3. 导入字幕
+
+1. 进入 **文本 → 新建文本 → 导入本地字幕**。
+2. 选择 `02-captions/master.srt`。
+3. 检查首句、末句、切点附近及重点词时间是否对齐。
+
+![导入本地字幕入口](screenshots/02-import-subtitles.png)
+
+注意：SRT 只保存字幕文字和时间，不能完整保存 ASS 中的逐词品牌色、加粗、放大和动画。若要在剪映中保持可编辑：
+
+- 把 `02-captions/master-reference.ass` 当作外观参考，不要把它误当作剪映原生可编辑样式。
+- 打开 `02-captions/caption-emphasis-plan.json`，按其中的重点词、颜色、字号倍率和时间范围，在剪映中拆分相应字幕片段并手动复刻。
+- 对需要放大或换色的词，通常要拆成独立文本片段或复制字幕层，再修改局部样式。
+- 修改字幕分句时，优先保持原词和时间权威，只调整语义断句与屏幕呈现，不擅自改写口播内容。
+
+### 4. 导入动效、个人 IP 插画和片尾
+
+1. `03-motion/all-motion-overlay.*` 若存在，作为整段叠加轨从 0 秒放置。
+2. `03-motion/events/*` 按各自 `timeline_start` 放置；可以在剪映中移动、裁切、隐藏、复制或调透明度。
+3. `04-ip-assets/` 中状态为 `available` 的文件才导入；没有文件就保持 `unavailable`，不要临时编造素材。
+4. `06-outro/` 中的背景、图标、文字说明和参考合成分别放到独立轨道，方便改文案、缩短时长或删除某一层。
+5. 若要改变动效内部节点、连线、文字结构或关键帧逻辑，应回到 `09-source-project/` 中保留的 HyperFrames 工程修改后再重新导出；剪映更适合处理已渲染层的位置、时长、透明度和组合关系。
+
+## 四、建议的时间线轨道顺序
+
+从上到下可使用：
+
+1. 临时参考成片（默认关闭并锁定）
+2. 片尾文字和图标
+3. 个人 IP 插图/插画
+4. 事件级动效
+5. 整段动效
+6. 字幕和重点词文本
+7. 主画面 clean A-roll
+8. 事件音效
+9. BGM
+10. 对白
+
+轨道名称、素材入点、出点和语义事件 ID 都可在 `layer-timeline.json` 中查到。不要只凭文件名猜时间。
+
+## 五、导入后必须完成的五项验证
+
+1. **字幕可编辑**：修改一个测试字幕，确认文字和样式能保存，再撤销。
+2. **动效可移动**：移动一个事件动效约 0.5 秒，确认它是独立素材层，再撤销。
+3. **音效可静音**：静音一个事件音效，确认对白没有同时消失，再撤销。
+4. **IP 素材可移动**：移动一个 IP 插图，确认它不是烧录在主视频里，再撤销。
+5. **片尾文案可改**：修改一次 CTA 文案，确认文字层独立，再撤销。
+
+完成后把结果记录到 `10-evidence/compatibility-report.json`。在五项人工验证完成前，兼容性状态应保持 `pending`，不能自动宣称剪映原生可编辑。
+
+## 六、常见问题
+
+- **字幕重复**：主视频可能已有烧录字幕，又导入了 SRT；关闭其中一层。
+- **人声有回声**：主视频音频和独立对白轨同时播放；静音其中一份重复对白。
+- **音效全挤在开头**：事件音效错误地都放在 0 秒；按 JSON 中每个事件的入点重新放置。
+- **动效位置能改、内容不能改**：这是普通渲染层的正常边界；深度修改需回到 HyperFrames。
+- **某目录为空**：查看 `10-evidence/nle-handoff-package.json` 中对应资产的 `status` 和 `reason`；`unavailable` 不代表打包失败。
+- **界面与截图不同**：截图来自 Windows 剪映专业版 `11.1.0.14287` 的空白工程；后续版本菜单位置可能变化，但目录、时间线和验证原则不变。
+"""
 
 
 def build_nle_handoff_package(
@@ -511,8 +654,15 @@ def build_nle_handoff_package(
         _write_json(timeline_path, timeline)
         otio_path = safe_generated_target(staging, Path("08-timeline/timeline.otio.json"))
         _write_json(otio_path, timeline["otio"])
+        _copy_guide_screenshots(staging)
         guide_path = safe_generated_target(staging, Path("08-timeline/import-order.md"))
-        atomic_write_text(guide_path, _import_guide(package_level))
+        atomic_write_text(
+            guide_path,
+            _import_guide(
+                package_level, width=width, height=height,
+                frame_rate=float(frame_rate),
+            ),
+        )
         markers_path = safe_generated_target(staging, Path("08-timeline/markers.csv"))
         atomic_write_text(markers_path, "marker_id,kind,time_seconds,label,semantic_event_id\n")
 
@@ -656,6 +806,39 @@ def validate_nle_handoff_package(receipt_path: Path, *, package_root_override: P
             errors.append("NLE handoff package is missing required package-level assets")
     for key in ("timeline", "rights_manifest", "compatibility_report", "validation_report", "import_guide"):
         errors.extend(_ref_errors(payload.get(key), root, key))
+    guide_path = _resolve_ref(payload.get("import_guide"), root)
+    if guide_path and guide_path.is_file():
+        try:
+            guide = guide_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            errors.append("NLE handoff Chinese import guide is unreadable")
+        else:
+            required_guide_text = (
+                "剪映专业版手动导入与调整指南",
+                "素材 → 导入",
+                "文本 → 新建文本 → 导入本地字幕",
+                "事件音效不能全部放在 0 秒",
+                "不包含剪映原生草稿",
+            )
+            if any(value not in guide for value in required_guide_text):
+                errors.append("NLE handoff Chinese import guide is incomplete")
+            for name in (
+                "01-empty-project.png",
+                "02-import-subtitles.png",
+                "03-audio-panel.png",
+                "04-project-settings.png",
+            ):
+                screenshot = root / "08-timeline" / "screenshots" / name
+                source = GUIDE_SCREENSHOT_ROOT / name
+                if (
+                    f"screenshots/{name}" not in guide
+                    or not screenshot.is_file()
+                    or not source.is_file()
+                    or sha256_file(screenshot) != sha256_file(source)
+                ):
+                    errors.append(
+                        f"NLE handoff guide screenshot is missing or stale: {name}"
+                    )
     timeline_path = _resolve_ref(payload.get("timeline"), root)
     if timeline_path and timeline_path.is_file():
         try:

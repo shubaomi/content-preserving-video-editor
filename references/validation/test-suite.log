@@ -961,6 +961,6 @@ test_sequential_correction_does_not_absorb_previous_punctuation_token (test_word
 test_verbatim_grouping_preserves_word_timing_and_applies_audited_phrase (test_word_aligned_captions.WordAlignedCaptionTests.test_verbatim_grouping_preserves_word_timing_and_applies_audited_phrase) ... ok
 
 ----------------------------------------------------------------------
-Ran 933 tests in 1230.704s
+Ran 933 tests in 1270.226s
 
 OK

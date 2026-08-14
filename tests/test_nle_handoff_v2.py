@@ -136,11 +136,41 @@ class NleHandoffV2Tests(unittest.TestCase):
             receipt_path = package / "10-evidence" / "nle-handoff-package.json"
             self.assertEqual(receipt["status"], "action_required")
             self.assertEqual(validate_nle_handoff_package(receipt_path), [])
-            self.assertTrue((package / "08-timeline" / "import-order.md").is_file())
+            guide_path = package / "08-timeline" / "import-order.md"
+            self.assertTrue(guide_path.is_file())
+            guide = guide_path.read_text(encoding="utf-8")
+            self.assertIn("剪映专业版手动导入与调整指南", guide)
+            self.assertIn("素材 → 导入", guide)
+            self.assertIn("文本 → 新建文本 → 导入本地字幕", guide)
+            self.assertIn("事件音效不能全部放在 0 秒", guide)
+            self.assertIn("不包含剪映原生草稿", guide)
+            inventory_paths = {
+                row["path"] for row in receipt["complete_file_inventory"]
+            }
+            for name in (
+                "01-empty-project.png", "02-import-subtitles.png",
+                "03-audio-panel.png", "04-project-settings.png",
+            ):
+                screenshot = package / "08-timeline" / "screenshots" / name
+                self.assertTrue(screenshot.is_file(), name)
+                self.assertIn(f"screenshots/{name}", guide)
+                self.assertIn(
+                    f"08-timeline/screenshots/{name}", inventory_paths,
+                )
             self.assertFalse(receipt["capability_claims"]["native_draft"])
             timeline = json.loads((package / "08-timeline" / "layer-timeline.json").read_text(encoding="utf-8"))
             sfx_track = next(row for row in timeline["tracks"] if row["role"] == "sfx")
             self.assertEqual(sfx_track["clips"][0]["timeline_start"], 0.5)
+
+            screenshot = package / "08-timeline" / "screenshots" / "01-empty-project.png"
+            screenshot_bytes = screenshot.read_bytes()
+            screenshot.write_bytes(b"stale screenshot")
+            self.assertTrue(any(
+                "guide screenshot" in row
+                for row in validate_nle_handoff_package(receipt_path)
+            ))
+            screenshot.write_bytes(screenshot_bytes)
+            self.assertEqual(validate_nle_handoff_package(receipt_path), [])
 
             copied = package / "02-captions" / "master.srt"
             copied.write_text("changed", encoding="utf-8")

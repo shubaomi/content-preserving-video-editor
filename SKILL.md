@@ -789,7 +789,11 @@ When schema-v12 `delivery.manual_finish.nle_package.enabled` is explicitly true,
 also build the editor-neutral `nle-package-v2` from current, hash-bound assets.
 At minimum `balanced` contains the immutable automatic reference, clean A-roll,
 UTF-8 SRT, available semantic-caption references, layer timeline/OTIO, rights and
-compatibility receipts, and a deterministic Jianying Desktop import guide.
+compatibility receipts, and a deterministic Chinese Jianying Desktop import
+guide with current blank-project screenshots. The guide must include exact
+project canvas/frame-rate values, folder-by-folder import order, event-local SFX
+placement, SRT-versus-ASS styling limits, the HyperFrames deep-edit boundary,
+and the five-task human canary.
 Package motion, personal-IP, audio, cover, and modular text-free outro layers
 only when their real current artifacts and rights evidence exist; otherwise mark
 them unavailable. Never generate or claim a Jianying native draft, API, CLI,

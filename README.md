@@ -4,6 +4,11 @@ This repository is the source of the preservation-first Director Skill. It
 coordinates video-use, HyperFrames, FFmpeg, optional providers, human approvals,
 QA, and one Universal MP4; it does not vendor or replace upstream Skills.
 
+When the optional layered manual-NLE handoff is enabled, each package contains
+a project-specific Chinese Jianying Desktop import guide with blank-project UI
+screenshots. See
+[`references/manual-nle-handoff-v2/jianying-import-guide-zh.md`](references/manual-nle-handoff-v2/jianying-import-guide-zh.md).
+
 ## Local setup
 
 Use Python 3.11–3.13 and the compatible tools in

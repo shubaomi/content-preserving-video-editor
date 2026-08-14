@@ -24,11 +24,18 @@
       "tests": 933,
       "failed": 0,
       "skipped": 0,
-      "source_tree_sha256": "e3093dbe1439e0ebc9adb9b9e894203260649f3dcfb4aae13c7bf523f492eb21"
+      "source_tree_sha256": "5e85815803a1fca12eadc63162249211f9f08e41800df87452344584ce21a9a2"
     },
     "current_golden": "pass",
     "real_short_package_validator": "pass",
     "real_short_full_decode": "pass"
+  },
+  "jianying_guide": {
+    "language": "zh-CN",
+    "detail_level": "folder_order_timeline_offsets_caption_recreation_human_canary",
+    "screenshots": 4,
+    "observed_editor": "Windows Jianying Desktop 11.1.0.14287",
+    "user_media_in_screenshots": false
   },
   "real_short_canary": "../validation/manual-nle-handoff-v2-canary.json",
   "remaining_human_gate": "HongRun must import the current package in Jianying Desktop and record the five-task compatibility/usability result.",

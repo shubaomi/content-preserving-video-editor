@@ -10,12 +10,18 @@
     "height": 960,
     "frame_rate": 25.0
   },
-  "implementation_sha256": "519855f06b489e4719361969af3ccbf26a14df880c340abfb807ac60a677c120",
+  "implementation_sha256": "c4af78c23aab709603b28f6ecb63d7cd7099bda61ddf63d1713e69c3bdb43122",
   "package": {
     "path": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\work\\director\\manual-nle-handoff-v2-canary\\nle-package-v2\\10-evidence\\nle-handoff-package.json",
-    "sha256": "faac66d74aa3412214c4de48699ae280c74950aaed8453ca3029f0b383cfcd03",
+    "sha256": "7b07e5d70d927e8041182f9e2e71e1a42e8fb4ca1b021bfcc991cc09c73be9e6",
     "validation_errors": [],
-    "complete_file_inventory_count": 24
+    "complete_file_inventory_count": 28
+  },
+  "import_guide": {
+    "language": "zh-CN",
+    "screenshot_count": 4,
+    "observed_editor": "Windows Jianying Desktop 11.1.0.14287",
+    "guide_sha256": "19a625d88bd64c526ce846403f726cf760599d3598e6e0f976317ef618effb3b"
   },
   "current_media": {
     "automatic_master_sha256": "744d8c4d160eec9ea0802700585b318637b9ed7ce803774774b2d20d40197d96",

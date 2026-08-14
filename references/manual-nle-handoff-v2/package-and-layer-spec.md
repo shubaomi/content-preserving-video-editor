@@ -46,7 +46,12 @@ manual-finish/nle-package-v2/
     timeline.otio.json
     layer-timeline.json
     markers.csv
-    import-order.md
+    import-order.md                       # Chinese, project-specific guide
+    screenshots/
+      01-empty-project.png
+      02-import-subtitles.png
+      03-audio-panel.png
+      04-project-settings.png
   09-source-project/
     hyperframes-project/                 # link/copy policy recorded in manifest
     semantic-brief.json
@@ -81,6 +86,11 @@ JSON rather than trusted as raw filesystem names.
 - Captions use UTF-8 SRT for editability. ASS is a visual reference, not a claim
   that Jianying imports its rich styles. The emphasis plan identifies exact
   caption IDs, word IDs, character spans, colors, weight, scale, and timing.
+- The import guide is generated in Chinese with the current package canvas,
+  frame rate, exact folder order, event-SFX placement warning, five-task human
+  canary, and four screenshots captured from a blank Windows Jianying Desktop
+  11.1.0.14287 project. Screenshots contain no user media and are part of the
+  package's complete hash inventory.
 - Clean A-roll contains narration and approved video-use edits but no Director
   motion, burned captions, added BGM, or added SFX.
 
@@ -148,4 +158,3 @@ canvas/fps, then import in this order:
 The editor exports a new file outside the automatic-master path. A correction
 summary lists changed events/layers/captions/audio/outro. Director records exact
 bytes and runs all existing delivery gates again.
-
