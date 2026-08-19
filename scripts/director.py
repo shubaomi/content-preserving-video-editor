@@ -106,6 +106,10 @@ from nle_handoff_v2 import (
     probe_video_frame_rate,
     validate_nle_handoff_package,
 )
+from nle_layer_materializer import (
+    NleLayerMaterializationError,
+    materialize_motion_handoff_layers,
+)
 from media_catalog_adapter import run_media_catalog
 from motion_contracts import (
     DEFAULT_RECIPE_REGISTRY,
@@ -5971,33 +5975,84 @@ class Director:
             "bgm_stem": "bgm_stem",
             "sfx_grouped": "sfx_grouped",
             "motion_full_duration": "transparent_motion_layer",
+            "motion_event": "motion_event",
             "ip_source": "ip_source",
             "ip_rendered": "ip_rendered",
             "outro_background": "outro_background",
             "outro_overlay": "outro_overlay",
             "outro_copy": "outro_copy",
             "outro_reference": "outro_reference",
+            "outro_icon": "outro_icon",
             "cover": "cover",
+            "hyperframes_project": "hyperframes_project",
+            "evidence": "evidence",
         }
         resolved_assets: dict[str, Any] = {}
         for role in (
             "clean_a_roll", "caption_srt", "caption_ass_reference", "caption_style_plan",
             "dialogue_stem", "bgm_stem", "sfx_grouped", "motion_full_duration",
+            "motion_event",
             "ip_source", "ip_rendered", "outro_background", "outro_overlay",
-            "outro_copy", "outro_reference", "cover",
+            "outro_copy", "outro_reference", "outro_icon", "cover",
+            "hyperframes_project", "evidence",
         ):
             configured = assets_config.get(aliases.get(role, role))
+            if isinstance(configured, list):
+                records: list[Any] = []
+                for value in configured:
+                    if isinstance(value, dict):
+                        path = self._optional_project_path(value.get("path"))
+                        if path is not None and path.is_file():
+                            records.append({**value, "path": path})
+                    else:
+                        path = self._optional_project_path(value)
+                        if path is not None and path.is_file():
+                            records.append(path)
+                if records:
+                    resolved_assets[role] = records
+                continue
+            if isinstance(configured, dict):
+                path = self._optional_project_path(configured.get("path"))
+                if path is not None and path.is_file():
+                    resolved_assets[role] = {**configured, "path": path}
+                continue
             candidate = self._optional_project_path(configured) if configured else defaults.get(role)
             if candidate is not None and candidate.is_file():
                 resolved_assets[role] = candidate
         include = package.get("include") or {}
+        media = self._motion_source_media()
+        if (
+            include.get("motion_layers") is True
+            and "motion_event" not in resolved_assets
+            and self.full_hyperframes_project.is_dir()
+            and (self.full_hyperframes_project / "renderer-payload.json").is_file()
+        ):
+            try:
+                materialized = materialize_motion_handoff_layers(
+                    source_project=self.full_hyperframes_project,
+                    output_root=self.manual_finish_dir / "nle-layer-derivatives",
+                    authorized_root=self.context.root,
+                    width=int(media["width"]), height=int(media["height"]),
+                    frame_rate=probe_video_frame_rate(self.delivery_output),
+                    execute=self.execute_external,
+                )
+            except (NleLayerMaterializationError, OSError, ValueError) as error:
+                raise DirectorContractError(
+                    f"manual NLE motion layer materialization failed: {error}"
+                ) from error
+            if materialized:
+                for role in ("motion_event", "hyperframes_project", "evidence"):
+                    if materialized.get(role):
+                        resolved_assets[role] = materialized[role]
         if include.get("motion_layers") is not True:
             resolved_assets.pop("motion_full_duration", None)
+            resolved_assets.pop("motion_event", None)
+            resolved_assets.pop("hyperframes_project", None)
         if include.get("ip_assets") is not True:
             resolved_assets.pop("ip_source", None)
             resolved_assets.pop("ip_rendered", None)
         if include.get("modular_outro") is not True:
-            for role in ("outro_background", "outro_overlay", "outro_copy", "outro_reference"):
+            for role in ("outro_background", "outro_overlay", "outro_copy", "outro_reference", "outro_icon"):
                 resolved_assets.pop(role, None)
         if include.get("event_sfx") is True:
             event_sfx = self._manual_nle_sfx_events()
@@ -6013,7 +6068,6 @@ class Director:
             self.production_contract_path,
         ]
         resolved_assets["editorial_authority"] = [path for path in editorial if path.is_file()]
-        media = self._motion_source_media()
         try:
             build_nle_handoff_package(
                 package_root=self.manual_nle_package_root,

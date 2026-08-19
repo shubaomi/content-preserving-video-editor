@@ -10,12 +10,13 @@
     "height": 960,
     "frame_rate": 25.0
   },
-  "implementation_sha256": "c4af78c23aab709603b28f6ecb63d7cd7099bda61ddf63d1713e69c3bdb43122",
+  "implementation_sha256": "7090a0b6ec2fcf9763e4b9fecdbf5a92ff120b1ac08dac6a917b897231d8230e",
+  "motion_materializer_sha256": "23cf3561e00705bd761d75ba599b2d890dbb0541d6f18ae7dc5136d7d4ed9964",
   "package": {
-    "path": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\work\\director\\manual-nle-handoff-v2-canary\\nle-package-v2\\10-evidence\\nle-handoff-package.json",
-    "sha256": "7b07e5d70d927e8041182f9e2e71e1a42e8fb4ca1b021bfcc991cc09c73be9e6",
+    "path": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\work\\director\\manual-nle-handoff-v2-canary\\nle-package-v2-layered\\10-evidence\\nle-handoff-package.json",
+    "sha256": "b2ac6cc0dd63ef004fbf6e815d9b42c087003330ed6bcc748e38d3560c1c88a6",
     "validation_errors": [],
-    "complete_file_inventory_count": 28
+    "complete_file_inventory_count": 69
   },
   "import_guide": {
     "language": "zh-CN",
@@ -39,12 +40,14 @@
     "caption_srt": 1,
     "caption_ass_reference": 1,
     "caption_style_plan": 1,
+    "motion_event": 3,
     "event_sfx": 3,
-    "editorial_authority": 8
+    "hyperframes_project": 1,
+    "editorial_authority": 8,
+    "evidence": 19
   },
   "unavailable_layers": [
     "motion_full_duration",
-    "motion_event",
     "ip_source",
     "ip_rendered",
     "bgm_stem",
@@ -54,9 +57,21 @@
     "outro_copy",
     "outro_reference",
     "outro_icon",
-    "cover",
-    "evidence"
+    "cover"
   ],
+  "motion_layers": {
+    "format": "ProRes 4444 MOV",
+    "pixel_format": "yuva444p12le",
+    "events": [
+      {"semantic_event_id": "secure-fit", "start_seconds": 10.09, "end_seconds": 12.77, "sha256": "8f8b994e2868e1fbd5b208e65896289efb301b7da5c92292ae6cad351b120a9b"},
+      {"semantic_event_id": "magnetic-charge", "start_seconds": 24.87, "end_seconds": 30.39, "sha256": "7cec18058a7e35648ee017824e5050f1ccbbfe174b86f4e87b287dd4057dc215"},
+      {"semantic_event_id": "compact-portable", "start_seconds": 47.29, "end_seconds": 55.37, "sha256": "5838798a044f274e4fb1658b6293cd8107501ae8d1cfa6768fcef2d65f6f8a01"}
+    ],
+    "automated_alpha_evidence": "pass",
+    "clean_exit_evidence": "pass",
+    "black_white_busy_composites": "pass",
+    "jianying_import": "pending"
+  },
   "capability_claims": {
     "native_jianying_draft": false,
     "editor_api": false,
@@ -70,7 +85,7 @@
     "next_action": "Import the package into the current Jianying Desktop and complete the five frozen edit tasks.",
     "tasks": [
       "correct one subtitle and change its emphasis styling",
-      "move or remove one event motion overlay when a real motion layer becomes available",
+      "move or remove one of the three available event motion overlays",
       "mute one SFX while preserving dialogue",
       "reposition or remove one personal-IP asset when available",
       "change CTA copy and hide one CTA icon when the modular outro becomes available"

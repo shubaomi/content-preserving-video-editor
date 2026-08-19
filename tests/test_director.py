@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import yaml
+from PIL import Image
 
 
 ROOT = Path(__file__).parents[1]
@@ -28,6 +29,7 @@ from director import (  # noqa: E402
     approve_sample,
     authorize_final_render,
 )
+import nle_layer_materializer as layer_materializer  # noqa: E402
 from director_contracts import DirectorContractError, STAGES, VISUAL_VOCABULARY, sha256_file  # noqa: E402
 from editorial_regression import create_baseline  # noqa: E402
 
@@ -1766,6 +1768,104 @@ class DirectorTests(unittest.TestCase):
         self.assertTrue(_artifact_records_current(records))
         (director.manual_nle_package_root / "02-captions" / "master.srt").unlink()
         self.assertFalse(_artifact_records_current(records))
+
+    def test_layered_nle_package_materializes_current_hyperframes_event_layers(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["manual_finish"] = {
+            "enabled": True, "backend": "other_nle", "modifications": [],
+            "nle_package": {
+                "enabled": True, "profile": "jianying_desktop_compatible_v1",
+                "level": "balanced",
+            },
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project, execute_external=True)
+        director.video_use_dir.mkdir(parents=True, exist_ok=True)
+        (director.video_use_dir / "base-preview.mp4").write_bytes(b"clean")
+        (director.video_use_dir / "master.srt").write_text("caption", encoding="utf-8")
+        (director.video_use_dir / "edl.json").write_text(json.dumps({
+            "owner": "video-use", "sources": {"input": str(director.context.source_video)},
+            "ranges": [{"id": "c1", "source": "input", "start": 0.0,
+                        "end": 1.0, "timeline_start": 0.0}],
+            "gaps": [], "transitions": [], "metadata": {"video_id": "sample"},
+        }), encoding="utf-8")
+        director.delivery_output.parent.mkdir(parents=True)
+        director.delivery_output.write_bytes(b"automatic")
+        director.full_hyperframes_project.mkdir(parents=True)
+        (director.full_hyperframes_project / "renderer-payload.json").write_text(
+            json.dumps({"events": []}), encoding="utf-8",
+        )
+        overlay = director.root / "fixture-motion.mov"; overlay.write_bytes(b"alpha")
+        archive = director.root / "fixture-hyperframes.zip"; archive.write_bytes(b"project")
+        alpha_root = director.root / "fixture-alpha"; alpha_root.mkdir()
+        midpoint = alpha_root / "midpoint.png"
+        post_exit = alpha_root / "post-exit.png"
+        middle = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+        for x in range(420, 660):
+            for y in range(760, 1160):
+                middle.putpixel((x, y), (60, 220, 190, 255))
+        middle.save(midpoint)
+        Image.new("RGBA", (1080, 1920), (0, 0, 0, 0)).save(post_exit)
+        composites = []
+        for name, background in layer_materializer._composite_backgrounds(1080, 1920).items():
+            image = alpha_root / f"composite-{name}.png"
+            background.alpha_composite(middle)
+            background.convert("RGB").save(image)
+            composites.append({"kind": name, "path": image.name,
+                               "sha256": sha256_file(image)})
+        probe = {"codec_name": "prores", "profile": "4444",
+                 "width": 1080, "height": 1920,
+                 "pixel_format": "yuva444p10le", "frame_rate": 25.0,
+                 "duration_seconds": 0.8, "alpha_mode": None}
+        evidence_payload = {
+            "schema_version": 1, "kind": "nle_motion_alpha_evidence",
+            "status": "pass", "video_sha256": sha256_file(overlay),
+            "probe": probe,
+            "midpoint": {"path": midpoint.name, "sha256": sha256_file(midpoint),
+                         "width": 1080, "height": 1920, "minimum_alpha": 0,
+                         "maximum_alpha": 255,
+                         "visible_ratio": (240 * 400) / (1080 * 1920)},
+            "post_exit": {"path": post_exit.name, "sha256": sha256_file(post_exit),
+                          "width": 1080, "height": 1920, "minimum_alpha": 0,
+                          "maximum_alpha": 0, "visible_ratio": 0.0},
+            "composites": composites,
+        }
+        evidence_payload["integrity_sha256"] = __import__("hashlib").sha256(json.dumps(
+            evidence_payload, ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        evidence = alpha_root / "alpha-evidence.json"
+        evidence.write_text(json.dumps(evidence_payload), encoding="utf-8")
+        materialized = {
+            "motion_event": [{
+                "path": overlay, "semantic_event_id": "semantic-1",
+                "render_event_id": "event-1",
+                "timeline": {"start_seconds": 0.1, "end_seconds": 0.9,
+                             "frame_rate": 25.0},
+                "video": {"codec_name": "prores", "profile": "4444",
+                          "width": 1080, "height": 1920,
+                          "pixel_format": "yuva444p10le", "alpha_status": "verified",
+                          "decode_receipt": {"path": str(evidence),
+                                             "sha256": sha256_file(evidence)}},
+            }],
+            "hyperframes_project": archive,
+            "evidence": [evidence],
+        }
+
+        with patch("director.probe_video_frame_rate", return_value=25.0), patch.object(
+            director, "_motion_source_media",
+            return_value={"width": 1080, "height": 1920, "duration_seconds": 1.0},
+        ), patch("director.materialize_motion_handoff_layers", return_value=materialized) as materialize, patch(
+            "nle_layer_materializer._probe_video", return_value=probe,
+        ):
+            receipt, _ = director._write_manual_nle_package_v2()
+
+        materialize.assert_called_once()
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        self.assertTrue(any(row["role"] == "motion_event" and row["status"] == "available"
+                            for row in payload["assets"]))
+        self.assertTrue(any(row["role"] == "hyperframes_project" and row["status"] == "available"
+                            for row in payload["assets"]))
 
     def test_optional_media_adapters_create_no_artifact_when_disabled(self) -> None:
         director = Director(self.project)

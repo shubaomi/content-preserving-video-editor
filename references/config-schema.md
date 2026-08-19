@@ -429,6 +429,17 @@ unmaterialized motion, IP, audio, cover, or outro layers stay explicitly
 `unavailable`. Compatibility remains pending until the five-task named-user
 Jianying Desktop canary is recorded.
 
+With `include.motion_layers: true`, a current HyperFrames renderer payload, and
+`--execute-external`, Director may render only the approved event windows as
+transparent ProRes 4444 MOV candidates. Each event must retain its semantic and
+renderer IDs, exact output-timeline offset, canvas, frame rate, decoded alpha
+evidence, clean exit, and black/white/busy composite proofs. The package also
+contains a deterministic ZIP of the retained HyperFrames project for deep edits.
+This automated evidence does not prove that the installed Jianying version
+imports or preserves alpha; the compatibility receipt remains pending until the
+human canary. Without external execution or current renderer authority, the
+motion roles remain `unavailable` rather than triggering a speculative render.
+
 An OpenMontage-oriented handoff may alternatively set:
 
 ```yaml

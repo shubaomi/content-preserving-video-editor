@@ -12,11 +12,13 @@ import math
 import os
 import shutil
 import subprocess
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Mapping
 
 from director_contracts import read_json, sha256_file
+from nle_layer_materializer import validate_alpha_evidence
 from otio_adapter import edl_to_otio, otio_to_internal, validate_roundtrip
 from safe_generated_output import (
     SafeGeneratedOutputError,
@@ -69,6 +71,7 @@ _DESTINATIONS: dict[str, tuple[str, str, str, str]] = {
     "outro_copy": ("06-outro/copy", "reference_only", "editable CTA copy instructions", "outro module"),
     "outro_reference": ("06-outro/reference-composite", "reference_only", "approved outro appearance", "outro module"),
     "cover": ("07-cover/cover", "reference_only", "approved cover", "cover workflow"),
+    "hyperframes_project": ("09-source-project/hyperframes-project", "source_project_editable", "retained HyperFrames source project archive", "current HyperFrames project"),
     "motion_event": ("03-motion/events", "reference_only", "event-local motion overlay candidate", "HyperFrames event render"),
     "sfx_event": ("05-audio/sfx-events", "reference_only", "event-local sound effect candidate", "current audio plan cue"),
     "outro_icon": ("06-outro/icons", "reference_only", "editable CTA icon candidate", "outro module"),
@@ -202,6 +205,27 @@ def validate_layer_asset(row: Any, *, package_root: Path) -> list[str]:
                     errors.append(f"NLE video {key} is invalid")
             if video.get("alpha_status") == "verified" and path.suffix.lower() == ".mp4":
                 errors.append("standard MP4 cannot be labeled as verified alpha")
+            if video.get("alpha_status") == "verified":
+                errors.extend(_ref_errors(
+                    video.get("decode_receipt"), package_root,
+                    f"NLE alpha decode receipt {asset_id}",
+                ))
+                decode_path = _resolve_ref(video.get("decode_receipt"), package_root)
+                if (
+                    path.is_file() and decode_path is not None and decode_path.is_file()
+                    and isinstance(timeline, Mapping)
+                    and _finite_number(timeline.get("start_seconds"), nonnegative=True)
+                    and _finite_number(timeline.get("end_seconds"), positive=True)
+                    and _finite_number(timeline.get("frame_rate"), positive=True)
+                    and float(timeline["end_seconds"]) > float(timeline["start_seconds"])
+                ):
+                    errors.extend(validate_alpha_evidence(
+                        decode_path,
+                        overlay=path,
+                        expected_video=video,
+                        expected_duration=float(timeline["end_seconds"]) - float(timeline["start_seconds"]),
+                        expected_frame_rate=float(timeline["frame_rate"]),
+                    ))
     audio = row.get("audio")
     if audio is not None:
         if not isinstance(audio, Mapping):
@@ -320,6 +344,8 @@ def _copy_asset(
     source: Path, staging: Path, role: str, *, asset_id: str | None = None,
     semantic_event_id: str | None = None, render_event_id: str | None = None,
     timeline: Mapping[str, Any] | None = None,
+    video: Mapping[str, Any] | None = None,
+    audio: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     source = source.resolve()
     if not source.is_file():
@@ -345,6 +371,74 @@ def _copy_asset(
         row["render_event_id"] = render_event_id
     if timeline is not None:
         row["timeline"] = dict(timeline)
+    if video is not None:
+        video_record = dict(video)
+        if video_record.get("alpha_status") == "verified":
+            decode = video_record.get("decode_receipt")
+            if not isinstance(decode, Mapping) or not isinstance(decode.get("path"), str):
+                raise NleHandoffError("verified-alpha NLE asset requires a decode receipt")
+            decode_source = Path(decode["path"]).resolve()
+            if not decode_source.is_file() or decode.get("sha256") != sha256_file(decode_source):
+                raise NleHandoffError("verified-alpha NLE asset decode receipt is stale")
+            if not isinstance(timeline, Mapping):
+                raise NleHandoffError("verified-alpha NLE asset requires exact timeline placement")
+            start = timeline.get("start_seconds")
+            end = timeline.get("end_seconds")
+            rate = timeline.get("frame_rate")
+            if (
+                not _finite_number(start, nonnegative=True)
+                or not _finite_number(end, positive=True)
+                or not _finite_number(rate, positive=True)
+                or float(end) <= float(start)
+            ):
+                raise NleHandoffError("verified-alpha NLE asset timeline is invalid")
+            alpha_errors = validate_alpha_evidence(
+                decode_source,
+                overlay=source,
+                expected_video=video_record,
+                expected_duration=float(end) - float(start),
+                expected_frame_rate=float(rate),
+            )
+            if alpha_errors:
+                raise NleHandoffError(
+                    "verified-alpha NLE evidence failed:\n- " + "\n- ".join(alpha_errors)
+                )
+            alpha_payload = read_json(decode_source)
+            alpha_dir = safe_generated_directory(
+                staging, Path("10-evidence/motion-alpha") / safe_id,
+            )
+            nested_refs: list[Mapping[str, Any]] = []
+            for key in ("midpoint", "post_exit"):
+                value = alpha_payload.get(key) if isinstance(alpha_payload, Mapping) else None
+                if isinstance(value, Mapping):
+                    nested_refs.append(value)
+            composites = alpha_payload.get("composites") if isinstance(alpha_payload, Mapping) else None
+            if isinstance(composites, list):
+                nested_refs.extend(value for value in composites if isinstance(value, Mapping))
+            for nested in nested_refs:
+                value = nested.get("path")
+                if not isinstance(value, str):
+                    raise NleHandoffError("verified-alpha NLE evidence reference is malformed")
+                relative = Path(value)
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise NleHandoffError("verified-alpha NLE evidence escapes its root")
+                nested_source = (decode_source.parent / relative).resolve()
+                if (
+                    not nested_source.is_relative_to(decode_source.parent.resolve())
+                    or not nested_source.is_file()
+                    or nested.get("sha256") != sha256_file(nested_source)
+                ):
+                    raise NleHandoffError("verified-alpha NLE evidence reference is stale")
+                nested_target = safe_generated_target(alpha_dir, relative)
+                atomic_replace_file(nested_source, nested_target)
+            decode_target = safe_generated_target(alpha_dir, Path("alpha-evidence.json"))
+            atomic_replace_file(decode_source, decode_target)
+            video_record["decode_receipt"] = _file_ref(
+                decode_target, relative_to=staging,
+            )
+        row["video"] = video_record
+    if audio is not None:
+        row["audio"] = dict(audio)
     return row
 
 
@@ -363,6 +457,7 @@ def _media_type(path: Path) -> str:
         ".mp4": "video/mp4", ".mov": "video/quicktime", ".wav": "audio/wav",
         ".srt": "application/x-subrip", ".ass": "text/x-ssa", ".json": "application/json",
         ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".zip": "application/zip", ".webm": "video/webm", ".svg": "image/svg+xml",
     }.get(path.suffix.lower(), "application/octet-stream")
 
 
@@ -386,6 +481,18 @@ def probe_video_frame_rate(path: Path) -> float:
 
 def _write_json(path: Path, payload: Any) -> None:
     atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n")
+
+
+def _replace_with_retry(source: Path, target: Path) -> None:
+    deadline = time.monotonic() + 5.0
+    while True:
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
 
 
 def _timeline(edl: Mapping[str, Any], assets: list[dict[str, Any]], *, rate: float, width: int, height: int) -> dict[str, Any]:
@@ -631,16 +738,32 @@ def build_nle_handoff_package(
                     rows.append(_unavailable(role, "current project has no authorized materialized asset"))
                 for index, value in enumerate(configured):
                     record = value if isinstance(value, Mapping) else {}
-                    source = Path(record.get("path") if record else value)
+                    source_value = record.get("path") if record else value
+                    if not isinstance(source_value, (str, os.PathLike)):
+                        raise NleHandoffError(f"NLE {role} asset path is invalid")
+                    source = Path(source_value)
                     rows.append(_copy_asset(
                         source, staging, role,
                         asset_id=f"{role}:{index}:{hashlib.sha256(str(source.resolve()).encode('utf-8')).hexdigest()[:12]}",
                         semantic_event_id=(str(record.get("semantic_event_id")) if record.get("semantic_event_id") else None),
                         render_event_id=(str(record.get("render_event_id")) if record.get("render_event_id") else None),
                         timeline=(record.get("timeline") if isinstance(record.get("timeline"), Mapping) else None),
+                        video=(record.get("video") if isinstance(record.get("video"), Mapping) else None),
+                        audio=(record.get("audio") if isinstance(record.get("audio"), Mapping) else None),
                     ))
             elif configured:
-                rows.append(_copy_asset(Path(configured), staging, role))
+                record = configured if isinstance(configured, Mapping) else {}
+                source_value = record.get("path") if record else configured
+                if not isinstance(source_value, (str, os.PathLike)):
+                    raise NleHandoffError(f"NLE {role} asset path is invalid")
+                rows.append(_copy_asset(
+                    Path(source_value), staging, role,
+                    semantic_event_id=(str(record.get("semantic_event_id")) if record.get("semantic_event_id") else None),
+                    render_event_id=(str(record.get("render_event_id")) if record.get("render_event_id") else None),
+                    timeline=(record.get("timeline") if isinstance(record.get("timeline"), Mapping) else None),
+                    video=(record.get("video") if isinstance(record.get("video"), Mapping) else None),
+                    audio=(record.get("audio") if isinstance(record.get("audio"), Mapping) else None),
+                ))
             else:
                 rows.append(_unavailable(role, "current project has no authorized materialized asset"))
         if package_level != "reference_only":
@@ -726,12 +849,12 @@ def build_nle_handoff_package(
         backup = parent / f".{package_root.name}.backup-{uuid.uuid4().hex}"
         had_previous = package_root.exists()
         if had_previous:
-            os.replace(package_root, backup)
+            _replace_with_retry(package_root, backup)
         try:
-            os.replace(staging, package_root)
+            _replace_with_retry(staging, package_root)
         except Exception:
             if had_previous and backup.exists():
-                os.replace(backup, package_root)
+                _replace_with_retry(backup, package_root)
             raise
         if backup.exists():
             shutil.rmtree(backup, ignore_errors=True)

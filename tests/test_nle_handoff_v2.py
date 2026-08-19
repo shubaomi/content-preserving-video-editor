@@ -8,6 +8,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from PIL import Image
 
 
 ROOT = Path(__file__).parents[1]
@@ -22,6 +25,7 @@ from nle_handoff_v2 import (  # noqa: E402
     validate_layer_timeline,
     validate_nle_handoff_package,
 )
+import nle_layer_materializer as layer_materializer  # noqa: E402
 
 
 class NleHandoffV2Tests(unittest.TestCase):
@@ -190,6 +194,134 @@ class NleHandoffV2Tests(unittest.TestCase):
                     frame_rate=25.0, width=1080, height=1920, assets={}, enabled=False,
                 )
             self.assertFalse(package.exists())
+
+    def test_package_publish_retries_transient_windows_directory_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            auth = self._authorities(root)
+            clean = root / "clean.mp4"; clean.write_bytes(b"clean")
+            captions = root / "master.srt"; captions.write_text("caption", encoding="utf-8")
+            package = root / "manual-finish" / "nle-package-v2"
+            kwargs = dict(
+                package_root=package, authorized_root=root,
+                project_path=auth["project.yaml"], source_path=auth["source.mp4"],
+                automatic_master=auth["automatic.mp4"], edl_path=auth["edl.json"],
+                implementation_sha256=sha256_file(ROOT / "scripts" / "nle_handoff_v2.py"),
+                package_level="balanced", frame_rate=25.0, width=1080, height=1920,
+                assets={"clean_a_roll": clean, "caption_srt": captions},
+            )
+            build_nle_handoff_package(**kwargs)
+            actual_replace = os.replace
+            raised = False
+
+            def transient(source: object, target: object) -> None:
+                nonlocal raised
+                if Path(source) == package and not raised:
+                    raised = True
+                    raise PermissionError("transient indexer lock")
+                actual_replace(source, target)
+
+            with patch("nle_handoff_v2.os.replace", side_effect=transient):
+                build_nle_handoff_package(**kwargs)
+            self.assertTrue(raised)
+            self.assertEqual(validate_nle_handoff_package(
+                package / "10-evidence" / "nle-handoff-package.json"
+            ), [])
+
+    def test_packages_verified_event_motion_metadata_and_source_project_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            auth = self._authorities(root)
+            clean = root / "clean.mp4"; clean.write_bytes(b"clean")
+            captions = root / "master.srt"; captions.write_text("caption", encoding="utf-8")
+            overlay = root / "overlay.mov"; overlay.write_bytes(b"alpha-mov")
+            archive = root / "hyperframes.zip"; archive.write_bytes(b"source-project")
+            alpha_root = root / "alpha-proof"; alpha_root.mkdir()
+            midpoint = alpha_root / "midpoint.png"
+            post_exit = alpha_root / "post-exit.png"
+            middle = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+            for x in range(420, 660):
+                for y in range(760, 1160):
+                    middle.putpixel((x, y), (60, 220, 190, 255))
+            middle.save(midpoint)
+            Image.new("RGBA", (1080, 1920), (0, 0, 0, 0)).save(post_exit)
+            composites = []
+            for name, background in layer_materializer._composite_backgrounds(1080, 1920).items():
+                image = alpha_root / f"composite-{name}.png"
+                background.alpha_composite(middle)
+                background.convert("RGB").save(image)
+                composites.append({"kind": name, "path": image.name,
+                                   "sha256": sha256_file(image)})
+            probe = {"codec_name": "prores", "profile": "4444",
+                     "width": 1080, "height": 1920,
+                     "pixel_format": "yuva444p10le", "frame_rate": 25.0,
+                     "duration_seconds": 1.0, "alpha_mode": None}
+            evidence_payload = {
+                "schema_version": 1, "kind": "nle_motion_alpha_evidence",
+                "status": "pass", "video_sha256": sha256_file(overlay),
+                "probe": probe,
+                "midpoint": {"path": midpoint.name, "sha256": sha256_file(midpoint),
+                             "width": 1080, "height": 1920, "minimum_alpha": 0,
+                             "maximum_alpha": 255,
+                             "visible_ratio": (240 * 400) / (1080 * 1920)},
+                "post_exit": {"path": post_exit.name, "sha256": sha256_file(post_exit),
+                              "width": 1080, "height": 1920, "minimum_alpha": 0,
+                              "maximum_alpha": 0, "visible_ratio": 0.0},
+                "composites": composites,
+            }
+            evidence_payload["integrity_sha256"] = __import__("hashlib").sha256(json.dumps(
+                evidence_payload, ensure_ascii=False, sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            evidence = alpha_root / "alpha-evidence.json"
+            evidence.write_text(json.dumps(evidence_payload), encoding="utf-8")
+            package = root / "manual-finish" / "nle-package-v2"
+
+            with patch("nle_layer_materializer._probe_video", return_value=probe):
+                receipt = build_nle_handoff_package(
+                    package_root=package, authorized_root=root,
+                    project_path=auth["project.yaml"], source_path=auth["source.mp4"],
+                    automatic_master=auth["automatic.mp4"], edl_path=auth["edl.json"],
+                    implementation_sha256=sha256_file(ROOT / "scripts" / "nle_handoff_v2.py"),
+                    package_level="balanced", frame_rate=25.0, width=1080, height=1920,
+                    assets={
+                        "clean_a_roll": clean, "caption_srt": captions,
+                        "motion_event": [{
+                            "path": overlay, "semantic_event_id": "semantic-1",
+                            "render_event_id": "event-1",
+                            "timeline": {"start_seconds": 0.5, "end_seconds": 1.5,
+                                         "frame_rate": 25.0},
+                            "video": {"codec_name": "prores", "profile": "4444",
+                                      "width": 1080, "height": 1920,
+                                      "pixel_format": "yuva444p10le",
+                                      "alpha_status": "verified",
+                                      "decode_receipt": {"path": str(evidence),
+                                                         "sha256": sha256_file(evidence)}},
+                        }],
+                        "hyperframes_project": archive,
+                        "evidence": [evidence],
+                    },
+                )
+
+            motion = next(row for row in receipt["assets"] if row["role"] == "motion_event")
+            source = next(row for row in receipt["assets"] if row["role"] == "hyperframes_project")
+            self.assertEqual(motion["video"]["alpha_status"], "verified")
+            self.assertEqual(motion["editability_class"], "reference_only")
+            self.assertEqual(source["path"], "09-source-project/hyperframes-project.zip")
+            with patch("nle_layer_materializer._probe_video", return_value=probe):
+                self.assertEqual(validate_nle_handoff_package(
+                    package / "10-evidence" / "nle-handoff-package.json"
+                ), [])
+            packaged_evidence = package / motion["video"]["decode_receipt"]["path"]
+            self.assertTrue((packaged_evidence.parent / "midpoint.png").is_file())
+            Image.new("RGBA", (1080, 1920), (0, 0, 0, 0)).save(
+                packaged_evidence.parent / "midpoint.png"
+            )
+            with patch("nle_layer_materializer._probe_video", return_value=probe):
+                self.assertTrue(any("midpoint" in error or "inventory" in error
+                                    for error in validate_nle_handoff_package(
+                                        package / "10-evidence" / "nle-handoff-package.json"
+                                    )))
 
     @unittest.skipUnless(os.name == "nt", "NTFS junction regression is Windows-specific")
     def test_package_root_junction_is_rejected_without_external_writes(self) -> None:

@@ -800,6 +800,14 @@ them unavailable. Never generate or claim a Jianying native draft, API, CLI,
 MCP, or headless renderer. Technical package validation remains separate from
 the five-task HongRun import/editability canary, and no long-video render is
 required to build or validate this handoff.
+When `motion_layers` is enabled, a current renderer payload exists, and external
+execution is authorized, derive one zero-based transparent HyperFrames project
+per approved event without mutating the retained source project. Render only
+those event windows, require decoded alpha plus non-empty/non-opaque coverage,
+clean exit, exact canvas/rate/duration, and black/white/busy-background proofs,
+then package the ProRes 4444 candidates with exact timeline offsets and a
+deterministic HyperFrames source-project ZIP. Keep Jianying alpha compatibility
+pending until the named human canary; a verified codec is not an import claim.
 
 Record every approved adjustment in `correction-ledger.json` with event ID,
 file/selector target, property, before/after values, reason, approver, approval

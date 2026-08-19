@@ -4,7 +4,7 @@
   "status": "pass",
   "maturity": "real_project_validated",
   "validation_id": "hongrun-physical-product-intro-wp8-repeat-use-v1",
-  "created_at": "2026-08-13T18:11:13.664647+00:00",
+  "created_at": "2026-08-19T01:44:16.741230+00:00",
   "profile_id": "hongrun",
   "profile_version": "2.0.0",
   "direction": "luminous_intelligence",
@@ -16,20 +16,20 @@
     "actor": "HongRun",
     "repeat_use_willingness": "yes",
     "preference": "candidate",
-    "decision_receipt_sha256": "0344c5e35fe71e1e67ed1ec5c4919a8427b83a9c5286e65f5a62692772d99c69"
+    "decision_receipt_sha256": "49aa8aa45a872207aea16336524784a0da3a53670c5d67b6916bde3a84c0f576"
   },
   "evidence_sha256": {
-    "live_validation": "a5edf4be3f79d12b05261a54fc8c60e93de3d1475fca4927cb90e977a6033249",
+    "live_validation": "cc39f2d47141903e663f34333dfd7153023fee4b035ad39ece3c4fb6947ed1dd",
     "second_topic_candidate": "1fdbd63318c1f3dee48eb3725bd8a9b50314b296ccebd05e7d9e10263941e1fd",
     "second_topic_qa": "f32b94f58432519927a2e39acbf1a1ec722449c3b09ea8e346335cb151e357b9"
   },
   "live_validation": {
     "path": "E:\\Projects\\IP\\HongRun\\validation\\content-preserving-video-editor-p0\\canaries\\portrait-product-intro-wp8\\hongrun-physical-product-intro-p0-portrait\\work\\director\\wp8-candidate\\final-qa\\wp8-promotion\\portrait-brand-real-project-validation.json",
-    "sha256": "a5edf4be3f79d12b05261a54fc8c60e93de3d1475fca4927cb90e977a6033249"
+    "sha256": "cc39f2d47141903e663f34333dfd7153023fee4b035ad39ece3c4fb6947ed1dd"
   },
   "implementation": {
-    "source_tree_sha256": "e899399a464ce4d0f4a1a4540c5d0517bf8d983b4fd2a82ecca11ef0dece0939",
-    "portrait_implementation_sha256": "5a4e625aa2a278f5fed42b2871d79857632b6d142a66c9ea8da2fd60357481d7"
+    "source_tree_sha256": "2e6b9dd8bac9ff4bbed8bd178009b8ea7bc79d0dc8a677d08202a6ee6903a5cd",
+    "portrait_implementation_sha256": "816411ea1c9e0ebc5194e8ee05f6bcfe628bdb844f762217ecdc96a8559c8f03"
   },
   "promotion": {
     "real_project_validation_count": 2,
@@ -42,5 +42,5 @@
     "Private real-project media remains in the authorized local validation projects.",
     "This retained receipt proves two-topic named-user reuse validation, not production-default approval."
   ],
-  "integrity_sha256": "f4cdbaacf184c9ad132eb6609025d074365525a252cbacd24a026f42b438071a"
+  "integrity_sha256": "91b26bf108d8427a9794f1fa4b16bb337f227345c468665cd84d9b7ea59949b4"
 }

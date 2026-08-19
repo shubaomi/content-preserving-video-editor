@@ -7,10 +7,10 @@
   "work_packages": {
     "WP0": "complete",
     "WP1": "complete_for_current_available_assets",
-    "WP2": "contract_and_unavailable_state_complete",
+    "WP2": "event_motion_and_hyperframes_source_complete_ip_and_outro_unavailable",
     "WP3": "complete",
     "WP4": "complete",
-    "WP5": "technical_canary_complete_human_jianying_gate_pending",
+    "WP5": "technical_layered_canary_complete_human_jianying_gate_pending",
     "WP6": "out_of_scope"
   },
   "current_maturity": "director_integrated",
@@ -21,10 +21,10 @@
   "automated_validation": {
     "full_suite": {
       "status": "pass",
-      "tests": 933,
+      "tests": 943,
       "failed": 0,
       "skipped": 0,
-      "source_tree_sha256": "5e85815803a1fca12eadc63162249211f9f08e41800df87452344584ce21a9a2"
+      "source_tree_sha256": "2e6b9dd8bac9ff4bbed8bd178009b8ea7bc79d0dc8a677d08202a6ee6903a5cd"
     },
     "current_golden": "pass",
     "real_short_package_validator": "pass",
@@ -38,10 +38,19 @@
     "user_media_in_screenshots": false
   },
   "real_short_canary": "../validation/manual-nle-handoff-v2-canary.json",
+  "real_short_layered_outputs": {
+    "event_motion_layers": 3,
+    "format": "ProRes 4444 MOV",
+    "alpha_automated": "pass",
+    "hyperframes_source_archive": "available",
+    "ip_assets": "unavailable_no_authorized_source",
+    "modular_outro": "unavailable_no_current_contract"
+  },
   "remaining_human_gate": "HongRun must import the current package in Jianying Desktop and record the five-task compatibility/usability result.",
   "delivery": {
+    "checkpoint_phase": "validated_before_delivery_commit",
     "commit_created": false,
     "push_performed": false,
-    "note": "Git delivery is performed only after final diff verification."
+    "note": "This checkpoint records the pre-delivery state; the final commit and push are reported outside this file."
   }
 }
