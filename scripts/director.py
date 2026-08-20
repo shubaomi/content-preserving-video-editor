@@ -46,7 +46,10 @@ from audio_production import (
 from brand_motion_playbook import compile_playbook, validate_playbook
 from build_motion_snapshot_plan import build_motion_sidecar, build_plan as build_motion_snapshot_plan
 from capability_registry import build_capability_inventory, build_toolchain_report, capability_config
-from caption_treatment import materialize as materialize_caption_treatment
+from caption_treatment import (
+    materialize as materialize_caption_treatment,
+    materialize_sample_caption_authority,
+)
 from clip_factory import build_clip_manifest, validate_clip_manifest
 from correction_ledger import append_correction, new_ledger, validate_ledger
 from creative_review import (
@@ -1185,7 +1188,12 @@ class Director:
         return self.root / "sample-qa" / "sample-caption-delivery.json"
 
     def _sample_requires_caption_delivery(self) -> bool:
-        if self.project.get("motion_quality", {}).get("enabled") is not True:
+        caption_treatment = ((self.project.get("editing") or {}).get("caption_treatment") or {})
+        semantic_caption_treatment = caption_treatment.get("enabled") is True
+        if (
+            self.project.get("motion_quality", {}).get("enabled") is not True
+            and not semantic_caption_treatment
+        ):
             return False
         if self.project.get("editing", {}).get("caption_delivery") == "none":
             return False
@@ -1231,14 +1239,49 @@ class Director:
             raise DirectorContractError(
                 "semantic caption treatment inputs are missing: " + ", ".join(missing)
             )
-        media = self._motion_source_media()
         output_dir = self.root / "caption-treatment" / scope
+        caption_srt = source_srt
+        caption_json = captions_json
+        sample_authority_artifacts: list[Path] = []
+        if scope == "sample":
+            source_start = 0.0
+            source_end: float | None = None
+            storyboard_path = self.sample_hyperframes_project / "storyboard.json"
+            if storyboard_path.is_file():
+                composition = read_json(storyboard_path).get("composition") or {}
+                try:
+                    source_start = float(composition.get("source_start", 0.0))
+                    source_end = float(composition.get("source_end"))
+                except (TypeError, ValueError):
+                    source_end = None
+            if source_end is None:
+                try:
+                    rows = read_json(captions_json).get("segments") or []
+                    source_end = max(float(row.get("end", 0.0)) for row in rows)
+                except (TypeError, ValueError):
+                    source_end = None
+            if (
+                source_end is None or not math.isfinite(source_start)
+                or not math.isfinite(source_end) or source_start < 0 or source_end <= source_start
+            ):
+                raise DirectorContractError("sample caption window cannot be derived from current authorities")
+            caption_json, caption_srt = materialize_sample_caption_authority(
+                captions_path=captions_json,
+                master_srt_path=source_srt,
+                source_start=source_start,
+                source_end=source_end,
+                output_captions=output_dir / "captions.sample.json",
+                output_srt=output_dir / "master.sample.srt",
+                authorized_root=self.root,
+            )
+            sample_authority_artifacts = [caption_json, caption_srt]
+        media = self._motion_source_media()
         output_ass = output_dir / "master.ass"
         output_plan = output_dir / "caption-emphasis-plan.json"
         materialize_caption_treatment(
-            captions_path=captions_json,
+            captions_path=caption_json,
             semantic_brief_path=brief,
-            master_srt_path=source_srt,
+            master_srt_path=caption_srt,
             output_ass=output_ass,
             output_plan=output_plan,
             options=config,
@@ -1246,7 +1289,8 @@ class Director:
             height=int(media["height"]),
             authorized_root=self.root,
         )
-        return output_ass, [source_srt, captions_json, brief, output_plan, output_ass]
+        return output_ass, [source_srt, captions_json, brief, *sample_authority_artifacts,
+                            output_plan, output_ass]
 
     def _ensure_sample_caption_delivery(self) -> list[Path]:
         if not self._sample_requires_caption_delivery():

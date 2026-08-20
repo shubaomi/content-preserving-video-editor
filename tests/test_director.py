@@ -2248,6 +2248,18 @@ class DirectorTests(unittest.TestCase):
         self.assertIn("亮度自然", asset.read_text(encoding="utf-8"))
         self.assertTrue(any(path.name == "caption-emphasis-plan.json" for path in artifacts))
 
+    def test_semantic_caption_treatment_requires_sample_delivery_without_motion_quality(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["editing"] = {"caption_delivery": "auto", "caption_treatment": {
+            "enabled": True, "mode": "semantic_emphasis",
+        }}
+        config["motion_quality"] = {"enabled": False}
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        self._write_master_srt(director)
+
+        self.assertTrue(director._sample_requires_caption_delivery())
+
     def test_polish_existing_without_verified_captions_still_burns_master_srt_last(self) -> None:
         director = Director(self.project)
         self._write_master_srt(director)

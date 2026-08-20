@@ -117,6 +117,80 @@ def _require_srt_equivalence(
                 )
 
 
+def _srt_time(seconds: float) -> str:
+    total_ms = round(seconds * 1000)
+    hours, remainder = divmod(total_ms, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    whole_seconds, milliseconds = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{whole_seconds:02d},{milliseconds:03d}"
+
+
+def materialize_sample_caption_authority(
+    *, captions_path: Path, master_srt_path: Path, source_start: float,
+    source_end: float, output_captions: Path, output_srt: Path,
+    authorized_root: Path,
+) -> tuple[Path, Path]:
+    """Create a sample-local caption authority from the immutable output timeline.
+
+    The review sample can begin later than the full output timeline.  This helper
+    retains only intersecting caption rows and rebases their timings; wording is
+    copied verbatim and the paired JSON/SRT remain exact equivalents.
+    """
+    start = _finite(source_start, "sample source_start")
+    end = _finite(source_end, "sample source_end")
+    if start < 0 or end <= start:
+        raise CaptionTreatmentError("sample caption window is invalid")
+    try:
+        payload = json.loads(captions_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CaptionTreatmentError(f"sample captions.json is unreadable: {error}") from error
+    if not isinstance(payload, Mapping):
+        raise CaptionTreatmentError("sample captions.json must be an object")
+    segments = payload.get("segments")
+    _require_srt_equivalence(segments, parse_srt(master_srt_path))
+    sliced: list[dict[str, Any]] = []
+    for row in _validated_caption_rows(segments):
+        if row["end"] <= start or row["start"] >= end:
+            continue
+        local_start = max(start, row["start"]) - start
+        local_end = min(end, row["end"]) - start
+        if _ass_centiseconds(local_end) <= _ass_centiseconds(local_start):
+            raise CaptionTreatmentError("sample caption loses its display duration after rebasing")
+        sliced.append({
+            "start": round(local_start, 3), "end": round(local_end, 3),
+            "text": row["text"], "timeline": "sample_output",
+            "source_start": row["start"], "source_end": row["end"],
+        })
+    if not sliced:
+        raise CaptionTreatmentError("sample caption window has no caption segments")
+    _require_srt_equivalence(sliced, [
+        {"start": row["start"], "end": row["end"], "text": row["text"]}
+        for row in sliced
+    ])
+    lexical_root = Path(os.path.abspath(authorized_root))
+    try:
+        captions_relative = Path(os.path.abspath(output_captions)).relative_to(lexical_root)
+        srt_relative = Path(os.path.abspath(output_srt)).relative_to(lexical_root)
+    except ValueError as error:
+        raise CaptionTreatmentError("sample caption output escapes its authorized root") from error
+    output_captions = safe_generated_target(lexical_root, captions_relative)
+    output_srt = safe_generated_target(lexical_root, srt_relative)
+    sample_payload = {
+        "version": 2,
+        "segments": sliced,
+        "sample_window": {"source_start": round(start, 3), "source_end": round(end, 3)},
+    }
+    srt = "\n\n".join(
+        f"{index}\n{_srt_time(row['start'])} --> {_srt_time(row['end'])}\n{row['text']}"
+        for index, row in enumerate(sliced, 1)
+    ) + "\n"
+    atomic_write_text(output_captions, json.dumps(sample_payload, ensure_ascii=False, indent=2,
+                                                   allow_nan=False) + "\n")
+    atomic_write_text(output_srt, srt)
+    _require_srt_equivalence(sliced, parse_srt(output_srt))
+    return output_captions.resolve(), output_srt.resolve()
+
+
 def _options(options: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(options, Mapping):
         raise CaptionTreatmentError("caption treatment options must be an object")
@@ -171,15 +245,18 @@ def _approved_anchors(semantic_brief: Mapping[str, Any]) -> list[dict[str, Any]]
         if not isinstance(approved, list) or any(not isinstance(value, str) for value in approved):
             continue
         approved = [value.strip() for value in approved]
-        if anchor not in approved:
-            # Highlight text is visible copy and therefore needs explicit approval.
-            continue
-        anchors.append({
-            "semantic_event_id": event_id, "text": anchor,
-            "output_start": start, "output_end": end,
-            "transcript_word_ids": [str(value) for value in word_ids],
-            "approved_visible_copy": approved,
-        })
+        # Each approved visible-copy term may be highlighted only when it also
+        # occurs verbatim in the authoritative caption.  The event anchor is a
+        # semantic locator, not necessarily the exact on-screen phrase.
+        for approved_text in dict.fromkeys(approved):
+            if not approved_text:
+                continue
+            anchors.append({
+                "semantic_event_id": event_id, "text": approved_text,
+                "output_start": start, "output_end": end,
+                "transcript_word_ids": [str(value) for value in word_ids],
+                "approved_visible_copy": approved,
+            })
     return anchors
 
 

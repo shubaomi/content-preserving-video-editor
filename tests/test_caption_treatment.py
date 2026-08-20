@@ -14,6 +14,7 @@ from caption_treatment import (  # noqa: E402
     CaptionTreatmentError,
     build_semantic_emphasis_plan,
     materialize,
+    materialize_sample_caption_authority,
     render_ass,
     validate_materialized,
 )
@@ -200,6 +201,32 @@ class CaptionTreatmentTests(unittest.TestCase):
                 expected_options=self.options,
             )
             self.assertTrue(any("canvas" in error for error in errors), errors)
+
+    def test_sample_caption_authority_rebases_without_rewriting_text(self) -> None:
+        import json
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            captions = root / "captions.json"
+            master_srt = root / "master.srt"
+            captions.write_text(json.dumps({"segments": [
+                {"start": 9.0, "end": 11.0, "text": "前一句"},
+                {"start": 11.0, "end": 14.0, "text": "后一句"},
+            ]}, ensure_ascii=False), encoding="utf-8")
+            master_srt.write_text(
+                "1\n00:00:09,000 --> 00:00:11,000\n前一句\n\n"
+                "2\n00:00:11,000 --> 00:00:14,000\n后一句\n", encoding="utf-8",
+            )
+            sample_json, sample_srt = materialize_sample_caption_authority(
+                captions_path=captions, master_srt_path=master_srt,
+                source_start=10.0, source_end=12.0,
+                output_captions=root / "sample-captions.json",
+                output_srt=root / "sample-master.srt", authorized_root=root,
+            )
+            sample = json.loads(sample_json.read_text(encoding="utf-8"))
+            self.assertEqual([(row["start"], row["end"], row["text"]) for row in sample["segments"]], [
+                (0.0, 1.0, "前一句"), (1.0, 2.0, "后一句"),
+            ])
+            self.assertEqual([row["text"] for row in __import__("caption_treatment").parse_srt(sample_srt)], ["前一句", "后一句"])
 
 
 if __name__ == "__main__":

@@ -558,6 +558,11 @@ the current semantic brief into a deterministic `master.ass` plus
 semantic anchors per phrase with bounded brand colors, weight, and 105–120%
 scale. For narrow portrait canvases it may add deterministic display-only ASS
 line breaks for long phrases; the authoritative text and timing do not change.
+For a sample beginning later than the source, the Director first derives a
+hash-bound, source-faithful rebased `captions.sample.json` and `master.sample.srt`;
+it must never burn the full-source SRT directly onto the shorter review media.
+An explicitly enabled semantic treatment requires caption-last delivery for the
+sample even when optional motion-quality gates remain disabled.
 Each anchor must be an exact `approved_visible_copy`. Before rendering,
 `captions.json` must match `master.srt` text, segmentation, and millisecond
 timing; completion rebuilds the canonical ASS and plan byte-for-byte from
