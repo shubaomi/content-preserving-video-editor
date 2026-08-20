@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite_version": "2026.08-p0p1p2",
-  "generated_at": "2026-08-20T05:41:06.135889+00:00",
+  "generated_at": "2026-08-20T06:30:35.477413+00:00",
   "status": "pass",
   "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
   "source": {
@@ -549,5 +549,5 @@
       }
     }
   ],
-  "report_integrity_sha256": "dcdf5e711ebf6121404d9f15c721aa05981881561a078ae7be7c5571490b9297"
+  "report_integrity_sha256": "2f9f8318dac423e27e8fc2bb288fc209b5c9d3f447e613289d6d5e41e3799f02"
 }
