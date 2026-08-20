@@ -25,7 +25,16 @@ from nle_handoff_v2 import (  # noqa: E402
     validate_layer_timeline,
     validate_nle_handoff_package,
 )
+from nle_outro import (  # noqa: E402
+    NleOutroError,
+    archive_modular_outro_project,
+    build_modular_outro_project,
+    record_modular_outro_render_approval,
+    validate_modular_outro_render_approval,
+    validate_modular_outro_contract,
+)
 import nle_layer_materializer as layer_materializer  # noqa: E402
+import nle_handoff_v2 as handoff_v2  # noqa: E402
 
 
 class NleHandoffV2Tests(unittest.TestCase):
@@ -93,6 +102,25 @@ class NleHandoffV2Tests(unittest.TestCase):
         self.assertTrue(any("canvas" in row for row in errors))
         self.assertTrue(any("duplicate" in row for row in errors))
         self.assertTrue(any("range" in row for row in errors))
+
+    def test_timeline_extends_for_appended_outro_without_extending_base_media(self) -> None:
+        edl = {
+            "owner": "video-use", "sources": {"input": "source.mp4"},
+            "ranges": [{"id": "c1", "source": "input", "start": 0.0, "end": 2.0,
+                        "timeline_start": 0.0}],
+            "gaps": [], "transitions": [], "metadata": {"video_id": "fixture"},
+        }
+        assets = [
+            {"asset_id": "base", "role": "clean_a_roll", "status": "available"},
+            {"asset_id": "outro", "role": "outro_overlay", "status": "available",
+             "timeline": {"start_seconds": 2.0, "end_seconds": 6.0, "frame_rate": 30.0}},
+        ]
+        timeline = handoff_v2._timeline(edl, assets, rate=30.0, width=1080, height=1920)
+        self.assertEqual(timeline["duration_seconds"], 6.0)
+        base = next(row for row in timeline["tracks"] if row["role"] == "base_video")
+        self.assertEqual(base["clips"][0]["timeline_end"], 2.0)
+        outro = next(row for row in timeline["tracks"] if row["role"] == "outro")
+        self.assertEqual(outro["clips"][0]["timeline_start"], 2.0)
 
     def test_compatibility_never_claims_native_editor_automation(self) -> None:
         report = {
@@ -194,6 +222,244 @@ class NleHandoffV2Tests(unittest.TestCase):
                     frame_rate=25.0, width=1080, height=1920, assets={}, enabled=False,
                 )
             self.assertFalse(package.exists())
+
+    def test_personal_ip_and_outro_assets_require_current_rights_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            auth = self._authorities(root)
+            clean = root / "clean.mp4"; clean.write_bytes(b"clean")
+            captions = root / "master.srt"; captions.write_text("caption", encoding="utf-8")
+            ip_source = root / "ip.png"
+            Image.new("RGBA", (32, 32), (10, 120, 80, 255)).save(ip_source)
+            package = root / "manual-finish" / "nle-package-v2"
+            with self.assertRaisesRegex(NleHandoffError, "rights evidence"):
+                build_nle_handoff_package(
+                    package_root=package, authorized_root=root,
+                    project_path=auth["project.yaml"], source_path=auth["source.mp4"],
+                    automatic_master=auth["automatic.mp4"], edl_path=auth["edl.json"],
+                    implementation_sha256=sha256_file(ROOT / "scripts" / "nle_handoff_v2.py"),
+                    package_level="balanced", frame_rate=25.0, width=1080, height=1920,
+                    assets={"clean_a_roll": clean, "caption_srt": captions,
+                            "ip_source": ip_source},
+                )
+
+            rights = root / "ip-rights.json"
+            rights_payload = {
+                "schema_version": 1,
+                "kind": "nle_asset_rights",
+                "status": "authorized",
+                "asset": {"path": str(ip_source.resolve()),
+                          "sha256": sha256_file(ip_source)},
+                "allowed_roles": ["ip_source"],
+                "identity_mode": "self",
+                "rights_basis": "user-owned project-generated personal IP asset",
+                "redistribution_authorized": True,
+            }
+            rights.write_text(json.dumps(rights_payload), encoding="utf-8")
+            receipt = build_nle_handoff_package(
+                package_root=package, authorized_root=root,
+                project_path=auth["project.yaml"], source_path=auth["source.mp4"],
+                automatic_master=auth["automatic.mp4"], edl_path=auth["edl.json"],
+                implementation_sha256=sha256_file(ROOT / "scripts" / "nle_handoff_v2.py"),
+                package_level="balanced", frame_rate=25.0, width=1080, height=1920,
+                assets={"clean_a_roll": clean, "caption_srt": captions, "ip_source": {
+                    "path": ip_source,
+                    "rights_status": "redistribution_authorized",
+                    "provenance": "HongRun current personal-IP library",
+                    "rights_evidence": {"path": rights, "sha256": sha256_file(rights)},
+                }},
+            )
+            ip_row = next(row for row in receipt["assets"] if row["role"] == "ip_source")
+            self.assertEqual(ip_row["rights_status"], "redistribution_authorized")
+            self.assertEqual(ip_row["provenance"], "HongRun current personal-IP library")
+            self.assertEqual(
+                validate_nle_handoff_package(
+                    package / "10-evidence" / "nle-handoff-package.json"
+                ),
+                [],
+            )
+            copied_rights = package / ip_row["rights_evidence"]["path"]
+            copied_rights.write_text("{}", encoding="utf-8")
+            self.assertTrue(any(
+                "rights evidence" in error
+                for error in validate_nle_handoff_package(
+                    package / "10-evidence" / "nle-handoff-package.json"
+                )
+            ))
+
+    def test_builds_deterministic_luminous_modular_outro_source_project(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile = root / "profile.json"
+            profile.write_text(json.dumps({
+                "schema_version": 1,
+                "profile_id": "hongrun",
+                "profile_version": "2.0.0",
+                "identity_mode": "self",
+                "status": "proposed",
+                "direction": "luminous_intelligence",
+                "palettes": {
+                    "dark": {"canvas": "#071A1A", "ink": "#F8FAFC",
+                             "mint": "#34D399", "cyan": "#22D3EE",
+                             "warm": "#F6C177", "violet": "#A78BFA"},
+                },
+                "typography": {"font_family": "Noto Sans SC"},
+            }, ensure_ascii=False), encoding="utf-8")
+            output = root / "work" / "outro-project"
+            runtime = root / "gsap-3.14.2.min.js"
+            runtime.write_text("window.gsap={};", encoding="utf-8")
+            contract = build_modular_outro_project(
+                output_root=output,
+                authorized_root=root,
+                profile_path=profile,
+                gsap_runtime_path=runtime,
+                width=1080,
+                height=1920,
+                frame_rate=30.0,
+                duration_seconds=4.0,
+                copy={
+                    "headline": "关注 HongRun",
+                    "actions": ["点赞", "转发", "收藏"],
+                    "supporting": "一起把想法做出来",
+                },
+            )
+            contract_path = output / "outro-contract.json"
+            self.assertEqual(validate_modular_outro_contract(contract_path), [])
+            html = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn('document.querySelectorAll(".action span")', html)
+            self.assertIn("actionLabels.forEach((node) => node.remove())", html)
+            self.assertIn("if (vars.showCopy) tl.fromTo(\"#meta\"", html)
+            self.assertEqual(contract["direction"], "luminous_intelligence")
+            self.assertTrue((output / "index.html").is_file())
+            self.assertTrue((output / "copy.json").is_file())
+            self.assertTrue((output / "timing.json").is_file())
+            self.assertEqual(len(list((output / "icons").glob("*.svg"))), 3)
+            html_text = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn('icons/like.svg" alt=""/><span>点赞</span>', html_text)
+            self.assertIn('icons/share.svg" alt=""/><span>转发</span>', html_text)
+            self.assertIn('icons/favorite.svg" alt=""/><span>收藏</span>', html_text)
+            archive = archive_modular_outro_project(
+                source_root=output,
+                archive_path=root / "work" / "outro-source-project.zip",
+                authorized_root=root,
+            )
+            self.assertTrue(Path(archive["path"]).is_file())
+            self.assertTrue(Path(archive["rights_evidence"]["path"]).is_file())
+            archive_hash = sha256_file(Path(archive["path"]))
+            archive_modular_outro_project(
+                source_root=output,
+                archive_path=root / "work" / "outro-source-project.zip",
+                authorized_root=root,
+            )
+            self.assertEqual(archive_hash, sha256_file(Path(archive["path"])))
+            first_hash = sha256_file(contract_path)
+            build_modular_outro_project(
+                output_root=output,
+                authorized_root=root,
+                profile_path=profile,
+                gsap_runtime_path=runtime,
+                width=1080,
+                height=1920,
+                frame_rate=30.0,
+                duration_seconds=4.0,
+                copy={
+                    "headline": "关注 HongRun",
+                    "actions": ["点赞", "转发", "收藏"],
+                    "supporting": "一起把想法做出来",
+                },
+            )
+            self.assertEqual(first_hash, sha256_file(contract_path))
+
+            malformed = json.loads(contract_path.read_text(encoding="utf-8"))
+            malformed["canvas"]["width"] = True
+            malformed["integrity_sha256"] = "0" * 64
+            contract_path.write_text(json.dumps(malformed), encoding="utf-8")
+            self.assertTrue(validate_modular_outro_contract(contract_path))
+
+    def test_modular_outro_rejects_unapproved_direction_and_redirected_output(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile = root / "profile.json"
+            profile.write_text(json.dumps({
+                "schema_version": 1, "profile_id": "hongrun",
+                "profile_version": "2.0.0", "identity_mode": "self",
+                "status": "proposed", "direction": "humanist_cinema",
+                "palettes": {"dark": {}}, "typography": {"font_family": "Noto Sans SC"},
+            }), encoding="utf-8")
+            runtime = root / "gsap-3.14.2.min.js"
+            runtime.write_text("window.gsap={};", encoding="utf-8")
+            with self.assertRaisesRegex(NleOutroError, "luminous_intelligence"):
+                build_modular_outro_project(
+                    output_root=root / "out", authorized_root=root,
+                    profile_path=profile, gsap_runtime_path=runtime,
+                    width=1080, height=1920,
+                    frame_rate=30.0, duration_seconds=4.0,
+                    copy={"headline": "关注", "actions": ["点赞"], "supporting": "继续"},
+                )
+
+    def test_records_current_modular_outro_render_approval_without_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile = root / "profile.json"
+            profile.write_text(json.dumps({
+                "schema_version": 1, "profile_id": "hongrun", "profile_version": "2.0.0",
+                "identity_mode": "self", "status": "proposed", "direction": "luminous_intelligence",
+                "palettes": {"dark": {"canvas": "#071A1A", "ink": "#F8FAFC", "mint": "#34D399",
+                                      "cyan": "#22D3EE", "warm": "#F6C177", "violet": "#A78BFA"}},
+                "typography": {"font_family": "Noto Sans SC"},
+            }), encoding="utf-8")
+            runtime = root / "gsap.js"; runtime.write_text("runtime", encoding="utf-8")
+            source = root / "source"
+            build_modular_outro_project(
+                output_root=source, authorized_root=root, profile_path=profile,
+                gsap_runtime_path=runtime, width=1080, height=1920, frame_rate=30.0,
+                duration_seconds=4.0,
+                copy={"headline": "关注 HongRun", "actions": ["点赞"], "supporting": "继续"},
+            )
+            snapshot = root / "preview.png"; Image.new("RGB", (8, 8), "black").save(snapshot)
+            approval_path = root / "approval.json"
+            receipt = record_modular_outro_render_approval(
+                contract_path=source / "outro-contract.json", snapshot_path=snapshot,
+                output_path=approval_path, authorized_root=root, actor="HongRun",
+                decision="approve_render", reason="批准片尾预览，允许渲染 4 秒透明片尾层和参考合成",
+                approved_at="2026-08-19T00:00:00Z",
+            )
+            self.assertEqual(validate_modular_outro_render_approval(approval_path), [])
+            self.assertIn("not identity authentication", receipt["integrity_notice"])
+            snapshot.write_bytes(b"stale")
+            self.assertTrue(validate_modular_outro_render_approval(approval_path))
+
+    def test_materializes_fresh_alpha_evidence_for_existing_outro_render(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            overlay = root / "outro.mov"; overlay.write_bytes(b"rendered-prores")
+            evidence_dir = root / "evidence"
+            probe = {
+                "codec_name": "prores", "profile": "4444", "width": 1080,
+                "height": 1920, "pixel_format": "yuva444p12le", "alpha_mode": None,
+                "duration_seconds": 4.0, "frame_rate": 30.0,
+            }
+
+            def frame(_source: Path, _seconds: float, output: Path) -> None:
+                image = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+                if output.name == "midpoint.png":
+                    for x in range(460, 620):
+                        for y in range(820, 1100):
+                            image.putpixel((x, y), (20, 220, 190, 255))
+                image.save(output)
+
+            with patch.object(layer_materializer, "_run"), \
+                 patch.object(layer_materializer, "_probe_video", return_value=probe), \
+                 patch.object(layer_materializer, "_extract_rgba_frame", side_effect=frame):
+                video = layer_materializer.materialize_existing_alpha_evidence(
+                    overlay=overlay, evidence_dir=evidence_dir, authorized_root=root,
+                    expected_width=1080, expected_height=1920,
+                    expected_duration=4.0, expected_frame_rate=30.0,
+                )
+            self.assertEqual(video["alpha_status"], "verified")
+            evidence = evidence_dir / "alpha-evidence.json"
+            self.assertTrue(evidence.is_file())
+            self.assertTrue((evidence_dir / "composite-busy.png").is_file())
 
     def test_package_publish_retries_transient_windows_directory_lock(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

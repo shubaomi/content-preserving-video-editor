@@ -42,6 +42,37 @@ Ordered track/layer placement independent of any NLE. It binds:
 - OTIO projection and round-trip/loss report;
 - marker inventory for events, captions, chapters, product windows, and outro.
 
+### `nle-asset-rights-v1`
+
+Personal-IP and modular-outro files are never authorized merely because a path
+exists in project configuration. Each available `ip_*` or `outro_*` layer must
+carry a current rights receipt that binds the exact source path and SHA-256,
+allowed package role, identity mode, non-empty rights basis, and redistribution
+policy. The receipt is copied into `10-evidence/asset-rights/` and becomes part
+of the package inventory. Missing, malformed, stale, role-mismatched, or
+identity-mismatched evidence makes package construction fail closed.
+
+### `manual-nle-modular-outro-v1`
+
+The HongRun `luminous_intelligence` source compiler emits a 3–6 second
+HyperFrames project with explicit canvas/rate, local GSAP runtime, brand
+profile hash, copy/timing JSON, three independently editable SVG action icons,
+and deterministic file inventory. Its initial status is always
+`preview_pending` and `render_authorized=false`. The source project may be
+archived deterministically as `outro_source_project`; only the copy, icons, and
+source archive enter the NLE package before visual approval. Text-free overlay,
+reference composite, and stems remain `unavailable` until preview approval and
+their own render/decode/parity evidence exist.
+
+After approval, `manual-nle-outro-render-approval-v1` binds the exact preview
+contract/snapshot, explicit actor decision, two-item render scope, reason, and
+time. Its SHA-256 is drift detection only, not encryption or identity
+authentication. `manual-nle-outro-render-receipt-v1` then binds the current
+source contract, approved/reference byte equality, text-free ProRes 4444 asset,
+alpha evidence, full reference decode, canvas/rate/duration, and role-specific
+rights receipts. The transparent layer contains no CTA words; editable copy is
+recreated from `copy.json` as native NLE text.
+
 ### `nle-compatibility-report-v2`
 
 Records facts instead of assumptions:
@@ -80,6 +111,9 @@ package/source/output drift reopens manual finish and delivery QA.
 9. Caption instructions must map exact `master.srt` segments and current word
    IDs; no paraphrase or timing change.
 10. Human import/editability approval is separate from automated package QA.
+11. Generated outro copy, icons, and source archive remain independently
+    removable; source-project availability never implies a rendered overlay or
+    approved visual appearance.
 
 ## Editability classes
 
@@ -91,4 +125,3 @@ package/source/output drift reopens manual finish and delivery QA.
 - `unavailable`: no file was generated or authorized.
 
 No layer may claim a higher class without a current compatibility receipt.
-

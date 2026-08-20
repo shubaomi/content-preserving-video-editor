@@ -800,6 +800,18 @@ them unavailable. Never generate or claim a Jianying native draft, API, CLI,
 MCP, or headless renderer. Technical package validation remains separate from
 the five-task HongRun import/editability canary, and no long-video render is
 required to build or validate this handoff.
+For a HongRun `luminous_intelligence` modular outro, first compile a 3–6 second
+preview-only HyperFrames source project. Package its rights-bound copy/timing
+JSON, independent SVG action icons, and deterministic source-project ZIP while
+keeping the text-free overlay and reference composite unavailable. HyperFrames
+strict check and snapshots do not authorize rendering: set
+`render_authorized=false` until HongRun approves the preview.
+After explicit approval, record a drift-only approval receipt, render the exact
+3–6 second source as (a) a text-free ProRes 4444 alpha layer and (b) a reference
+composite, full-decode both, verify midpoint transparency and clean post-exit,
+and require the reference bytes to match the approved appearance. Package the
+alpha layer, native-copy instructions/icons, reference composite, and current
+source archive separately; approval never implies Jianying compatibility.
 When `motion_layers` is enabled, a current renderer payload exists, and external
 execution is authorized, derive one zero-based transparent HyperFrames project
 per approved event without mutating the retained source project. Render only

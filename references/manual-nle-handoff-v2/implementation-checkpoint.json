@@ -7,7 +7,7 @@
   "work_packages": {
     "WP0": "complete",
     "WP1": "complete_for_current_available_assets",
-    "WP2": "event_motion_and_hyperframes_source_complete_ip_and_outro_unavailable",
+    "WP2": "event_motion_complete_outro_preview_approved_alpha_and_reference_rendered_ip_unavailable",
     "WP3": "complete",
     "WP4": "complete",
     "WP5": "technical_layered_canary_complete_human_jianying_gate_pending",
@@ -21,12 +21,24 @@
   "automated_validation": {
     "full_suite": {
       "status": "pass",
-      "tests": 943,
+      "tests": 949,
       "failed": 0,
       "skipped": 0,
-      "source_tree_sha256": "2e6b9dd8bac9ff4bbed8bd178009b8ea7bc79d0dc8a677d08202a6ee6903a5cd"
+      "source_tree_sha256": "d7196f3eccd4fd6a46483fcc4e1ddcfbafbcd9f3fda2099b31eb9eb8675b4a15"
     },
-    "current_golden": "pass",
+    "focused_outro_nle_director_tests": {
+      "status": "pass",
+      "tests": 151,
+      "failed": 0
+    },
+    "hyperframes_outro_preview_check": {
+      "status": "pass",
+      "version": "0.8.4",
+      "errors": 0,
+      "warnings": 0,
+      "snapshots": 5
+    },
+    "current_golden": "pass_current",
     "real_short_package_validator": "pass",
     "real_short_full_decode": "pass"
   },
@@ -44,9 +56,34 @@
     "alpha_automated": "pass",
     "hyperframes_source_archive": "available",
     "ip_assets": "unavailable_no_authorized_source",
-    "modular_outro": "unavailable_no_current_contract"
+    "modular_outro": {
+      "status": "preview_approved_transparent_layer_reference_and_source_available",
+      "contract_integrity_sha256": "37876c59c401a00335dfc9f93bae4b5c135177b90f178b469af20104dc93b3a7",
+      "copy_json": "available",
+      "editable_svg_icons": 3,
+      "source_project_archive": "available",
+      "text_free_overlay": {
+        "status": "available",
+        "sha256": "919b100ce8ac7d2bb1a3bcce7288255f025f0ca293c1c2557fbdeb006ddd8ceb",
+        "format": "ProRes 4444 MOV",
+        "alpha": "verified",
+        "duration_seconds": 4.0,
+        "frame_rate": 30.0,
+        "canvas": "1080x1920"
+      },
+      "reference_composite": {
+        "status": "available",
+        "sha256": "436938345ff65e0d0c876926f36661449d9b4927f0c2993718bc5e0119aae881",
+        "approved_preview_exact_match": true,
+        "full_decode": "pass"
+      },
+      "nle_timeline_seconds": [55.45, 59.45],
+      "full_video_rendered": false
+    }
   },
-  "remaining_human_gate": "HongRun must import the current package in Jianying Desktop and record the five-task compatibility/usability result.",
+  "remaining_human_gates": [
+    "HongRun may defer the Jianying Desktop five-task compatibility/usability canary; technical package evidence does not replace it."
+  ],
   "delivery": {
     "checkpoint_phase": "validated_before_delivery_commit",
     "commit_created": false,

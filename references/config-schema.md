@@ -429,6 +429,18 @@ unmaterialized motion, IP, audio, cover, or outro layers stay explicitly
 `unavailable`. Compatibility remains pending until the five-task named-user
 Jianying Desktop canary is recorded.
 
+Configured `ip_source`, `ip_rendered`, and `outro_*` records must be mappings
+with `path`, `provenance`, `rights_status`, and a `rights_evidence` file reference.
+The referenced `nle_asset_rights` receipt must bind the exact current asset
+path/hash and authorize that precise role. A preview-pending modular outro may
+package `outro_copy`, repeated `outro_icon`, and `outro_source_project`; it must
+not claim `outro_overlay` or `outro_reference` before visual approval and
+render/decode/parity evidence.
+After approval, `outro_overlay` must be a text-free ProRes 4444 MOV with current
+alpha/decode evidence and exact timeline placement. `outro_reference` must bind
+the approved preview appearance. Both remain ordinary media assets rather than
+native Jianying layers, and their role-specific rights receipts remain required.
+
 With `include.motion_layers: true`, a current HyperFrames renderer payload, and
 `--execute-external`, Director may render only the approved event windows as
 transparent ProRes 4444 MOV candidates. Each event must retain its semantic and

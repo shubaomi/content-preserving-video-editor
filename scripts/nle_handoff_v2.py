@@ -50,7 +50,7 @@ ROLES = {
     "caption_style_plan", "motion_event", "motion_full_duration", "ip_source",
     "ip_rendered", "dialogue_stem", "bgm_stem", "sfx_grouped", "sfx_event",
     "outro_background", "outro_overlay", "outro_icon", "outro_copy",
-    "outro_reference", "cover", "hyperframes_project", "editorial_authority",
+    "outro_reference", "outro_source_project", "cover", "hyperframes_project", "editorial_authority",
     "evidence",
 }
 
@@ -70,6 +70,7 @@ _DESTINATIONS: dict[str, tuple[str, str, str, str]] = {
     "outro_overlay": ("06-outro/overlay-text-free", "reference_only", "text-free modular CTA overlay candidate", "outro module"),
     "outro_copy": ("06-outro/copy", "reference_only", "editable CTA copy instructions", "outro module"),
     "outro_reference": ("06-outro/reference-composite", "reference_only", "approved outro appearance", "outro module"),
+    "outro_source_project": ("09-source-project/outro-source-project", "source_project_editable", "editable modular CTA HyperFrames source archive", "outro module"),
     "cover": ("07-cover/cover", "reference_only", "approved cover", "cover workflow"),
     "hyperframes_project": ("09-source-project/hyperframes-project", "source_project_editable", "retained HyperFrames source project archive", "current HyperFrames project"),
     "motion_event": ("03-motion/events", "reference_only", "event-local motion overlay candidate", "HyperFrames event render"),
@@ -80,6 +81,10 @@ _DESTINATIONS: dict[str, tuple[str, str, str, str]] = {
 }
 
 _REPEATED_ROLES = {"motion_event", "sfx_event", "outro_icon", "editorial_authority", "evidence"}
+_RIGHTS_BOUND_ROLES = {
+    "ip_source", "ip_rendered", "outro_background", "outro_overlay",
+    "outro_icon", "outro_copy", "outro_reference", "outro_source_project",
+}
 
 
 def _stable_hash(payload: Mapping[str, Any]) -> str:
@@ -136,6 +141,47 @@ def _ref_errors(value: Any, root: Path, label: str, *, external: bool = False) -
     if not isinstance(digest, str) or digest != sha256_file(path):
         return [f"{label} file reference is stale"]
     return []
+
+
+def _rights_evidence_errors(
+    value: Any, root: Path, *, role: str, asset_sha256: Any,
+) -> list[str]:
+    errors = _ref_errors(value, root, f"NLE {role} rights evidence")
+    if errors:
+        return errors
+    path = _resolve_ref(value, root)
+    if path is None:
+        return [f"NLE {role} rights evidence is missing"]
+    try:
+        payload = read_json(path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return [f"NLE {role} rights evidence is unreadable"]
+    if not isinstance(payload, Mapping):
+        return [f"NLE {role} rights evidence must be an object"]
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("kind") != "nle_asset_rights"
+        or payload.get("status") != "authorized"
+    ):
+        errors.append(f"NLE {role} rights evidence identity is invalid")
+    asset = payload.get("asset")
+    if not isinstance(asset, Mapping) or asset.get("sha256") != asset_sha256:
+        errors.append(f"NLE {role} rights evidence does not bind the packaged asset")
+    roles = payload.get("allowed_roles")
+    if not isinstance(roles, list) or role not in roles or any(
+        not isinstance(item, str) for item in roles
+    ):
+        errors.append(f"NLE {role} rights evidence does not authorize the role")
+    if not isinstance(payload.get("rights_basis"), str) or not payload["rights_basis"].strip():
+        errors.append(f"NLE {role} rights evidence lacks a rights basis")
+    if not isinstance(payload.get("redistribution_authorized"), bool):
+        errors.append(f"NLE {role} rights evidence lacks redistribution policy")
+    identity_mode = payload.get("identity_mode")
+    if identity_mode not in {"self", "generic", "third_party"}:
+        errors.append(f"NLE {role} rights evidence identity mode is invalid")
+    if role in {"ip_source", "ip_rendered"} and identity_mode != "self":
+        errors.append(f"NLE {role} rights evidence is not self identity")
+    return errors
 
 
 def validate_layer_asset(row: Any, *, package_root: Path) -> list[str]:
@@ -237,6 +283,11 @@ def validate_layer_asset(row: Any, *, package_root: Path) -> list[str]:
             errors.append("event-local NLE layer requires semantic_event_id")
         if not isinstance(timeline, Mapping):
             errors.append("event-local NLE layer requires exact timeline placement")
+    if row.get("role") in _RIGHTS_BOUND_ROLES:
+        errors.extend(_rights_evidence_errors(
+            row.get("rights_evidence"), package_root,
+            role=str(row.get("role")), asset_sha256=row.get("sha256"),
+        ))
     return errors
 
 
@@ -346,6 +397,9 @@ def _copy_asset(
     timeline: Mapping[str, Any] | None = None,
     video: Mapping[str, Any] | None = None,
     audio: Mapping[str, Any] | None = None,
+    rights_status: str = "project_authorized",
+    provenance_override: str | None = None,
+    rights_evidence: Path | None = None,
 ) -> dict[str, Any]:
     source = source.resolve()
     if not source.is_file():
@@ -362,9 +416,18 @@ def _copy_asset(
         "status": "available", "editability_class": editability,
         "path": str(target.relative_to(staging)).replace("\\", "/"),
         "sha256": sha256_file(target), "size_bytes": target.stat().st_size,
-        "media_type": _media_type(target), "purpose": purpose, "provenance": provenance,
-        "rights_status": "project_authorized", "reason": None,
+        "media_type": _media_type(target), "purpose": purpose,
+        "provenance": provenance_override or provenance,
+        "rights_status": rights_status, "reason": None,
     }
+    if role in _RIGHTS_BOUND_ROLES:
+        if rights_evidence is None:
+            raise NleHandoffError(f"NLE {role} requires current rights evidence")
+        evidence_target = safe_generated_target(
+            staging, Path("10-evidence/asset-rights") / f"{safe_id}.json",
+        )
+        atomic_replace_file(rights_evidence, evidence_target)
+        row["rights_evidence"] = _file_ref(evidence_target, relative_to=staging)
     if semantic_event_id is not None:
         row["semantic_event_id"] = semantic_event_id
     if render_event_id is not None:
@@ -452,6 +515,65 @@ def _unavailable(role: str, reason: str) -> dict[str, Any]:
     }
 
 
+def _authorized_asset_options(
+    source: Path, role: str, record: Mapping[str, Any],
+) -> dict[str, Any]:
+    if role not in _RIGHTS_BOUND_ROLES:
+        return {}
+    evidence_ref = record.get("rights_evidence")
+    if not isinstance(evidence_ref, Mapping) or not isinstance(evidence_ref.get("path"), (str, os.PathLike)):
+        raise NleHandoffError(f"NLE {role} requires current rights evidence")
+    evidence_path = Path(evidence_ref["path"]).resolve()
+    if (
+        not evidence_path.is_file()
+        or not isinstance(evidence_ref.get("sha256"), str)
+        or evidence_ref["sha256"] != sha256_file(evidence_path)
+    ):
+        raise NleHandoffError(f"NLE {role} rights evidence is stale")
+    try:
+        payload = read_json(evidence_path)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise NleHandoffError(f"NLE {role} rights evidence is unreadable") from error
+    if not isinstance(payload, Mapping):
+        raise NleHandoffError(f"NLE {role} rights evidence must be an object")
+    asset = payload.get("asset")
+    roles = payload.get("allowed_roles")
+    source = source.resolve()
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("kind") != "nle_asset_rights"
+        or payload.get("status") != "authorized"
+        or not isinstance(asset, Mapping)
+        or asset.get("path") != str(source)
+        or asset.get("sha256") != sha256_file(source)
+        or not isinstance(roles, list)
+        or role not in roles
+        or any(not isinstance(item, str) for item in roles)
+        or not isinstance(payload.get("rights_basis"), str)
+        or not payload["rights_basis"].strip()
+        or not isinstance(payload.get("redistribution_authorized"), bool)
+    ):
+        raise NleHandoffError(f"NLE {role} rights evidence does not authorize the current asset")
+    identity_mode = payload.get("identity_mode")
+    if identity_mode not in {"self", "generic", "third_party"}:
+        raise NleHandoffError(f"NLE {role} rights evidence identity mode is invalid")
+    if role in {"ip_source", "ip_rendered"} and identity_mode != "self":
+        raise NleHandoffError(f"NLE {role} rights evidence must authorize self identity")
+    rights_status = record.get("rights_status")
+    if rights_status not in {"project_authorized", "redistribution_authorized", "reference_only"}:
+        raise NleHandoffError(f"NLE {role} rights_status is invalid")
+    if rights_status == "redistribution_authorized" and payload.get("redistribution_authorized") is not True:
+        raise NleHandoffError(f"NLE {role} is not authorized for redistribution")
+    provenance = record.get("provenance")
+    if not isinstance(provenance, str) or not provenance.strip():
+        raise NleHandoffError(f"NLE {role} provenance is missing")
+    return {
+        "rights_status": rights_status,
+        "provenance_override": provenance.strip(),
+        "rights_evidence": evidence_path,
+    }
+
+
 def _media_type(path: Path) -> str:
     return {
         ".mp4": "video/mp4", ".mov": "video/quicktime", ".wav": "audio/wav",
@@ -508,6 +630,13 @@ def _timeline(edl: Mapping[str, Any], assets: list[dict[str, Any]], *, rate: flo
         if not all(_finite_number(value, nonnegative=True) for value in (start, end, cursor)) or float(end) <= float(start):
             raise NleHandoffError("NLE package EDL times are invalid")
         duration = max(duration, float(cursor) + float(end) - float(start))
+    base_duration = duration
+    for row in assets:
+        placement = row.get("timeline")
+        if row.get("status") == "available" and isinstance(placement, Mapping):
+            end = placement.get("end_seconds")
+            if _finite_number(end, nonnegative=True):
+                duration = max(duration, float(end))
     available = {row["role"]: row for row in assets if row["status"] == "available"}
     tracks: list[dict[str, Any]] = []
     for order, (role, track_role) in enumerate((
@@ -520,8 +649,8 @@ def _timeline(edl: Mapping[str, Any], assets: list[dict[str, Any]], *, rate: flo
             tracks.append({
                 "track_id": f"track-{role}", "role": track_role, "order": order,
                 "clips": [{"clip_id": f"clip-{role}", "asset_id": row["asset_id"],
-                           "timeline_start": 0.0, "timeline_end": duration,
-                           "source_start": 0.0, "source_end": duration}],
+                           "timeline_start": 0.0, "timeline_end": base_duration,
+                           "source_start": 0.0, "source_end": base_duration}],
             })
     for role, track_role in (("motion_event", "motion"), ("sfx_event", "sfx"),
                              ("ip_rendered", "ip"), ("outro_overlay", "outro")):
@@ -655,8 +784,10 @@ def _import_guide(
 1. `03-motion/all-motion-overlay.*` 若存在，作为整段叠加轨从 0 秒放置。
 2. `03-motion/events/*` 按各自 `timeline_start` 放置；可以在剪映中移动、裁切、隐藏、复制或调透明度。
 3. `04-ip-assets/` 中状态为 `available` 的文件才导入；没有文件就保持 `unavailable`，不要临时编造素材。
-4. `06-outro/` 中的背景、图标、文字说明和参考合成分别放到独立轨道，方便改文案、缩短时长或删除某一层。
-5. 若要改变动效内部节点、连线、文字结构或关键帧逻辑，应回到 `09-source-project/` 中保留的 HyperFrames 工程修改后再重新导出；剪映更适合处理已渲染层的位置、时长、透明度和组合关系。
+4. `06-outro/overlay-text-free.mov` 是带透明通道且不含文案的片尾动效。按 `layer-timeline.json` 的片尾轨入点放置；需要改字时，在剪映中另建原生文字层。
+5. `06-outro/copy.json` 保存参考文案与时序，`06-outro/icons/` 保存可单独导入的 SVG 图标；不要把图标文字误认为已烧录进透明层。
+6. `06-outro/reference-composite.mp4` 是已批准外观的不可拆参考合成，可放在临时参考轨对照，也可在来不及重建文字时作为快速成片候选。
+7. 若要改变动效内部节点、连线、文字结构或关键帧逻辑，应回到 `09-source-project/outro-source-project.zip` 中保留的 HyperFrames 工程修改后再重新导出；剪映更适合处理已渲染层的位置、时长、透明度和组合关系。
 
 ## 四、建议的时间线轨道顺序
 
@@ -742,6 +873,7 @@ def build_nle_handoff_package(
                     if not isinstance(source_value, (str, os.PathLike)):
                         raise NleHandoffError(f"NLE {role} asset path is invalid")
                     source = Path(source_value)
+                    authorized_options = _authorized_asset_options(source, role, record)
                     rows.append(_copy_asset(
                         source, staging, role,
                         asset_id=f"{role}:{index}:{hashlib.sha256(str(source.resolve()).encode('utf-8')).hexdigest()[:12]}",
@@ -750,19 +882,23 @@ def build_nle_handoff_package(
                         timeline=(record.get("timeline") if isinstance(record.get("timeline"), Mapping) else None),
                         video=(record.get("video") if isinstance(record.get("video"), Mapping) else None),
                         audio=(record.get("audio") if isinstance(record.get("audio"), Mapping) else None),
+                        **authorized_options,
                     ))
             elif configured:
                 record = configured if isinstance(configured, Mapping) else {}
                 source_value = record.get("path") if record else configured
                 if not isinstance(source_value, (str, os.PathLike)):
                     raise NleHandoffError(f"NLE {role} asset path is invalid")
+                source_path = Path(source_value)
+                authorized_options = _authorized_asset_options(source_path, role, record)
                 rows.append(_copy_asset(
-                    Path(source_value), staging, role,
+                    source_path, staging, role,
                     semantic_event_id=(str(record.get("semantic_event_id")) if record.get("semantic_event_id") else None),
                     render_event_id=(str(record.get("render_event_id")) if record.get("render_event_id") else None),
                     timeline=(record.get("timeline") if isinstance(record.get("timeline"), Mapping) else None),
                     video=(record.get("video") if isinstance(record.get("video"), Mapping) else None),
                     audio=(record.get("audio") if isinstance(record.get("audio"), Mapping) else None),
+                    **authorized_options,
                 ))
             else:
                 rows.append(_unavailable(role, "current project has no authorized materialized asset"))
@@ -791,7 +927,15 @@ def build_nle_handoff_package(
 
         rights_path = safe_generated_target(staging, Path("10-evidence/rights-manifest.json"))
         rights = {"schema_version": 2, "status": "pass", "assets": [
-            {"asset_id": row["asset_id"], "rights_status": row["rights_status"], "sha256": row["sha256"]}
+            {
+                "asset_id": row["asset_id"],
+                "rights_status": row["rights_status"],
+                "sha256": row["sha256"],
+                **(
+                    {"rights_evidence": row["rights_evidence"]}
+                    if isinstance(row.get("rights_evidence"), Mapping) else {}
+                ),
+            }
             for row in rows
         ]}
         _write_json(rights_path, rights)
@@ -991,8 +1135,15 @@ def validate_nle_handoff_package(receipt_path: Path, *, package_root_override: P
         try:
             rights = read_json(rights_path)
             expected_rights = [
-                {"asset_id": row.get("asset_id"), "rights_status": row.get("rights_status"),
-                 "sha256": row.get("sha256")}
+                {
+                    "asset_id": row.get("asset_id"),
+                    "rights_status": row.get("rights_status"),
+                    "sha256": row.get("sha256"),
+                    **(
+                        {"rights_evidence": row.get("rights_evidence")}
+                        if isinstance(row.get("rights_evidence"), Mapping) else {}
+                    ),
+                }
                 for row in assets if isinstance(row, Mapping)
             ]
             if not isinstance(rights, Mapping) or rights.get("status") != "pass" or rights.get("assets") != expected_rights:

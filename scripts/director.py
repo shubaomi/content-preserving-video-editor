@@ -5982,6 +5982,7 @@ class Director:
             "outro_overlay": "outro_overlay",
             "outro_copy": "outro_copy",
             "outro_reference": "outro_reference",
+            "outro_source_project": "outro_source_project",
             "outro_icon": "outro_icon",
             "cover": "cover",
             "hyperframes_project": "hyperframes_project",
@@ -5994,6 +5995,7 @@ class Director:
             "motion_event",
             "ip_source", "ip_rendered", "outro_background", "outro_overlay",
             "outro_copy", "outro_reference", "outro_icon", "cover",
+            "outro_source_project",
             "hyperframes_project", "evidence",
         ):
             configured = assets_config.get(aliases.get(role, role))
@@ -6052,7 +6054,7 @@ class Director:
             resolved_assets.pop("ip_source", None)
             resolved_assets.pop("ip_rendered", None)
         if include.get("modular_outro") is not True:
-            for role in ("outro_background", "outro_overlay", "outro_copy", "outro_reference", "outro_icon"):
+            for role in ("outro_background", "outro_overlay", "outro_copy", "outro_reference", "outro_icon", "outro_source_project"):
                 resolved_assets.pop(role, None)
         if include.get("event_sfx") is True:
             event_sfx = self._manual_nle_sfx_events()

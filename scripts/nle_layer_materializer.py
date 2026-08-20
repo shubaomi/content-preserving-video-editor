@@ -578,6 +578,104 @@ def _composite_proofs(frame: Path, output_dir: Path) -> list[dict[str, str]]:
     return results
 
 
+def materialize_existing_alpha_evidence(
+    *, overlay: Path, evidence_dir: Path, authorized_root: Path,
+    expected_width: int, expected_height: int, expected_duration: float,
+    expected_frame_rate: float,
+) -> dict[str, Any]:
+    """Build fresh, hash-bound alpha/decode evidence for an existing render."""
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 1
+        for value in (expected_width, expected_height)
+    ):
+        raise NleLayerMaterializationError("motion alpha evidence canvas is invalid")
+    if not _finite(expected_duration, positive=True) or not _finite(
+        expected_frame_rate, positive=True,
+    ):
+        raise NleLayerMaterializationError("motion alpha evidence timing is invalid")
+    overlay = Path(overlay).resolve()
+    if not overlay.is_file():
+        raise NleLayerMaterializationError("motion alpha overlay is missing")
+    authorized_root = Path(os.path.abspath(authorized_root))
+    evidence_lexical = Path(os.path.abspath(evidence_dir))
+    try:
+        evidence_relative = evidence_lexical.relative_to(authorized_root)
+        evidence_dir = safe_generated_directory(authorized_root, evidence_relative)
+    except (ValueError, SafeGeneratedOutputError) as error:
+        raise NleLayerMaterializationError(str(error)) from error
+
+    _run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(overlay),
+        "-map", "0:v:0", "-f", "null", os.devnull,
+    ], timeout=180)
+    probe = _probe_video(overlay)
+    tolerance = max(0.05, 1.5 / float(expected_frame_rate))
+    if probe["width"] != expected_width or probe["height"] != expected_height:
+        raise NleLayerMaterializationError("motion layer canvas differs from the output timeline")
+    if abs(probe["frame_rate"] - float(expected_frame_rate)) > 0.001:
+        raise NleLayerMaterializationError("motion layer frame rate differs from the output timeline")
+    if abs(probe["duration_seconds"] - float(expected_duration)) > tolerance:
+        raise NleLayerMaterializationError("motion layer duration differs from its event window")
+    if probe.get("codec_name") != "prores" or "4444" not in str(probe.get("profile")):
+        raise NleLayerMaterializationError("motion layer is not ProRes 4444")
+    if not _alpha_capable(probe.get("pixel_format"), probe.get("alpha_mode")):
+        raise NleLayerMaterializationError("motion layer codec does not expose an alpha channel")
+
+    midpoint = safe_generated_target(evidence_dir, Path("midpoint.png"))
+    post_exit = safe_generated_target(evidence_dir, Path("post-exit.png"))
+    _extract_rgba_frame(
+        overlay, min(float(expected_duration) / 2, max(0.001, float(expected_duration) - 0.08)),
+        midpoint,
+    )
+    _extract_rgba_frame(overlay, max(0.001, float(expected_duration) - 0.04), post_exit)
+    middle = _alpha_stats(midpoint)
+    exit_stats = _alpha_stats(post_exit)
+    if middle["maximum_alpha"] <= 0 or not 0.0001 <= middle["visible_ratio"] < 0.95:
+        raise NleLayerMaterializationError("motion layer alpha is empty or effectively opaque")
+    if exit_stats["maximum_alpha"] > 8:
+        raise NleLayerMaterializationError("motion layer does not cleanly exit its event window")
+    evidence = {
+        "schema_version": 1,
+        "kind": "nle_motion_alpha_evidence",
+        "status": "pass",
+        "video_sha256": sha256_file(overlay),
+        "probe": probe,
+        "midpoint": {
+            "path": midpoint.name, "sha256": sha256_file(midpoint), **middle,
+        },
+        "post_exit": {
+            "path": post_exit.name, "sha256": sha256_file(post_exit), **exit_stats,
+        },
+        "composites": _composite_proofs(midpoint, evidence_dir),
+    }
+    evidence["integrity_sha256"] = _stable_hash(evidence)
+    evidence_path = safe_generated_target(evidence_dir, Path("alpha-evidence.json"))
+    atomic_write_text(
+        evidence_path,
+        json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
+    )
+    video_metadata = {
+        "codec_name": probe["codec_name"], "profile": probe["profile"],
+        "width": expected_width, "height": expected_height,
+        "pixel_format": probe["pixel_format"], "alpha_status": "verified",
+        "decode_receipt": {
+            "path": str(evidence_path), "sha256": sha256_file(evidence_path),
+        },
+    }
+    errors = validate_alpha_evidence(
+        evidence_path,
+        overlay=overlay,
+        expected_video=video_metadata,
+        expected_duration=float(expected_duration),
+        expected_frame_rate=float(expected_frame_rate),
+    )
+    if errors:
+        raise NleLayerMaterializationError(
+            "motion alpha evidence failed:\n- " + "\n- ".join(errors)
+        )
+    return video_metadata
+
+
 def _render_event(
     *, project: Path, output: Path, evidence_dir: Path, duration: float,
     width: int, height: int, frame_rate: float,
@@ -601,52 +699,14 @@ def _render_event(
         if not rendered.is_file():
             raise NleLayerMaterializationError("HyperFrames did not produce the motion layer")
         atomic_replace_file(rendered, output)
-    _run([
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(output),
-        "-map", "0:v:0", "-f", "null", os.devnull,
-    ], timeout=180)
-    probe = _probe_video(output)
-    tolerance = max(0.05, 1.5 / frame_rate)
-    if probe["width"] != width or probe["height"] != height:
-        raise NleLayerMaterializationError("motion layer canvas differs from the output timeline")
-    if abs(probe["frame_rate"] - frame_rate) > 0.001:
-        raise NleLayerMaterializationError("motion layer frame rate differs from the output timeline")
-    if abs(probe["duration_seconds"] - duration) > tolerance:
-        raise NleLayerMaterializationError("motion layer duration differs from its event window")
-    if probe.get("codec_name") != "prores" or "4444" not in str(probe.get("profile")):
-        raise NleLayerMaterializationError("motion layer is not ProRes 4444")
-    if not _alpha_capable(probe.get("pixel_format"), probe.get("alpha_mode")):
-        raise NleLayerMaterializationError("motion layer codec does not expose an alpha channel")
-    midpoint = safe_generated_target(evidence_dir, Path("midpoint.png"))
-    post_exit = safe_generated_target(evidence_dir, Path("post-exit.png"))
-    _extract_rgba_frame(output, min(duration / 2, max(0.001, duration - 0.08)), midpoint)
-    _extract_rgba_frame(output, max(0.001, duration - 0.04), post_exit)
-    middle = _alpha_stats(midpoint)
-    exit_stats = _alpha_stats(post_exit)
-    if middle["maximum_alpha"] <= 0 or not 0.0001 <= middle["visible_ratio"] < 0.95:
-        raise NleLayerMaterializationError("motion layer alpha is empty or effectively opaque")
-    if exit_stats["maximum_alpha"] > 8:
-        raise NleLayerMaterializationError("motion layer does not cleanly exit its event window")
-    proofs = _composite_proofs(midpoint, evidence_dir)
-    evidence = {
-        "schema_version": 1, "kind": "nle_motion_alpha_evidence", "status": "pass",
-        "video_sha256": sha256_file(output), "probe": probe,
-        "midpoint": {"path": midpoint.name, "sha256": sha256_file(midpoint), **middle},
-        "post_exit": {"path": post_exit.name, "sha256": sha256_file(post_exit), **exit_stats},
-        "composites": proofs,
-    }
-    evidence["integrity_sha256"] = _stable_hash(evidence)
-    evidence_path = safe_generated_target(evidence_dir, Path("alpha-evidence.json"))
-    atomic_write_text(
-        evidence_path,
-        json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True, allow_nan=False) + "\n",
+    video_metadata = materialize_existing_alpha_evidence(
+        overlay=output, evidence_dir=evidence_dir,
+        authorized_root=evidence_dir.parent,
+        expected_width=width, expected_height=height,
+        expected_duration=duration, expected_frame_rate=frame_rate,
     )
-    video_metadata = {
-        "codec_name": probe["codec_name"], "profile": probe["profile"],
-        "width": width, "height": height, "pixel_format": probe["pixel_format"],
-        "alpha_status": "verified",
-        "decode_receipt": {"path": str(evidence_path), "sha256": sha256_file(evidence_path)},
-    }
+    evidence_path = Path(video_metadata["decode_receipt"]["path"])
+    evidence = read_json(evidence_path)
     return video_metadata, evidence
 
 

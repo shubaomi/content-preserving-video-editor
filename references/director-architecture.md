@@ -150,6 +150,17 @@ manifest and correction ledger. The package is editor-neutral: automatic master,
 clean A-roll, editable SRT, ASS/style references, available media/audio/IP/outro
 layers, OTIO/layer timeline, rights evidence, and an import guide are copied into
 a complete hash inventory. It neither creates nor mutates a Jianying draft.
+Personal-IP and outro assets require a role-specific current rights receipt;
+configuration paths alone do not authorize copying. A modular HongRun outro may
+contribute editable copy, individual SVG icons, and a deterministic HyperFrames
+source-project archive while its transparent overlay/reference render remains
+preview-gated and explicitly unavailable.
+Once HongRun explicitly approves that preview, the approval receipt binds the
+preview contract and snapshot without claiming encryption or identity
+authentication. The renderer publishes a text-free ProRes 4444 layer, a
+byte-identical approved reference composite, alpha/decode evidence, and a new
+source archive. The NLE timeline may append the four-second overlay while the
+base media retains its original duration.
 Every nested package file is a Director stage artifact, so deletion or drift
 reopens manual finishing. The stage still remains `action_required` until a
 distinct human-returned export passes the existing full return QA.
