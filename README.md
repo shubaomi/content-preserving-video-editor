@@ -4,6 +4,14 @@ This repository is the source of the preservation-first Director Skill. It
 coordinates video-use, HyperFrames, FFmpeg, optional providers, human approvals,
 QA, and one Universal MP4; it does not vendor or replace upstream Skills.
 
+Creators do not need to memorize the command sequence below. The normal Skill
+entry is a one-batch guided intake: provide (or be asked once for) the source
+path, identity/rights, sample-or-approved-resume choice, optional HongRun
+Profile, and optional manual-NLE package. The Director detects the actual video
+format and generates IDs, titles, publishing copy, canvas, resolution, and frame
+rate from evidence. See
+[`references/guided-intake.md`](references/guided-intake.md).
+
 When the optional layered manual-NLE handoff is enabled, each package contains
 a project-specific Chinese Jianying Desktop import guide with blank-project UI
 screenshots. See

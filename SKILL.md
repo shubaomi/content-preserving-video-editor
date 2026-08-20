@@ -33,6 +33,47 @@ Read [director-architecture.md](references/director-architecture.md) before
 execution. Read [config-schema.md](references/config-schema.md) when resolving
 configuration and [quality-gates.md](references/quality-gates.md) before QA.
 
+## Start with one guided intake
+
+Do not require the user to remember a long invocation prompt. When a user says
+they have a video to edit, reuse every answer already present in the request or
+current project, then ask once for only the missing items in one compact batch:
+
+1. absolute source-video path;
+2. identity and rights declaration: `self`, `third_party`, or `generic`, plus
+   separate confirmation of editing authorization and, when a publishable
+   delivery is requested, publication authorization;
+3. desired execution point: analyze only, create a sample first, or resume a
+   full render that already has a current sample approval;
+4. for eligible HongRun self-recorded portrait footage, whether to opt in to
+   the current HongRun Profile/portrait-brand direction;
+5. delivery preference: automatic universal MP4 only, or also the optional
+   editor-neutral manual-NLE package.
+
+Default title, `video_id`, publishing copy, cover copy, content-type detection,
+platform target, and technical settings to automatic generation unless the
+user overrides them. Do not ask the user to classify the video as talking head,
+product demo, screen tutorial, interview, or mixed footage. Treat any supplied
+type as a hint only; determine the effective input mode and content format from
+media, transcript, scene, subject, UI, product/action, and existing-edit
+evidence after inspection. Report the evidence-backed classification before
+creative planning, and pause only when evidence conflicts with the identity or
+rights declaration or cannot support a safe route.
+
+For a new or changed source, `sample_first` is the safe default and the only
+route to a new full render. A request for direct full rendering is valid only
+when the project already has a current, hash-bound sample approval and explicit
+final-render authorization. Never reinterpret a preference for convenience as
+permission to bypass the sample, aesthetic, likeness, rights, or publication
+gates.
+
+After the one-batch intake is complete, show a short intake summary with the
+resolved source, identity/rights, requested execution point, automatic fields,
+Profile choice, and delivery choice. Then proceed autonomously until the next
+real user gate. Do not repeat answered questions after resume or context
+compression. Read [guided-intake.md](references/guided-intake.md) for the exact
+question and defaulting protocol.
+
 ## Resolve the project
 
 Resolve configuration in this order:

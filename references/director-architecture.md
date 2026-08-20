@@ -57,6 +57,15 @@ explicit promotion approval.
 
 ## State machine
 
+The conversational guided intake in `references/guided-intake.md` runs before
+project initialization and is not a twentieth workflow stage. It reuses known
+answers and asks one batch only for the missing source, identity/rights,
+execution point, Profile opt-in, and delivery preference. Content type remains
+an evidence-derived Director decision, not a required user classification.
+Intake may start inspection or a sample, but it cannot create sample approval or
+final-render authorization. A direct-full request is interpreted only as resume
+of an already approved, hash-current project.
+
 Before the state machine leaves `inspect`, resolve input mode from explicit
 project evidence or a cached `input-mode-evidence.json`. When neither exists,
 run the conservative existing-edit analyzer. Bind the decision to source size,

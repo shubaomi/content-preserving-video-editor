@@ -516,6 +516,9 @@ test_wrap_produces_multiple_lines_for_long_title (test_generated_cover.Generated
 test_corrupted_typography_metadata_fails (test_generated_cover_ab.GeneratedCoverABTests.test_corrupted_typography_metadata_fails) ... ok
 test_cosmetic_duplicate_fails (test_generated_cover_ab.GeneratedCoverABTests.test_cosmetic_duplicate_fails) ... ok
 test_distinct_valid_strategies_pass (test_generated_cover_ab.GeneratedCoverABTests.test_distinct_valid_strategies_pass) ... ok
+test_defaults_remove_technical_prompt_burden (test_guided_intake_contract.GuidedIntakeContractTests.test_defaults_remove_technical_prompt_burden) ... ok
+test_new_source_cannot_bypass_sample_gate (test_guided_intake_contract.GuidedIntakeContractTests.test_new_source_cannot_bypass_sample_gate) ... ok
+test_skill_requires_one_batch_and_evidence_derived_type (test_guided_intake_contract.GuidedIntakeContractTests.test_skill_requires_one_batch_and_evidence_derived_type) ... ok
 test_default_is_general_video_and_semantic_authority_stays_with_director (test_hyperframes_router.HyperFramesRouterTests.test_default_is_general_video_and_semantic_authority_stays_with_director) ... ok
 test_motion_quality_route_binds_compiler_contract_without_transferring_selection (test_hyperframes_router.HyperFramesRouterTests.test_motion_quality_route_binds_compiler_contract_without_transferring_selection) ... ok
 test_remotion_does_not_trust_audio_delta_without_audio_applicability_proof (test_hyperframes_router.HyperFramesRouterTests.test_remotion_does_not_trust_audio_delta_without_audio_applicability_proof) ... ok
@@ -977,6 +980,6 @@ test_sequential_correction_does_not_absorb_previous_punctuation_token (test_word
 test_verbatim_grouping_preserves_word_timing_and_applies_audited_phrase (test_word_aligned_captions.WordAlignedCaptionTests.test_verbatim_grouping_preserves_word_timing_and_applies_audited_phrase) ... ok
 
 ----------------------------------------------------------------------
-Ran 949 tests in 1255.562s
+Ran 952 tests in 1215.197s
 
 OK
