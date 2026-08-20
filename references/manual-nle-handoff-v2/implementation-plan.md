@@ -16,13 +16,17 @@ fail-closed; no media rendering required.
 
 ## WP1 — Clean base, captions, and audio stems
 
+- Promote the minimum repair kit (automatic reference, actual pre-caption full
+  render, SRT, deterministic ASS/style plan, HyperFrames inventory) into the
+  normal `final_compose` delivery contract without enabling human finishing.
 - Reuse current video-use EDL and final timeline to materialize clean A-roll.
 - Export dialogue/BGM/grouped SFX and optional per-event SFX from current plans.
 - Package current SRT, deterministic ASS reference, emphasis plan/style guide.
 - Add negative checks proving clean base has no newly baked overlay/captions and
   audio recomposition retains alignment.
 
-Exit: short fixture recomposes within frozen audio/picture tolerances.
+Exit: the standard kit validates without another render; the optional layered
+package short fixture recomposes within frozen audio/picture tolerances.
 
 ## WP2 — Motion, personal-IP, and modular outro layers
 
@@ -79,4 +83,3 @@ Exit: explicit HongRun decision on usefulness and preferred package level.
 - Do not render a full video until the short canary and user gate pass.
 - Stage only scoped files; commit/push only after implementation completion and
   current receipts, not during this design-freeze candidate phase.
-

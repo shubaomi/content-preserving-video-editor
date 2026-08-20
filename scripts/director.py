@@ -47,7 +47,9 @@ from brand_motion_playbook import compile_playbook, validate_playbook
 from build_motion_snapshot_plan import build_motion_sidecar, build_plan as build_motion_snapshot_plan
 from capability_registry import build_capability_inventory, build_toolchain_report, capability_config
 from caption_treatment import (
+    CaptionTreatmentError,
     materialize as materialize_caption_treatment,
+    materialize_editable_ass_reference,
     materialize_sample_caption_authority,
 )
 from clip_factory import build_clip_manifest, validate_clip_manifest
@@ -90,6 +92,11 @@ from director_contracts import (
     exclusive_file_lock,
 )
 from evidence_acquisition import acquire as acquire_evidence
+from editable_delivery import (
+    EditableDeliveryError,
+    build_editable_delivery,
+    validate_editable_delivery,
+)
 from editorial_regression import (
     create_baseline, evaluate_regression, validate_baseline, validate_regression,
 )
@@ -1455,6 +1462,10 @@ class Director:
     @property
     def manual_nle_package_root(self) -> Path:
         return self.manual_finish_dir / "nle-package-v2"
+
+    @property
+    def editable_delivery_root(self) -> Path:
+        return self.root / "editable-delivery"
 
     def _legacy_script_audit(self) -> Path:
         scripts_dir = self.context.root / str(self.project.get("paths", {}).get("scripts", "scripts"))
@@ -5752,6 +5763,8 @@ class Director:
                 raise DirectorContractError("final caption synchronization closure did not pass")
             write_json(sync_closure_path, sync_closure)
         artifacts = [output, command_path, media_report, *caption_treatment_artifacts]
+        editable_manifest, editable_artifacts = self._write_standard_editable_delivery(motion)
+        artifacts.extend([editable_manifest, *editable_artifacts])
         if sync_closure_path.is_file() and caption_sync_closure_enabled:
             artifacts.append(sync_closure_path)
         if normalize_enabled:
@@ -5995,6 +6008,78 @@ class Director:
             production_contract=self.production_contract_path,
         )
         return path
+
+    def _write_standard_editable_delivery(self, motion: Path) -> tuple[Path, list[Path]]:
+        """Write the always-on editor-neutral repair kit for a completed full render."""
+        caption_srt = self.video_use_dir / "master.srt"
+        if not caption_srt.is_file():
+            raise DirectorContractError(
+                "standard editable delivery requires the current output-timeline master.srt"
+            )
+        caption_config = (self.project.get("editing") or {}).get("caption_treatment") or {}
+        caption_ass = self.root / "caption-treatment" / "full" / "master.ass"
+        caption_plan = (
+            self.root / "caption-treatment" / "full" / "caption-emphasis-plan.json"
+        )
+        generated_reference: list[Path] = []
+        semantic_reference_ready = (
+            caption_config.get("enabled") is True
+            and caption_config.get("mode") == "semantic_emphasis"
+            and caption_ass.is_file()
+            and caption_plan.is_file()
+        )
+        if not semantic_reference_ready:
+            media = self._motion_source_media()
+            try:
+                caption_ass, caption_plan = materialize_editable_ass_reference(
+                    master_srt_path=caption_srt,
+                    output_ass=self.root / "caption-treatment" / "editable-reference" / "master.ass",
+                    output_plan=(
+                        self.root / "caption-treatment" / "editable-reference" /
+                        "caption-style-plan.json"
+                    ),
+                    options=caption_config,
+                    width=int(media["width"]),
+                    height=int(media["height"]),
+                    authorized_root=self.context.root,
+                )
+            except (CaptionTreatmentError, OSError, TypeError, ValueError) as error:
+                raise DirectorContractError(
+                    f"editable ASS reference materialization failed: {error}"
+                ) from error
+            generated_reference = [caption_ass, caption_plan]
+        try:
+            manifest = build_editable_delivery(
+                output_root=self.editable_delivery_root,
+                authorized_root=self.context.root,
+                automatic_master=self.delivery_output,
+                caption_free_candidate=motion,
+                caption_srt=caption_srt,
+                caption_ass=caption_ass,
+                caption_style_plan=caption_plan,
+                hyperframes_project=self.full_hyperframes_project,
+            )
+        except (EditableDeliveryError, OSError, TypeError, ValueError) as error:
+            raise DirectorContractError(
+                f"standard editable delivery failed: {error}"
+            ) from error
+        errors = validate_editable_delivery(manifest)
+        if errors:
+            raise DirectorContractError(
+                "standard editable delivery is invalid: " + "; ".join(errors)
+            )
+        payload = read_json(manifest)
+        artifacts = [manifest, caption_srt, caption_ass, caption_plan, motion, *generated_reference]
+        for path in self.editable_delivery_root.rglob("*"):
+            if path.is_file():
+                artifacts.append(path.resolve())
+        project = payload.get("hyperframes_project") or {}
+        for row in project.get("files") or []:
+            if isinstance(row, dict) and row.get("path"):
+                path = Path(str(row["path"])).resolve()
+                if path.is_file():
+                    artifacts.append(path)
+        return manifest, list(dict.fromkeys(artifacts))
 
     def _write_manual_nle_package_v2(self) -> tuple[Path, list[Path]] | None:
         package = self.manual_nle_package_config

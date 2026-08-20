@@ -440,6 +440,13 @@ current video-use `master.srt` is hash-bound into the compose signature and
 burned as the final picture filter. A `polish_existing` label alone is not
 caption evidence; only independently verified existing captions preserve the
 established layer.
+After the final encode and technical/caption checks pass, the same stage writes
+the always-on `editable-delivery` repair kit. It references the current full
+HyperFrames render as the no-new-caption candidate, copies the current SRT plus
+deterministic ASS/style plan, inventories the editable full HyperFrames project,
+and binds every file by hash. It does not render another video and does not
+claim a Jianying/ChatCut native project. Deletion or drift of any nested repair
+asset reopens `final_compose`.
 If enabled, only the revalidated human return becomes the effective universal
 output. `delivery_qa` then blocks on the final aesthetic review, speech-dominant audio plan with
 provenance, topic/identity/expression-approved cover, and Douyin plus WeChat

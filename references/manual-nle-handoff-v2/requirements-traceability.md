@@ -20,7 +20,7 @@
 | NLE-RQ-016 | Avoid unbounded storage and rendering cost | Director | Package levels and explicit size estimate/budget; full-duration alpha is optional |
 | NLE-RQ-017 | Fail closed on path escape, Junction/symlink redirection, stale hashes, or partial packages | Director | Safe-root/atomic-package tests and full nested inventory validation |
 | NLE-RQ-018 | Revalidate a returned manual edit against exact bytes | Director | Existing return receipt, full decode, caption/audio/visual/edit-correctness/platform QA |
-| NLE-RQ-019 | Keep normal workflow/default migrations unchanged | Config migrator | Feature default-off; legacy config in-memory migration; disabled path remains no-op |
+| NLE-RQ-019 | Keep expanded layered/manual-return behavior default-off while making the minimum repair kit a normal delivery invariant | Director + Config migrator | Every completed full render binds master, pre-caption candidate, SRT, ASS/style plan and HyperFrames inventory; transparent layers/audio/IP/outro and human return remain opt-in |
 | NLE-RQ-020 | Treat actual import/edit convenience as a human canary, not an automated claim | HongRun | Jianying Desktop canary records import result, relink friction, editability, and user judgment |
 | NLE-RQ-021 | Preserve semantic/product soft-occlusion behavior in the reference, while making it removable | HyperFrames + Director | Overlay event carries semantic/window/protected-region evidence; removal leaves clean A-roll intact |
 | NLE-RQ-022 | Do not require keys, encryption, cloud sync, or a Jianying login to build the package | Director | Local deterministic generation; no secret/env-token fields in schema |
@@ -36,4 +36,3 @@
 - Making baked text inside an overlay natively editable. Editable copy is
   provided separately; the text-free layer is the modification surface.
 - Replacing the HyperFrames project as the deep-edit source of truth.
-

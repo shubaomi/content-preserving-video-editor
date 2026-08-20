@@ -19,7 +19,7 @@ Use this Chinese form as the canonical conversational shape:
 > 2. 视频身份与授权：本人录制 / 第三方视频 / 无需人物身份的通用视频；是否已获得剪辑授权，以及是否已获得发布授权；
 > 3. 本次先做样片，还是继续一个已经通过样片审核的项目完成全片；
 > 4. 如果是 HongRun 本人竖屏口播，是否启用 HongRun Profile 和 portrait-brand v2；
-> 5. 只要自动成片，还是同时生成可导入人工 NLE 的分层交接包。
+> 5. 是否还需要包含透明动效、独立音轨、IP 素材等内容的完整分层 NLE 交接包。
 >
 > `video_id`、视频类型、工作标题、发布标题、封面文案、简介、话题、比例、分辨率和帧率默认由系统根据源视频与内容自动生成。
 
@@ -32,7 +32,9 @@ numbering or use technical enum names.
   frame rate, and content format: automatic.
 - New or changed source: sample first.
 - Universal MP4: enabled.
-- Manual-NLE package: disabled unless requested.
+- Standard repair kit: always included with a completed full render (automatic
+  master, no-new-caption candidate, SRT, ASS/style plan, HyperFrames inventory).
+- Expanded layered Manual-NLE package: disabled unless requested.
 - HongRun portrait-brand: explicit opt-in only; never inferred for third-party
   or generic footage.
 - Editing authorization and publication authorization are separate. A locally

@@ -460,6 +460,42 @@ def materialize(
     return output_ass.resolve(), output_plan.resolve()
 
 
+def materialize_editable_ass_reference(
+    *, master_srt_path: Path, output_ass: Path, output_plan: Path,
+    options: Mapping[str, Any], width: int, height: int, authorized_root: Path,
+) -> tuple[Path, Path]:
+    """Create an editable styled ASS reference even when semantic styling is off.
+
+    The SRT remains the text/timing authority.  This path adds no emphasis that
+    was not already approved; it only preserves the current typography as an
+    editor-neutral ASS file for downstream manual adjustment.
+    """
+    rows = parse_srt(master_srt_path)
+    plan = build_semantic_emphasis_plan(rows, {"events": []}, options)
+    plan["purpose"] = "editable_style_reference"
+    plan["inputs"] = {
+        "master_srt": {
+            "path": str(master_srt_path.resolve()),
+            "sha256": sha256_file(master_srt_path),
+        },
+    }
+    plan["canvas"] = {"width": width, "height": height}
+    lexical_root = Path(os.path.abspath(authorized_root))
+    try:
+        ass_relative = Path(os.path.abspath(output_ass)).relative_to(lexical_root)
+        plan_relative = Path(os.path.abspath(output_plan)).relative_to(lexical_root)
+    except ValueError as error:
+        raise CaptionTreatmentError("editable ASS output escapes its authorized root") from error
+    output_ass = safe_generated_target(lexical_root, ass_relative)
+    output_plan = safe_generated_target(lexical_root, plan_relative)
+    atomic_write_text(output_ass, render_ass(plan, width=width, height=height))
+    plan["output"] = {"path": str(output_ass.resolve()), "sha256": sha256_file(output_ass)}
+    atomic_write_text(output_plan, json.dumps(
+        plan, ensure_ascii=False, indent=2, allow_nan=False,
+    ) + "\n")
+    return output_ass.resolve(), output_plan.resolve()
+
+
 def validate_materialized(
     *, plan_path: Path, ass_path: Path, expected_master_srt: Path,
     expected_captions: Path, expected_semantic_brief: Path,

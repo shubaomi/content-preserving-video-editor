@@ -14,6 +14,7 @@ from caption_treatment import (  # noqa: E402
     CaptionTreatmentError,
     build_semantic_emphasis_plan,
     materialize,
+    materialize_editable_ass_reference,
     materialize_sample_caption_authority,
     render_ass,
     validate_materialized,
@@ -104,6 +105,23 @@ class CaptionTreatmentTests(unittest.TestCase):
             path = Path(temp) / "master.ass"
             path.write_text(render_ass(plan, width=1080, height=1920), encoding="utf-8")
             self.assertTrue(path.read_text(encoding="utf-8").startswith("[Script Info]"))
+
+    def test_plain_projects_still_receive_an_editable_ass_style_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            srt = root / "master.srt"
+            srt.write_text(
+                "1\n00:00:01,000 --> 00:00:03,000\n普通字幕\n", encoding="utf-8",
+            )
+            ass, plan = materialize_editable_ass_reference(
+                master_srt_path=srt, output_ass=root / "master.ass",
+                output_plan=root / "caption-style-plan.json", options=self.options,
+                width=1080, height=1920, authorized_root=root,
+            )
+            self.assertIn("普通字幕", ass.read_text(encoding="utf-8"))
+            payload = __import__("json").loads(plan.read_text(encoding="utf-8"))
+            self.assertEqual(payload["purpose"], "editable_style_reference")
+            self.assertEqual(payload["captions"][0]["emphasis"], [])
 
     def test_materializer_rejects_output_outside_authorized_root(self) -> None:
         import json

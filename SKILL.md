@@ -47,8 +47,9 @@ current project, then ask once for only the missing items in one compact batch:
    full render that already has a current sample approval;
 4. for eligible HongRun self-recorded portrait footage, whether to opt in to
    the current HongRun Profile/portrait-brand direction;
-5. delivery preference: automatic universal MP4 only, or also the optional
-   editor-neutral manual-NLE package.
+5. whether the expanded layered manual-NLE package is also needed. The normal
+   automatic delivery already includes the standard editor-neutral repair kit;
+   do not ask the user to opt in to SRT/ASS/caption-free-candidate delivery.
 
 Default title, `video_id`, publishing copy, cover copy, content-type detection,
 platform target, and technical settings to automatic generation unless the
@@ -822,6 +823,25 @@ Deliver the universal video, cover, editable HyperFrames project, director state
 EDL/transcript/caption artifacts, semantic brief, storyboard, audio plan,
 provenance, video-use final edit-correctness evidence, technical QA, aesthetic
 QA, and honest remaining limitations.
+
+Every completed normal full render must also create
+`work/director/editable-delivery/editable-delivery-manifest.json`. This standard
+repair kit is not the optional layered NLE package. It must bind the immutable
+automatic master, the actual full HyperFrames render before Director applies its
+new caption layer, a copied UTF-8 `master.srt`, a deterministic styled
+`master.ass`, the caption style plan, a current HyperFrames project inventory,
+and a Chinese usage guide. If semantic caption treatment is disabled, derive the
+ASS from the current SRT with the configured base typography and no invented
+highlight. Track every nested file and authority hash so drift reopens
+`final_compose`; do not perform a second video render merely to build the kit.
+“Caption-free” means free of the new Director caption layer—it cannot remove
+captions already burned into the source.
+
+Treat SRT as editable text/timing authority and ASS as a style-preserving
+reference. Do not claim that Jianying, ChatCut, or another editor supports ASS,
+can import the retained HyperFrames project, or has received a native draft
+unless that exact capability has separate current evidence. The burned automatic
+master remains a reference; its pixels are not editable text.
 
 When optional manual finishing is enabled, create `handoff-manifest.json` from
 files that actually exist: immutable source, automatic master, optional clean

@@ -364,6 +364,18 @@ Complete a video only when applicable gates pass.
 
 ## Optional manual finish
 
+- Before delivery QA, require a current standard editable-delivery manifest for
+  every completed normal full render. Revalidate the automatic master, distinct
+  pre-caption full HyperFrames candidate, copied SRT/ASS/style plan, Chinese
+  guide, and retained HyperFrames project inventory by exact path/hash.
+- Require plain projects to receive a deterministic ASS style reference derived
+  from current SRT with no unapproved emphasis. Never label source-burned
+  captions removable, the automatic master text-editable, or the repair kit a
+  native Jianying/ChatCut project.
+- Building the standard kit must reuse existing render bytes and must not trigger
+  another full-video render. Missing or drifted nested assets reopen
+  `final_compose`.
+
 - Keep `manual_finish_handoff` disabled by default. OpenCut and other NLEs are
   human-facing finishing surfaces, not automated director backends or required
   dependencies.

@@ -75,6 +75,15 @@ still keeps `master.srt` as the authoritative
 plain-text subtitle and burns the ASS last.
 No configuration permits arbitrary rainbow rotation or per-character flashing.
 
+The standard editable delivery is config-free and is produced for every
+completed normal full render under `work/director/editable-delivery/`. It binds
+the automatic master, the pre-caption full HyperFrames candidate, current
+`master.srt`, deterministic ASS/style plan, and current HyperFrames project
+inventory. This baseline does not enable manual finishing, create a native NLE
+draft, or imply support in a particular editor. `caption_delivery: none` remains
+an explicit caption-delivery override; normal `auto` delivery produces the full
+repair kit.
+
 `qa.platform_occlusion` keeps its legacy hard-collision behavior unless an
 current semantic brief carries `occlusion_focus={primary: product, status:
 approved}`, the rendered event carries the matching semantic ID and
@@ -410,8 +419,9 @@ delivery:
         event_sfx: true
 ```
 
-Keep it disabled by default. `enabled: false` or backend `none` leaves the
-automatic one-shot workflow unchanged. `opencut` and `other_nle` mean only that
+Keep the expanded layered package and human-return workflow disabled by default.
+`enabled: false` or backend `none` still permits the config-free standard repair
+kit but does not pause for a human return. `opencut` and `other_nle` mean only that
 a human will use that finishing surface; they do not authorize or imply an API,
 CLI, MCP, or headless integration. Resolve declared asset and return paths from
 `paths.root`. The returned path must differ from the automatic master path.

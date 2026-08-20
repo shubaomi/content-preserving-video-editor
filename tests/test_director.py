@@ -62,6 +62,21 @@ class DirectorTests(unittest.TestCase):
         )
         return captions
 
+    @staticmethod
+    def _write_standard_editable_delivery_authorities(director: Director) -> None:
+        director.evidence_bundle_path.parent.mkdir(parents=True, exist_ok=True)
+        director.evidence_bundle_path.write_text(json.dumps({
+            "duration_seconds": 1.0,
+            "display": {"width": 1920, "height": 1080, "orientation": "landscape"},
+        }), encoding="utf-8")
+        director.full_hyperframes_project.mkdir(parents=True, exist_ok=True)
+        (director.full_hyperframes_project / "index.html").write_text(
+            "<main data-composition-id='main'></main>", encoding="utf-8",
+        )
+        storyboard = director.full_hyperframes_project / "storyboard.json"
+        if not storyboard.is_file():
+            storyboard.write_text(json.dumps({"events": []}), encoding="utf-8")
+
     def _write_full_hyperframes_contract(self, director: Director, duration: float = 100.0) -> None:
         project = director.full_hyperframes_project
         project.mkdir(parents=True)
@@ -1769,6 +1784,50 @@ class DirectorTests(unittest.TestCase):
         (director.manual_nle_package_root / "02-captions" / "master.srt").unlink()
         self.assertFalse(_artifact_records_current(records))
 
+    def test_standard_editable_delivery_is_always_built_without_enabling_nle_package(self) -> None:
+        director = Director(self.project)
+        self._write_master_srt(director)
+        director.delivery_output.parent.mkdir(parents=True, exist_ok=True)
+        director.delivery_output.write_bytes(b"automatic-captioned-master")
+        motion = director.root / "full-hyperframes-render.mp4"
+        motion.write_bytes(b"caption-free-full-render")
+        director.full_hyperframes_project.mkdir(parents=True, exist_ok=True)
+        (director.full_hyperframes_project / "index.html").write_text(
+            "<main data-composition-id='main'></main>", encoding="utf-8",
+        )
+        (director.full_hyperframes_project / "storyboard.json").write_text(
+            json.dumps({"events": []}), encoding="utf-8",
+        )
+        stale_full = director.root / "caption-treatment" / "full"
+        stale_full.mkdir(parents=True, exist_ok=True)
+        (stale_full / "master.ass").write_text("stale semantic ASS", encoding="utf-8")
+        (stale_full / "caption-emphasis-plan.json").write_text(
+            json.dumps({"stale": True}), encoding="utf-8",
+        )
+
+        with patch.object(
+            director, "_motion_source_media",
+            return_value={"width": 1080, "height": 1920, "duration_seconds": 1.0},
+        ):
+            manifest, artifacts = director._write_standard_editable_delivery(motion)
+
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        self.assertEqual(payload["status"], "ready")
+        self.assertEqual(
+            Path(payload["caption_free_candidate"]["path"]), motion.resolve(),
+        )
+        self.assertTrue(Path(payload["captions"]["srt"]["path"]).is_file())
+        self.assertTrue(Path(payload["captions"]["ass"]["path"]).is_file())
+        self.assertEqual(
+            Path(payload["captions"]["ass"]["source"]["path"]).parent.name,
+            "editable-reference",
+        )
+        self.assertIn(motion.resolve(), artifacts)
+        self.assertFalse(
+            (director.manual_finish_dir / "nle-package-v2").exists(),
+            "the expanded layered NLE package remains optional",
+        )
+
     def test_layered_nle_package_materializes_current_hyperframes_event_layers(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["delivery"]["manual_finish"] = {
@@ -2907,6 +2966,7 @@ class DirectorTests(unittest.TestCase):
     def test_final_compose_runs_full_technical_qa_bound_to_output(self) -> None:
         director = Director(self.project, execute_external=True)
         self._write_master_srt(director)
+        self._write_standard_editable_delivery_authorities(director)
         motion = director.root / "render" / "full-hyperframes.mp4"
         motion.parent.mkdir(parents=True)
         motion.write_bytes(b"motion")
@@ -2946,6 +3006,7 @@ class DirectorTests(unittest.TestCase):
         self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
         director = Director(self.project, execute_external=True)
         self._write_master_srt(director)
+        self._write_standard_editable_delivery_authorities(director)
         motion = director.root / "render" / "full-hyperframes.mp4"
         motion.parent.mkdir(parents=True)
         motion.write_bytes(b"motion")
@@ -3000,6 +3061,7 @@ class DirectorTests(unittest.TestCase):
         self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
         director = Director(self.project, execute_external=True)
         self._write_master_srt(director)
+        self._write_standard_editable_delivery_authorities(director)
         motion = director.root / "render" / "full-hyperframes.mp4"
         motion.parent.mkdir(parents=True)
         motion.write_bytes(b"motion-v1")
@@ -3053,6 +3115,7 @@ class DirectorTests(unittest.TestCase):
     def test_final_compose_adopts_exact_manual_command_output_on_resume(self) -> None:
         director = Director(self.project)
         self._write_master_srt(director)
+        self._write_standard_editable_delivery_authorities(director)
         motion = director.root / "render" / "full-hyperframes.mp4"
         motion.parent.mkdir(parents=True)
         motion.write_bytes(b"motion")

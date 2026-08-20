@@ -4,6 +4,7 @@
 |---|---|---|---|
 | Package integrity | Exact complete nested inventory, hashes, no extra files | — | Package pass |
 | Safe output | Root/child Junction, symlink, traversal, interrupted-write tests | — | Any materialization |
+| Standard repair kit | Distinct automatic/pre-caption paths with current hashes; exact SRT/ASS/style-plan copies; current HyperFrames inventory; no native-draft claim | Import in any chosen professional editor when needed | Normal full delivery |
 | Clean A-roll | Full decode, exact EDL duration/cuts, speech retained, no burned Director caption/motion signature | Visual spot check | Package pass |
 | Captions | Current SRT exact; emphasis plan exact word/span/time binding; ASS deterministic | Import SRT and edit one block in Jianying Desktop | Compatibility promotion |
 | Event motion | Decode, alpha channel/coverage, exact event window, black/white/busy composite | Import, place at offset, hide/trim one event | Jianying profile pass |
@@ -55,4 +56,3 @@
 
 The canary passes usability only when the user can complete these without
 re-rendering the full HyperFrames project and judges the handoff worthwhile.
-
