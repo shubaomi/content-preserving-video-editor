@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "kind": "jianying_native_draft_v1_design_freeze_approval",
+  "status": "approved",
+  "actor": "HongRun",
+  "approved_at": "2026-08-22T05:12:00-07:00",
+  "candidate": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\jianying-native-draft-v1\\design-freeze-candidate.json",
+    "sha256": "233fb713dbca2a470e1df604114bb76a9757451655c176309e5f027bede7f0fe"
+  },
+  "approval_text": "批准 jianying-native-draft-v1 design-freeze-candidate，按照实施计划进入下一阶段实现。",
+  "authorized_scope": "WP0_through_WP3_implementation_tests_and_isolated_synthetic_fixtures",
+  "still_requires_separate_approval": [
+    "WP4_editor_store_installation_or_any_existing_draft_store_write",
+    "WP5_real_short_project_install_open_edit_and_returned_export_canary",
+    "long_or_full_video_render",
+    "production_default",
+    "proprietary_effects_existing_draft_merge_or_ui_automation"
+  ]
+}

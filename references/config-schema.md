@@ -4,8 +4,8 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 12. New projects write both
-`schema_version: 12` and `version: 12`. Legacy projects from v1 through v11 are
+The current project schema is version 13. New projects write both
+`schema_version: 13` and `version: 13`. Legacy projects from v1 through v12 are
 deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
@@ -417,6 +417,13 @@ delivery:
         ip_assets: true
         modular_outro: true
         event_sfx: true
+    jianying_native_draft:
+      enabled: false
+      adapter: pyjianyingdraft_0_3
+      profile: layered_reconstruction # repair_draft | layered_reconstruction
+      asset_mode: linked # linked | portable
+      install: false
+      max_package_gib: 8.0
 ```
 
 Keep the expanded layered package and human-return workflow disabled by default.
@@ -461,6 +468,23 @@ This automated evidence does not prove that the installed Jianying version
 imports or preserves alpha; the compatibility receipt remains pending until the
 human canary. Without external execution or current renderer authority, the
 motion roles remain `unavailable` rather than triggering a speculative render.
+
+`jianying_native_draft.enabled: true` requires `manual_finish.enabled: true`,
+backend `other_nle`, and `nle_package.enabled: true`. In schema v13 the Director
+only compiles `jianying-draft-plan.json`, a Chinese status/usage guide, and a
+target-free install proposal. The adapter remains default-off, does not launch
+Jianying, does not read or write its draft store, and does not produce a real
+native draft. `install` must remain `false`; unknown adapter/profile/asset mode,
+non-finite size budgets, or extra secret-bearing fields fail validation. Real
+materialization/installation requires separate WP4 approval and exact-version
+compatibility; a short named-user canary is required before any real-project
+claim.
+`layered_reconstruction` preserves one base clip per EDL output range. Its clean
+A-roll is already conformed, so native source-in equals the output start;
+`repair_draft` instead uses one full-duration baked pre-caption candidate and
+adds only editable captions plus a locked reference. `portable` is accepted as
+an explicit plan mode, but WP0–WP3 synthetic fixtures do not claim a portable
+real editor project or copy media into the Jianying draft store.
 
 An OpenMontage-oriented handoff may alternatively set:
 

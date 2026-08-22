@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.content-preserving-video-editor/schemas/jianying-canary-review-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "status", "package", "editor", "tasks", "existing_drafts_unchanged", "reviewer", "reviewed_at", "decision", "reason", "integrity_sha256"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "jianying_native_draft_canary_review"},
+    "status": {"enum": ["approved", "rejected", "stale"]},
+    "package": {"$ref": "#/$defs/file_ref"},
+    "editor": {"type": "object", "required": ["version", "executable_sha256"], "properties": {"version": {"type": "string", "minLength": 1}, "executable_sha256": {"$ref": "#/$defs/sha256"}}, "additionalProperties": false},
+    "tasks": {"type": "object", "required": ["caption", "motion", "audio", "ip", "outro"], "additionalProperties": false, "properties": {"caption": {"$ref": "#/$defs/task"}, "motion": {"$ref": "#/$defs/task"}, "audio": {"$ref": "#/$defs/task"}, "ip": {"$ref": "#/$defs/task"}, "outro": {"$ref": "#/$defs/task"}}},
+    "existing_drafts_unchanged": {"type": "boolean"},
+    "reviewer": {"const": "HongRun"},
+    "reviewed_at": {"type": "string", "format": "date-time"},
+    "decision": {"enum": ["reuse", "revise", "reject"]},
+    "reason": {"type": "string", "minLength": 1},
+    "integrity_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "file_ref": {"type": "object", "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}}, "additionalProperties": false},
+    "task": {"type": "object", "required": ["status", "seconds", "evidence"], "properties": {"status": {"enum": ["pass", "failed", "not_applicable"]}, "seconds": {"type": "number", "minimum": 0}, "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/file_ref"}}}, "additionalProperties": false}
+  }
+}

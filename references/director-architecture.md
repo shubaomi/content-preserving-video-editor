@@ -153,7 +153,7 @@ missing optional assets remain explicit `unavailable` records. The correction
 ledger stores approved before/after property changes with related file hashes and
 a drift guard so structured corrections are auditable and replayable.
 
-Schema-v12 projects may explicitly enable `manual_finish.nle_package`. Director
+Schema-v13 projects may explicitly enable `manual_finish.nle_package`. Director
 then assembles `nle-package-v2` after final compose, while retaining the v1
 manifest and correction ledger. The package is editor-neutral: automatic master,
 clean A-roll, editable SRT, ASS/style references, available media/audio/IP/outro
@@ -173,6 +173,24 @@ base media retains its original duration.
 Every nested package file is a Director stage artifact, so deletion or drift
 reopens manual finishing. The stage still remains `action_required` until a
 distinct human-returned export passes the existing full return QA.
+
+Schema-v13 also defines the separate, default-off
+`manual_finish.jianying_native_draft` projection after the current NLE package.
+At its present `director_integrated` runtime boundary it writes only a canonical
+frame plan, `draft-status.json`, Chinese instructions and a target-free install
+proposal under `manual-finish/jianying-native-draft-v1/`. Synthetic contract
+fixtures may prove `fixture_validated`, but they are never emitted as real
+Jianying projects. Unknown editor versions, plan/asset drift or adapter failure
+leave the automatic master and editor-neutral package current and usable; no
+route launches Jianying or reads/writes its draft store. Real package creation,
+installation and open/edit/export canary remain separate WP4/WP5 gates.
+The layered base inventory mirrors EDL output ranges, including empty gaps.
+Since the clean A-roll is already conformed, its native source-in is derived
+from each output start; event-local overlays and cues start at source frame
+zero. Event SFX metadata comes from a current 48 kHz stream probe plus the
+audio-plan volume. Expected optional failures produce a separately tracked
+`unavailable` receipt even when a returned manual export already exists;
+programming exceptions are not converted into fallback success.
 
 On return, the director records the returned file's hash, size, and mtime, resets
 old delivery QA, and performs a full FFmpeg decode plus ffprobe. The stage remains

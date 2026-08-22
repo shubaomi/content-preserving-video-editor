@@ -1,0 +1,2 @@
+# Design-freeze hashes bind exact UTF-8/LF bytes across Windows checkouts.
+references/jianying-native-draft-v1/** text eol=lf

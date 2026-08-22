@@ -111,13 +111,21 @@ class ProjectConfigMigrationTests(unittest.TestCase):
                     "event_sfx": True,
                 },
             },
+            "jianying_native_draft": {
+                "enabled": False,
+                "adapter": "pyjianyingdraft_0_3",
+                "profile": "layered_reconstruction",
+                "asset_mode": "linked",
+                "install": False,
+                "max_package_gib": 8.0,
+            },
         })
         self.assertEqual(migrated["qa"]["preview_render_parity"]["tolerances"], {
             "position_px": 4.0,
             "size_px": 4.0,
             "time_seconds": 0.05,
         })
-        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 12)
+        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 13)
         self.assertTrue(migrated["workflow"]["production_contract"]["enabled"])
         self.assertEqual(migrated["provider_governance"]["max_evidence_age_days"], 30)
         self.assertTrue(migrated["qa"]["visual_dynamics"]["enabled"])
@@ -263,8 +271,8 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "manual_finish.backend"):
             migrate_project_config(project)
 
-    def test_all_v1_through_v11_configs_migrate_to_v12_without_mutation(self) -> None:
-        for version in range(1, 12):
+    def test_all_v1_through_v12_configs_migrate_to_v13_without_mutation(self) -> None:
+        for version in range(1, 13):
             original = {
                 "schema_version": version,
                 "version": version,
@@ -274,12 +282,75 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             with self.subTest(version=version):
                 migrated = migrate_project_config(original)
                 self.assertEqual(original, before)
-                self.assertEqual(migrated["schema_version"], 12)
-                self.assertEqual(migrated["version"], 12)
+                self.assertEqual(migrated["schema_version"], 13)
+                self.assertEqual(migrated["version"], 13)
                 self.assertEqual(migrated["identity"]["mode"], "generic")
                 self.assertFalse(migrated["motion_quality"]["enabled"])
                 self.assertFalse(migrated["motion_quality"]["portrait_brand"]["enabled"])
                 self.assertFalse(migrated["delivery"]["manual_finish"]["nle_package"]["enabled"])
+                self.assertFalse(
+                    migrated["delivery"]["manual_finish"]["jianying_native_draft"]["enabled"]
+                )
+
+    def test_jianying_native_draft_v1_is_default_off_and_fail_closed(self) -> None:
+        migrated = migrate_project_config({
+            "schema_version": 12,
+            "version": 12,
+            "delivery": {"manual_finish": {"enabled": True, "backend": "other_nle"}},
+        })
+        native = migrated["delivery"]["manual_finish"]["jianying_native_draft"]
+        self.assertEqual(native, {
+            "enabled": False,
+            "adapter": "pyjianyingdraft_0_3",
+            "profile": "layered_reconstruction",
+            "asset_mode": "linked",
+            "install": False,
+            "max_package_gib": 8.0,
+        })
+
+        valid = {
+            "schema_version": 13,
+            "version": 13,
+            "delivery": {"manual_finish": {
+                "enabled": True,
+                "backend": "other_nle",
+                "nle_package": {"enabled": True},
+                "jianying_native_draft": {"enabled": True},
+            }},
+        }
+        enabled = migrate_project_config(valid)["delivery"]["manual_finish"]
+        self.assertTrue(enabled["jianying_native_draft"]["enabled"])
+
+        for override, message in (
+            ({"install": True}, "install"),
+            ({"adapter": "latest"}, "adapter"),
+            ({"profile": "magic"}, "profile"),
+            ({"asset_mode": "cloud"}, "asset_mode"),
+            ({"max_package_gib": float("nan")}, "max_package_gib"),
+            ({"secret": "forbidden"}, "unsupported fields"),
+        ):
+            with self.subTest(override=override), self.assertRaisesRegex(ValueError, message):
+                migrate_project_config({
+                    "schema_version": 13,
+                    "version": 13,
+                    "delivery": {"manual_finish": {
+                        "enabled": True,
+                        "backend": "other_nle",
+                        "nle_package": {"enabled": True},
+                        "jianying_native_draft": {"enabled": True, **override},
+                    }},
+                })
+
+        with self.assertRaisesRegex(ValueError, "requires nle_package.enabled"):
+            migrate_project_config({
+                "schema_version": 13,
+                "version": 13,
+                "delivery": {"manual_finish": {
+                    "enabled": True,
+                    "backend": "other_nle",
+                    "jianying_native_draft": {"enabled": True},
+                }},
+            })
 
     def test_manual_nle_package_v2_defaults_off_and_rejects_unsupported_claims(self) -> None:
         migrated = migrate_project_config({
@@ -426,7 +497,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         migrated = migrate_project_config(original)
 
         self.assertEqual(original, before)
-        self.assertEqual(migrated["schema_version"], 12)
+        self.assertEqual(migrated["schema_version"], CURRENT_PROJECT_SCHEMA_VERSION)
         self.assertTrue(migrated["assets"]["media_catalog"]["enabled"])
         self.assertFalse(migrated["assets"]["local_semantic_corpus"]["enabled"])
         self.assertEqual(migrated["delivery"]["openmontage_handoff"]["backend"], "openmontage")
@@ -436,7 +507,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         before = copy.deepcopy(original)
         migrated = migrate_project_config(original)
         self.assertEqual(original, before)
-        self.assertEqual(migrated["schema_version"], 12)
+        self.assertEqual(migrated["schema_version"], CURRENT_PROJECT_SCHEMA_VERSION)
         self.assertTrue(migrated["render"]["cache"]["enabled"])
         self.assertFalse(migrated["render"]["cache"]["event_level"]["enabled"])
 

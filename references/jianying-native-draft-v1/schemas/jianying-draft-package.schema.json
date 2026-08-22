@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.content-preserving-video-editor/schemas/jianying-draft-package-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "status", "build_id", "profile", "asset_mode", "plan", "compatibility", "adapter_report", "output_root", "inventory", "safety", "fallbacks", "integrity_sha256"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "jianying_native_draft_package"},
+    "status": {"enum": ["validated", "action_required", "unavailable"]},
+    "build_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+    "profile": {"enum": ["repair_draft", "layered_reconstruction"]},
+    "asset_mode": {"enum": ["linked", "portable"]},
+    "plan": {"$ref": "#/$defs/file_ref"},
+    "compatibility": {"$ref": "#/$defs/file_ref"},
+    "adapter_report": {"$ref": "#/$defs/file_ref"},
+    "output_root": {"type": "string", "minLength": 1},
+    "inventory": {"type": "array", "items": {"$ref": "#/$defs/file_ref"}},
+    "safety": {"type": "object", "required": ["new_isolated_draft", "existing_draft_read", "existing_draft_modified", "network_used", "secret_required"], "properties": {"new_isolated_draft": {"const": true}, "existing_draft_read": {"const": false}, "existing_draft_modified": {"const": false}, "network_used": {"const": false}, "secret_required": {"const": false}}, "additionalProperties": false},
+    "fallbacks": {"type": "object", "required": ["automatic_master", "standard_editable_delivery", "nle_package"], "additionalProperties": {"$ref": "#/$defs/file_ref"}},
+    "integrity_sha256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "file_ref": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}}}
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "adapter_id": "pyjianyingdraft_0_3",
+  "package": "pyJianYingDraft",
+  "version": "0.3.0",
+  "distribution": {
+    "filename": "pyjianyingdraft-0.3.0-py3-none-any.whl",
+    "sha256": "09863de4b0cfbb23fff54b4122ef49eff3527685f7978c6230f0651942954bdc",
+    "index": "https://pypi.org/project/pyjianyingdraft/0.3.0/"
+  },
+  "license": {
+    "spdx": "Apache-2.0",
+    "source": "https://github.com/GuanYixuan/pyJianYingDraft/blob/main/LICENSE"
+  },
+  "import_name": "pyJianYingDraft",
+  "network_required_for_generation": false,
+  "forbidden_operations": [
+    "load_template",
+    "duplicate_as_template",
+    "remove_existing_draft",
+    "open_editor",
+    "export_media",
+    "read_editor_store"
+  ]
+}

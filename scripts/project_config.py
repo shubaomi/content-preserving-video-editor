@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 12
+CURRENT_PROJECT_SCHEMA_VERSION = 13
 IDENTITY_MODES = {"self", "third_party", "generic"}
 REQUIRED_ASSET_APPLICABILITY = {"required", "optional", "not_applicable"}
 DELIVERABLE_READINESS = {"ready", "asset_ready", "not_applicable"}
@@ -29,6 +29,14 @@ MANUAL_FINISH_DEFAULTS: dict[str, Any] = {
             "modular_outro": True,
             "event_sfx": True,
         },
+    },
+    "jianying_native_draft": {
+        "enabled": False,
+        "adapter": "pyjianyingdraft_0_3",
+        "profile": "layered_reconstruction",
+        "asset_mode": "linked",
+        "install": False,
+        "max_package_gib": 8.0,
     },
 }
 PREVIEW_RENDER_PARITY_TOLERANCE_DEFAULTS: dict[str, float] = {
@@ -495,6 +503,68 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     for key in sorted(allowed_nle_include):
         if not isinstance(nle_include.get(key), bool):
             raise ValueError(f"delivery.manual_finish.nle_package.include.{key} must be a boolean")
+    native_draft = manual.get("jianying_native_draft")
+    if not isinstance(native_draft, dict):
+        raise ValueError("delivery.manual_finish.jianying_native_draft must be a mapping")
+    native_defaults = MANUAL_FINISH_DEFAULTS["jianying_native_draft"]
+    unknown_native_keys = set(native_draft) - set(native_defaults)
+    if unknown_native_keys:
+        raise ValueError(
+            "delivery.manual_finish.jianying_native_draft has unsupported fields: "
+            + ", ".join(sorted(unknown_native_keys))
+        )
+    for key, value in native_defaults.items():
+        native_draft.setdefault(key, deepcopy(value))
+    if not isinstance(native_draft.get("enabled"), bool):
+        raise ValueError("delivery.manual_finish.jianying_native_draft.enabled must be a boolean")
+    if native_draft.get("adapter") != "pyjianyingdraft_0_3":
+        raise ValueError(
+            "delivery.manual_finish.jianying_native_draft.adapter must be "
+            "pyjianyingdraft_0_3"
+        )
+    if native_draft.get("profile") not in {"repair_draft", "layered_reconstruction"}:
+        raise ValueError(
+            "delivery.manual_finish.jianying_native_draft.profile must be "
+            "repair_draft or layered_reconstruction"
+        )
+    if native_draft.get("asset_mode") not in {"linked", "portable"}:
+        raise ValueError(
+            "delivery.manual_finish.jianying_native_draft.asset_mode must be linked or portable"
+        )
+    if native_draft.get("install") is not False:
+        raise ValueError(
+            "delivery.manual_finish.jianying_native_draft.install must remain false; "
+            "editor-store installation requires separate approval"
+        )
+    package_budget = native_draft.get("max_package_gib")
+    if (
+        isinstance(package_budget, bool)
+        or not isinstance(package_budget, (int, float))
+        or not math.isfinite(float(package_budget))
+        or not 0.1 <= float(package_budget) <= 64.0
+    ):
+        raise ValueError(
+            "delivery.manual_finish.jianying_native_draft.max_package_gib must be "
+            "finite and in [0.1, 64]"
+        )
+    native_draft["max_package_gib"] = float(package_budget)
+    if native_draft["enabled"]:
+        if manual.get("enabled") is not True or manual.get("backend") != "other_nle":
+            raise ValueError(
+                "delivery.manual_finish.jianying_native_draft requires enabled "
+                "manual_finish backend other_nle"
+            )
+        if nle_package.get("enabled") is not True:
+            raise ValueError(
+                "delivery.manual_finish.jianying_native_draft requires nle_package.enabled"
+            )
+        if (
+            native_draft.get("profile") == "layered_reconstruction"
+            and nle_package.get("level") == "reference_only"
+        ):
+            raise ValueError(
+                "layered_reconstruction requires balanced or max_editable nle_package level"
+            )
     openmontage = delivery.setdefault("openmontage_handoff", {})
     if not isinstance(openmontage, dict):
         raise ValueError("delivery.openmontage_handoff must be a mapping")

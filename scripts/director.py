@@ -106,6 +106,7 @@ from editorial_promise import (
 from hyperframes_router import route_hyperframes
 from ip_production import IpProductionActionRequired, produce_ip_components
 from keyframe_receipt import validate_keyframe_receipt, validate_renderer_export
+from jianying_native_draft import JianyingNativeDraftError, compile_draft_plan
 from manual_finish import (
     build_handoff_manifest,
     validate_returned_final_qa,
@@ -120,6 +121,7 @@ from nle_layer_materializer import (
     NleLayerMaterializationError,
     materialize_motion_handoff_layers,
 )
+from safe_generated_output import SafeGeneratedOutputError, safe_generated_directory
 from media_catalog_adapter import run_media_catalog
 from motion_contracts import (
     DEFAULT_RECIPE_REGISTRY,
@@ -574,6 +576,36 @@ def _ffprobe_duration(path: Path) -> float:
     ]
     result = subprocess.run(command, check=True, capture_output=True, text=True)
     return float(result.stdout.strip())
+
+
+def _ffprobe_audio_metadata(path: Path) -> dict[str, float | int]:
+    """Read the current audio stream contract used by editable handoff tracks."""
+    command = [
+        "ffprobe", "-v", "error", "-select_streams", "a:0",
+        "-show_entries", "stream=sample_rate,channels:format=duration",
+        "-of", "json", str(path),
+    ]
+    result = subprocess.run(
+        command, check=True, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=30,
+    )
+    payload = json.loads(result.stdout)
+    streams = payload.get("streams") if isinstance(payload, dict) else None
+    stream = streams[0] if isinstance(streams, list) and streams else None
+    format_row = payload.get("format") if isinstance(payload, dict) else None
+    if not isinstance(stream, dict) or not isinstance(format_row, dict):
+        raise DirectorContractError("manual NLE SFX has no readable audio stream")
+    try:
+        sample_rate = int(stream["sample_rate"])
+        channels = int(stream["channels"])
+        duration = float(format_row["duration"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise DirectorContractError("manual NLE SFX audio metadata is invalid") from error
+    if sample_rate != 48000 or channels < 1 or channels > 8 or not math.isfinite(
+        duration
+    ) or duration <= 0:
+        raise DirectorContractError("manual NLE SFX must be finite-duration 48 kHz audio")
+    return {"sample_rate": sample_rate, "channels": channels, "duration_seconds": duration}
 
 
 def _stage_template() -> dict[str, Any]:
@@ -1435,6 +1467,11 @@ class Director:
         return value if isinstance(value, dict) else {}
 
     @property
+    def jianying_native_draft_config(self) -> dict[str, Any]:
+        value = self.manual_finish_config.get("jianying_native_draft") or {}
+        return value if isinstance(value, dict) else {}
+
+    @property
     def manual_return_output(self) -> Path:
         configured = self.manual_finish_config.get("returned_final")
         if configured:
@@ -1462,6 +1499,10 @@ class Director:
     @property
     def manual_nle_package_root(self) -> Path:
         return self.manual_finish_dir / "nle-package-v2"
+
+    @property
+    def jianying_native_draft_root(self) -> Path:
+        return self.manual_finish_dir / "jianying-native-draft-v1"
 
     @property
     def editable_delivery_root(self) -> Path:
@@ -5958,6 +5999,11 @@ class Director:
             except (KeyError, TypeError, ValueError):
                 continue
             if path and path.is_file() and math.isfinite(start) and math.isfinite(duration) and start >= 0 and duration > 0:
+                metadata = _ffprobe_audio_metadata(path)
+                volume = row.get("volume")
+                if isinstance(volume, bool) or not isinstance(volume, (int, float)) or not math.isfinite(float(volume)) or float(volume) < 0:
+                    raise DirectorContractError("manual NLE SFX volume is invalid")
+                gain_db = round(20.0 * math.log10(max(float(volume), 0.001)), 3)
                 results.append({
                     "path": path,
                     "semantic_event_id": str(row.get("semantic_event_id") or row.get("event_id") or ""),
@@ -5966,6 +6012,12 @@ class Director:
                         "start_seconds": start,
                         "end_seconds": start + duration,
                         "frame_rate": probe_video_frame_rate(self.delivery_output),
+                    },
+                    "audio": {
+                        "sample_rate": metadata["sample_rate"],
+                        "duration_seconds": metadata["duration_seconds"],
+                        "gain_db": gain_db,
+                        "channels": metadata["channels"],
                     },
                 })
         return results
@@ -6227,6 +6279,163 @@ class Director:
         artifacts = sorted(path for path in self.manual_nle_package_root.rglob("*") if path.is_file())
         return receipt, artifacts
 
+    def _prepare_jianying_native_draft(
+        self, nle_package_receipt: Path,
+    ) -> dict[str, Any]:
+        try:
+            root_relative = self.jianying_native_draft_root.relative_to(self.context.root)
+            root = safe_generated_directory(self.context.root, root_relative)
+            plan_dir = safe_generated_directory(self.context.root, root_relative / "plan")
+            proposal_dir = safe_generated_directory(
+                self.context.root, root_relative / "install-proposals"
+            )
+        except (ValueError, SafeGeneratedOutputError) as error:
+            raise DirectorContractError(
+                f"Jianying native draft safe output failed: {error}"
+            ) from error
+        receipt_hash = sha256_file(nle_package_receipt)
+        raw_video_id = str(self.project.get("video_id") or "video")
+        safe_video_id = re.sub(r"[^A-Za-z0-9._-]+", "-", raw_video_id).strip("-._") or "video"
+        draft_id = f"{safe_video_id}-{receipt_hash[:12]}"
+        return {
+            "root": root,
+            "draft_id": draft_id,
+            "receipt_hash": receipt_hash,
+            "plan_path": plan_dir / "jianying-draft-plan.json",
+            "status_path": root / "draft-status.json",
+            "guide_path": root / "README-中文.md",
+            "proposal_path": proposal_dir / f"{draft_id}.json",
+        }
+
+    def _jianying_repair_candidate(self, profile: str) -> Path | None:
+        repair_candidate: Path | None = None
+        if profile == "repair_draft":
+            editable_manifest = self.editable_delivery_root / "editable-delivery-manifest.json"
+            if editable_manifest.is_file() and not validate_editable_delivery(editable_manifest):
+                candidate = read_json(editable_manifest).get("caption_free_candidate") or {}
+                if isinstance(candidate.get("path"), str):
+                    repair_candidate = Path(candidate["path"])
+        return repair_candidate
+
+    def _attempt_jianying_native_plan(
+        self, *, nle_package_receipt: Path, plan_path: Path,
+        draft_id: str, profile: str, asset_mode: str,
+    ) -> str | None:
+        try:
+            compile_draft_plan(
+                nle_package_receipt=nle_package_receipt,
+                output_path=plan_path,
+                authorized_root=self.context.root,
+                draft_id=draft_id,
+                profile=profile,
+                asset_mode=asset_mode,
+                repair_candidate=self._jianying_repair_candidate(profile),
+            )
+        except (JianyingNativeDraftError, OSError) as error:
+            return str(error)
+        return None
+
+    def _write_jianying_native_receipts(
+        self, *, prepared: Mapping[str, Any], nle_package_receipt: Path,
+        config: Mapping[str, Any], plan_error: str | None,
+    ) -> list[Path]:
+        plan_path = Path(prepared["plan_path"])
+        status_path = Path(prepared["status_path"])
+        proposal_path = Path(prepared["proposal_path"])
+        guide_path = Path(prepared["guide_path"])
+        plan_current = plan_error is None
+        fallbacks = {
+            "automatic_master": {
+                "path": str(self.delivery_output.resolve()),
+                "sha256": sha256_file(self.delivery_output),
+            },
+            "nle_package": {
+                "path": str(nle_package_receipt.resolve()),
+                "sha256": str(prepared["receipt_hash"]),
+            },
+        }
+        status = {
+            "schema_version": 1,
+            "kind": "jianying_native_draft_status",
+            "status": "action_required" if plan_error is None else "unavailable",
+            "maturity": "director_integrated",
+            "draft_id": prepared["draft_id"],
+            "profile": config.get("profile"),
+            "asset_mode": config.get("asset_mode"),
+            "plan": (
+                {"path": str(plan_path.resolve()), "sha256": sha256_file(plan_path)}
+                if plan_current else None
+            ),
+            "reason": (
+                "真实剪映草稿生成与安装尚未获 WP4/WP5 授权；需要精确版本兼容档案和短片人工 canary。"
+                if plan_error is None else "剪映计划无法从当前权威资产安全生成。"
+            ),
+            "errors": [plan_error] if plan_error else [],
+            "real_jianying_compatibility_claimed": False,
+            "editor_launched": False,
+            "draft_store_read": False,
+            "draft_store_written": False,
+            "native_package_generated": False,
+            "fallbacks": fallbacks,
+        }
+        write_json(status_path, status)
+        write_json(proposal_path, {
+            "schema_version": 1,
+            "kind": "jianying_install_proposal",
+            "status": "blocked_by_separate_approval",
+            "draft_id": prepared["draft_id"],
+            "source_plan": status["plan"],
+            "target": None,
+            "draft_store_inspected": False,
+            "draft_store_written": False,
+            "required_before_install": [
+                "HongRun separately approves WP4 draft-store write",
+                "exact Jianying executable version and hash are detected read-only",
+                "exact compatibility tuple is approved",
+                "new target is proven nonexistent without reading existing draft contents",
+            ],
+        })
+        guide_path.write_text(
+            "# 剪映原生可编辑草稿 v1（当前状态）\n\n"
+            "当前只完成权威时间轴计划与安全提案，尚未生成、安装或打开真实剪映草稿。\n\n"
+            "1. 自动成片和 `nle-package-v2` 仍是可用兜底。\n"
+            "2. `plan/jianying-draft-plan.json` 是从当前 EDL、SRT 和分层资产生成的只读投影。\n"
+            "3. `draft-status.json` 记录兼容性与边界；`install-proposals` 不包含真实目标路径。\n"
+            "4. 进入真实剪映前，必须另行批准 WP4，并对精确安装版本运行 45–60 秒短片 canary。\n"
+            "5. 本阶段不会启动剪映、读取已有草稿、覆盖项目或导出视频。\n",
+            encoding="utf-8",
+        )
+        return ([plan_path] if plan_current else []) + [
+            status_path, proposal_path, guide_path,
+        ]
+
+    def _write_jianying_native_draft_v1(
+        self, *, nle_package_receipt: Path | None,
+    ) -> tuple[Path, list[Path]] | None:
+        config = self.jianying_native_draft_config
+        if config.get("enabled") is not True:
+            return None
+        if nle_package_receipt is None:
+            raise DirectorContractError(
+                "Jianying native draft requires the current editor-neutral NLE package"
+            )
+        prepared = self._prepare_jianying_native_draft(nle_package_receipt)
+        profile = str(config.get("profile") or "layered_reconstruction")
+        plan_error = self._attempt_jianying_native_plan(
+            nle_package_receipt=nle_package_receipt,
+            plan_path=Path(prepared["plan_path"]),
+            draft_id=str(prepared["draft_id"]),
+            profile=profile,
+            asset_mode=str(config.get("asset_mode") or "linked"),
+        )
+        artifacts = self._write_jianying_native_receipts(
+            prepared=prepared,
+            nle_package_receipt=nle_package_receipt,
+            config=config,
+            plan_error=plan_error,
+        )
+        return Path(prepared["status_path"]), artifacts
+
     def _ensure_manual_correction_ledger(self) -> Path:
         path = self.manual_finish_dir / "correction-ledger.json"
         if not path.is_file():
@@ -6325,6 +6534,39 @@ class Director:
         nle_package_result = self._write_manual_nle_package_v2()
         nle_package_receipt = nle_package_result[0] if nle_package_result else None
         nle_package_artifacts = nle_package_result[1] if nle_package_result else []
+        native_draft_error: str | None = None
+        try:
+            native_draft_result = self._write_jianying_native_draft_v1(
+                nle_package_receipt=nle_package_receipt,
+            )
+        except (DirectorContractError, JianyingNativeDraftError, OSError) as error:
+            native_draft_result = None
+            native_draft_error = f"{type(error).__name__}: {error}"
+            native_draft_status = self.manual_finish_dir / "jianying-native-draft-unavailable.json"
+            write_json(native_draft_status, {
+                "schema_version": 1,
+                "kind": "jianying_native_draft_status",
+                "status": "unavailable",
+                "reason": "optional Jianying native-draft adapter failed safely",
+                "errors": [native_draft_error],
+                "real_jianying_compatibility_claimed": False,
+                "draft_store_read": False,
+                "draft_store_written": False,
+                "automatic_master": {
+                    "path": str(self.delivery_output.resolve()),
+                    "sha256": sha256_file(self.delivery_output),
+                },
+                "nle_package": (
+                    {
+                        "path": str(nle_package_receipt.resolve()),
+                        "sha256": sha256_file(nle_package_receipt),
+                    } if nle_package_receipt is not None else None
+                ),
+            })
+            native_draft_artifacts = [native_draft_status]
+        else:
+            native_draft_status = native_draft_result[0] if native_draft_result else None
+            native_draft_artifacts = native_draft_result[1] if native_draft_result else []
         ledger_path = self._ensure_manual_correction_ledger()
         typed_handoff_path: Path | None = None
         if backend in {"opencut", "other_nle", "openmontage"}:
@@ -6356,6 +6598,10 @@ class Director:
                         str(self.manual_nle_package_root / "08-timeline" / "import-order.md")
                         if nle_package_receipt is not None else None
                     ),
+                    "jianying_native_draft_status": (
+                        str(native_draft_status) if native_draft_status is not None else None
+                    ),
+                    "jianying_native_draft_error": native_draft_error,
                     "expected_artifact": str(returned),
                     "capability_boundary": (
                         "The configured NLE is a human-facing option only; no CLI, MCP, Editor API, "
@@ -6425,12 +6671,17 @@ class Director:
             "automatic_master": str(self.delivery_output),
             "returned_final": str(returned),
             "returned_final_sha256": sha256_file(returned),
+            "jianying_native_draft_status": (
+                str(native_draft_status) if native_draft_status is not None else None
+            ),
+            "jianying_native_draft_error": native_draft_error,
         })
         self._complete("manual_finish_handoff", [
             decision_path, manifest_path, ledger_path, receipt_path,
             media_report_path, returned_qa_path, final_correctness_path, returned,
             *([typed_handoff_path] if typed_handoff_path is not None else []),
             *nle_package_artifacts,
+            *native_draft_artifacts,
         ])
 
     def _build_optional_delivery_packages(

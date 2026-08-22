@@ -410,6 +410,26 @@ Complete a video only when applicable gates pass.
   the short canary and complete the five caption/motion/SFX/IP/outro edits before
   promoting the named compatibility profile. Native draft/API/CLI/headless
   capabilities remain false.
+- Keep `jianying_native_draft` default-off. When explicitly enabled, require a
+  current valid NLE package, exact EDL/SRT/layer-timeline and asset hashes, a
+  deterministic rational-frame plan, Chinese guide and target-free install
+  proposal. Disabled execution creates no native-adapter directory.
+- WP0–WP3 may validate only isolated synthetic contract fixtures. Every fixture
+  must state `synthetic_fixture_only=true`, claim no real Jianying compatibility,
+  contain no proprietary effect/resource IDs or privacy metadata, rebuild to the
+  same canonical hash, and refuse traversal, symlink/Junction and existing
+  targets. Never install it into Jianying.
+- Require layered base clips to equal EDL output ranges and require the native
+  projection to derive conformed clean-A-roll source-in from each output start.
+  Permit one motion clip and its paired SFX to share a semantic/render binding,
+  but reject duplicates within the same role.
+- Re-parse the source plan, standard editable and NLE fallbacks, projected
+  native plan, adapter report and every package JSON. Reject absolute
+  home/cache paths, URLs, secret-bearing fields, source-plan drift and package
+  size overrun even when hashes were recomputed after tampering.
+- Native-plan or adapter failure must not remove or invalidate the automatic
+  master or `nle-package-v2`. Real draft generation/install and the five-task
+  short-video canary remain unresolved until separately authorized WP4/WP5.
 
 ## Optional derived outputs
 

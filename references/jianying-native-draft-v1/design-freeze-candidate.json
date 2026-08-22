@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "candidate_id": "jianying-native-draft-v1-design-freeze-2026-08-22",
+  "status": "pending_user_approval",
+  "created_at": "2026-08-22T05:03:36.3825865-07:00",
+  "repository": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor",
+    "branch": "main",
+    "head_at_design_start": "5005471aad89e45a1375b0cab4eaddae14a4608f"
+  },
+  "canonical_objective": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor\\references\\jianying-native-draft-v1\\goal-objective.md",
+    "sha256": "34762b053ff2c35e79161c3e6d9fad76deb1ab3d39d94ad14940224b458ddf37",
+    "resume_rule": "After task recovery, context compaction, or model change, fully read the canonical objective before continuing."
+  },
+  "design_decision": {
+    "architecture": "canonical_handoff_graph_with_disposable_jianying_projection",
+    "primary_adapter_candidate": "pyjianyingdraft_0_3",
+    "secondary_research_candidate": "capcut_cli_jianying_0_20",
+    "default_behavior": "disabled",
+    "profiles": [
+      "repair_draft",
+      "layered_reconstruction"
+    ],
+    "preferred_canary_profile": "layered_reconstruction",
+    "compatibility_policy": "exact_os_editor_adapter_layout_profile_tuple_only",
+    "production_default": false,
+    "first_real_gate": "45_to_60_second_authorized_hongrun_portrait_product_canary"
+  },
+  "frozen_authorities": {
+    "cuts_and_gaps": "video-use_edl",
+    "parallel_layer_placement": "layer-timeline.json",
+    "caption_text_and_timing": "master.srt",
+    "semantic_and_render_windows": "semantic_brief_storyboard_and_hyperframes",
+    "audio_decisions": "director_audio_plan",
+    "identity_and_rights": "profile_assets_and_rights_receipts",
+    "native_draft": "derived_output_only_never_authority"
+  },
+  "frozen_boundaries": {
+    "existing_draft_read_modify_merge_or_overwrite": "forbidden",
+    "native_generation_root": "project_local_staging_only",
+    "editor_store_install": "separate_explicit_approval_required",
+    "auto_open_export_publish": "forbidden",
+    "proprietary_effect_transition_template_ids": "forbidden",
+    "official_api_claim": "not_verified",
+    "editor_neutral_fallback": "mandatory",
+    "long_or_full_video_render_for_canary": "forbidden",
+    "secret_or_login_requirement": "forbidden"
+  },
+  "artifact_inventory": [
+    {
+      "path": "references/jianying-native-draft-v1/acceptance-matrix.md",
+      "sha256": "986801ee913e3d6018e215d7eb81589e5cf0d234ccb4cea7fddc313da3143872"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/architecture-and-tool-boundaries.md",
+      "sha256": "3b015e50e80665333ef27d094866cfbd10a3658a4a1bbc723e1a26acebbb6a29"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/canary-plan.md",
+      "sha256": "ef721c6b8cd2a398614df0efd2ce0861932c4f84fbe0154014a5a9b52dbad5f4"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/design-review-report.md",
+      "sha256": "7e302374924b79b112b40c7675f0f8013b76c24002dbe9fbf5fbe5c265449f60"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/draft-layout-and-versioning.md",
+      "sha256": "dc0501447fe29e20091df16312a12bc473c67211bd33511a403de21edb1aaf55"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/goal-objective.md",
+      "sha256": "34762b053ff2c35e79161c3e6d9fad76deb1ab3d39d94ad14940224b458ddf37"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/implementation-plan.md",
+      "sha256": "31f2eca5e74148409eb2020b26ff4311ef4f98e0029287c854d7485fb68d1def"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/migration-and-rollback.md",
+      "sha256": "5446d989295dbffa75bce343f658fb979e8d6f80167e2093de128d327ec63685"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/README.md",
+      "sha256": "fb9070e9f985b7e590eebaa28f5bba8ec2727caf94607713aa5e4910259535b2"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/requirements-traceability.md",
+      "sha256": "94e83758b4b860f7d6dd067e5303c0493582f5c314c88e6b8ffd879a3115d456"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/research-sources.md",
+      "sha256": "90d824c494dfa20dfbfbde2cb5d9873c46d1ac50f9fc535c7b72c76fdd888d0c"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/risk-and-cost-ledger.md",
+      "sha256": "51293b36add479b3969f76236fa3bde315679c68ff24d94fd2f7d417e635cb62"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/schemas/jianying-canary-review.schema.json",
+      "sha256": "7eff7a667b5ff82464402dcf5f73a91ee3354f03399d3ca7e09f52e2971a68d2"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/schemas/jianying-compatibility-profile.schema.json",
+      "sha256": "9afb8398d4551fd685b4c0b1406076bb7ba81e5435dde2ab868bd5a0e89f9836"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/schemas/jianying-draft-package.schema.json",
+      "sha256": "f1307b429c2428fec11c44de10c38a6c0e0780ca0d14f0e83c70e6650cbeeadf"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/schemas/jianying-draft-plan.schema.json",
+      "sha256": "de4b7a6d0239ba3f0ab4997f8a59a6e3409e483a342118571346f66cb3d8f689"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/security-isolation.md",
+      "sha256": "d9cb9463c5fba8455145630d725b18ce0423a0937f564dddc932db05f173b6ca"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/timeline-authority.md",
+      "sha256": "c55f06f5a9216243bb9c28d1089d661e203e1ff6d090cbab033aadde63485ad3"
+    },
+    {
+      "path": "references/jianying-native-draft-v1/track-contracts.md",
+      "sha256": "89fe74cdceb6065dc01a17ec6f571befe1ac52ff3388382fe7d12fbfaf81ca9c"
+    }
+  ],
+  "validation": {
+    "requirement_ids": "JYD-RQ-001_through_JYD-RQ-024_present",
+    "requirement_count": 24,
+    "design_markdown_count": 15,
+    "schema_count": 4,
+    "json_parse": "pass",
+    "json_schema_draft_2020_12_meta_validation": "pass",
+    "artifact_hash_verification": "pass",
+    "design_review": "pass_with_implementation_and_exact_version_canary_pending",
+    "real_jianying_compatibility": "not_tested_not_claimed"
+  },
+  "current_stage_prohibitions": [
+    "production_implementation_or_test_changes",
+    "dependency_installation",
+    "real_native_draft_generation",
+    "jianying_store_or_existing_draft_access",
+    "long_or_full_video_render",
+    "ui_automation_export_or_publish",
+    "commit_or_push"
+  ],
+  "next_stage_if_approved": {
+    "authorized_scope": "WP0_through_WP3_implementation_tests_and_isolated_synthetic_fixtures",
+    "still_requires_separate_approval": [
+      "WP4_editor_store_installation_or_any_existing_draft_store_write",
+      "WP5_real_short_project_install_open_edit_and_returned_export_canary",
+      "long_or_full_video_render",
+      "production_default",
+      "proprietary_effects_existing_draft_merge_or_ui_automation"
+    ]
+  },
+  "approval_request": {
+    "decision": "pending",
+    "required_actor": "HongRun",
+    "approval_phrase": "批准 jianying-native-draft-v1 design-freeze-candidate，按照实施计划进入下一阶段实现。"
+  }
+}

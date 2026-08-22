@@ -1692,6 +1692,7 @@ class DirectorTests(unittest.TestCase):
         director.stage_manual_finish_handoff()
         self.assertEqual(director.state["stages"]["manual_finish_handoff"]["status"], "complete")
         self.assertFalse((director.root / "manual-finish" / "handoff-manifest.json").exists())
+        self.assertFalse(director.jianying_native_draft_root.exists())
         decision = json.loads((director.root / "manual-finish" / "decision.json").read_text(encoding="utf-8"))
         self.assertFalse(decision["enabled"])
         self.assertEqual(director.delivery_qa_output, director.delivery_output)
@@ -1783,6 +1784,247 @@ class DirectorTests(unittest.TestCase):
         self.assertTrue(_artifact_records_current(records))
         (director.manual_nle_package_root / "02-captions" / "master.srt").unlink()
         self.assertFalse(_artifact_records_current(records))
+
+    def test_enabled_jianying_native_adapter_builds_plan_only_and_preserves_fallbacks(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["manual_finish"] = {
+            "enabled": True,
+            "backend": "other_nle",
+            "modifications": [],
+            "nle_package": {
+                "enabled": True,
+                "profile": "jianying_desktop_compatible_v1",
+                "level": "balanced",
+            },
+            "jianying_native_draft": {
+                "enabled": True,
+                "profile": "layered_reconstruction",
+            },
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director.video_use_dir.mkdir(parents=True, exist_ok=True)
+        (director.video_use_dir / "base-preview.mp4").write_bytes(b"clean")
+        (director.video_use_dir / "master.srt").write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\n字幕\n", encoding="utf-8",
+        )
+        (director.video_use_dir / "edl.json").write_text(json.dumps({
+            "owner": "video-use", "sources": {"input": str(director.context.source_video)},
+            "ranges": [{"id": "c1", "source": "input", "start": 0.0,
+                        "end": 1.0, "timeline_start": 0.0}],
+            "gaps": [], "transitions": [], "metadata": {"video_id": "sample"},
+        }), encoding="utf-8")
+        director.delivery_output.parent.mkdir(parents=True)
+        director.delivery_output.write_bytes(b"automatic")
+        director.full_hyperframes_project.mkdir(parents=True)
+        cue = director.full_hyperframes_project / "assets" / "sfx" / "cue.wav"
+        cue.parent.mkdir(parents=True)
+        cue.write_bytes(b"cue")
+        (director.full_hyperframes_project / "audio-plan.json").write_text(json.dumps({
+            "motion_sfx": {"event_decisions": [{
+                "decision": "cue", "asset": "assets/sfx/cue.wav",
+                "semantic_event_id": "semantic-1", "event_id": "render-1",
+                "start": 0.25, "duration_seconds": 0.5, "volume": 0.5,
+            }]},
+        }), encoding="utf-8")
+
+        director._start("manual_finish_handoff")
+        with patch("director.probe_video_frame_rate", return_value=25.0), patch(
+            "director._ffprobe_audio_metadata",
+            return_value={"sample_rate": 48000, "channels": 2, "duration_seconds": 0.5},
+        ), patch.object(
+            director, "_motion_source_media",
+            return_value={"width": 1080, "height": 1920, "duration_seconds": 1.0},
+        ):
+            with self.assertRaisesRegex(DirectorContractError, "human manual finishing"):
+                director.stage_manual_finish_handoff()
+
+        plan = director.jianying_native_draft_root / "plan" / "jianying-draft-plan.json"
+        status_path = director.jianying_native_draft_root / "draft-status.json"
+        proposal = next(
+            (director.jianying_native_draft_root / "install-proposals").glob("*.json")
+        )
+        guide = director.jianying_native_draft_root / "README-中文.md"
+        self.assertTrue(plan.is_file())
+        self.assertTrue(guide.is_file())
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        self.assertEqual(status["status"], "action_required")
+        self.assertEqual(status["maturity"], "director_integrated")
+        self.assertFalse(status["real_jianying_compatibility_claimed"])
+        self.assertFalse(status["draft_store_read"])
+        self.assertFalse(status["draft_store_written"])
+        native_plan = json.loads(plan.read_text(encoding="utf-8"))
+        sfx = next(
+            track for track in native_plan["tracks"]
+            if track["track_id"] == "audio.sfx.render-1"
+        )
+        self.assertEqual(sfx["clips"][0]["payload"]["sample_rate_hz"], 48000)
+        self.assertEqual(sfx["clips"][0]["payload"]["gain_db"], -6.021)
+        self.assertEqual(
+            status["fallbacks"]["automatic_master"]["sha256"],
+            sha256_file(director.delivery_output),
+        )
+        self.assertEqual(
+            status["fallbacks"]["nle_package"]["sha256"],
+            sha256_file(director.manual_nle_package_root / "10-evidence" / "nle-handoff-package.json"),
+        )
+        install = json.loads(proposal.read_text(encoding="utf-8"))
+        self.assertEqual(install["status"], "blocked_by_separate_approval")
+        self.assertIsNone(install["target"])
+        self.assertFalse(install["draft_store_inspected"])
+        action = json.loads(director.action_path.read_text(encoding="utf-8"))
+        self.assertEqual(action["actions"][0]["jianying_native_draft_status"], str(status_path))
+        self.assertFalse((director.jianying_native_draft_root / "published").exists())
+
+    def test_jianying_adapter_failure_does_not_block_manual_fallback_packet(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["manual_finish"] = {
+            "enabled": True, "backend": "other_nle", "modifications": [],
+            "nle_package": {"enabled": True, "level": "balanced"},
+            "jianying_native_draft": {"enabled": True},
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director.video_use_dir.mkdir(parents=True, exist_ok=True)
+        (director.video_use_dir / "base-preview.mp4").write_bytes(b"clean")
+        (director.video_use_dir / "master.srt").write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\n字幕\n", encoding="utf-8",
+        )
+        (director.video_use_dir / "edl.json").write_text(json.dumps({
+            "owner": "video-use", "sources": {"input": str(director.context.source_video)},
+            "ranges": [{"id": "c1", "source": "input", "start": 0.0,
+                        "end": 1.0, "timeline_start": 0.0}],
+            "gaps": [], "transitions": [], "metadata": {"video_id": "sample"},
+        }), encoding="utf-8")
+        director.delivery_output.parent.mkdir(parents=True)
+        director.delivery_output.write_bytes(b"automatic")
+
+        director._start("manual_finish_handoff")
+        with patch("director.probe_video_frame_rate", return_value=25.0), patch.object(
+            director, "_motion_source_media",
+            return_value={"width": 1080, "height": 1920, "duration_seconds": 1.0},
+        ), patch.object(
+            director, "_write_jianying_native_draft_v1",
+            side_effect=DirectorContractError("redirected native output"),
+        ):
+            with self.assertRaisesRegex(DirectorContractError, "human manual finishing"):
+                director.stage_manual_finish_handoff()
+
+        action = json.loads(director.action_path.read_text(encoding="utf-8"))
+        row = action["actions"][0]
+        self.assertTrue(Path(row["layered_nle_package"]).is_file())
+        failure_status = Path(row["jianying_native_draft_status"])
+        self.assertTrue(failure_status.is_file())
+        self.assertEqual(
+            json.loads(failure_status.read_text(encoding="utf-8"))["status"],
+            "unavailable",
+        )
+        self.assertIn("redirected native output", row["jianying_native_draft_error"])
+        self.assertTrue(director.delivery_output.is_file())
+
+    def test_jianying_adapter_programming_error_is_not_swallowed(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["manual_finish"] = {
+            "enabled": True, "backend": "other_nle", "modifications": [],
+            "nle_package": {"enabled": True, "level": "balanced"},
+            "jianying_native_draft": {"enabled": True},
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director.delivery_output.parent.mkdir(parents=True)
+        director.delivery_output.write_bytes(b"automatic")
+        receipt = director.root / "fixture-nle-receipt.json"
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_text("{}", encoding="utf-8")
+        handoff = director.root / "fixture-handoff.json"
+        handoff.write_text("{}", encoding="utf-8")
+        director._start("manual_finish_handoff")
+        for error_type in (RuntimeError, ValueError):
+            with self.subTest(error_type=error_type.__name__), patch.object(
+                director, "_write_manual_handoff_manifest", return_value=handoff,
+            ), patch.object(
+                director, "_write_manual_nle_package_v2", return_value=(receipt, []),
+            ), patch.object(
+                director, "_write_jianying_native_draft_v1",
+                side_effect=error_type("programming regression"),
+            ):
+                with self.assertRaisesRegex(error_type, "programming regression"):
+                    director.stage_manual_finish_handoff()
+        self.assertFalse(
+            (director.manual_finish_dir / "jianying-native-draft-unavailable.json").exists()
+        )
+
+    def test_jianying_plan_compiler_programming_error_is_not_swallowed(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["manual_finish"] = {
+            "enabled": True, "backend": "other_nle", "modifications": [],
+            "nle_package": {"enabled": True, "level": "balanced"},
+            "jianying_native_draft": {"enabled": True},
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        receipt = director.root / "fixture-nle-receipt.json"
+        receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt.write_text("{}", encoding="utf-8")
+
+        for error_type in (TypeError, ValueError):
+            with self.subTest(error_type=error_type.__name__), patch(
+                "director.compile_draft_plan",
+                side_effect=error_type("compiler programming regression"),
+            ):
+                with self.assertRaisesRegex(
+                    error_type, "compiler programming regression"
+                ):
+                    director._write_jianying_native_draft_v1(
+                        nle_package_receipt=receipt,
+                    )
+
+        self.assertFalse(
+            (director.jianying_native_draft_root / "draft-status.json").exists()
+        )
+
+    def test_failed_repair_plan_never_reuses_stale_native_plan(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["manual_finish"] = {
+            "enabled": True, "backend": "other_nle", "modifications": [],
+            "nle_package": {"enabled": True, "level": "balanced"},
+            "jianying_native_draft": {"enabled": True, "profile": "repair_draft"},
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        director.video_use_dir.mkdir(parents=True, exist_ok=True)
+        (director.video_use_dir / "base-preview.mp4").write_bytes(b"clean")
+        (director.video_use_dir / "master.srt").write_text(
+            "1\n00:00:00,000 --> 00:00:01,000\n字幕\n", encoding="utf-8",
+        )
+        (director.video_use_dir / "edl.json").write_text(json.dumps({
+            "owner": "video-use", "sources": {"input": str(director.context.source_video)},
+            "ranges": [{"id": "c1", "source": "input", "start": 0.0,
+                        "end": 1.0, "timeline_start": 0.0}],
+            "gaps": [], "transitions": [], "metadata": {"video_id": "sample"},
+        }), encoding="utf-8")
+        director.delivery_output.parent.mkdir(parents=True)
+        director.delivery_output.write_bytes(b"automatic")
+        stale = director.jianying_native_draft_root / "plan" / "jianying-draft-plan.json"
+        stale.parent.mkdir(parents=True)
+        stale.write_text('{"stale":true}', encoding="utf-8")
+
+        director._start("manual_finish_handoff")
+        with patch("director.probe_video_frame_rate", return_value=25.0), patch.object(
+            director, "_motion_source_media",
+            return_value={"width": 1080, "height": 1920, "duration_seconds": 1.0},
+        ):
+            with self.assertRaisesRegex(DirectorContractError, "human manual finishing"):
+                director.stage_manual_finish_handoff()
+
+        status = json.loads(
+            (director.jianying_native_draft_root / "draft-status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(status["status"], "unavailable")
+        self.assertIsNone(status["plan"])
+        self.assertTrue(status["errors"])
 
     def test_standard_editable_delivery_is_always_built_without_enabling_nle_package(self) -> None:
         director = Director(self.project)
@@ -2175,11 +2417,40 @@ class DirectorTests(unittest.TestCase):
         media_report.write_text(json.dumps({
             "decode_status": "pass", "sha256": sha256_file(returned),
         }), encoding="utf-8")
+        director.project["delivery"]["manual_finish"]["jianying_native_draft"][
+            "enabled"
+        ] = True
+        nle_receipt = director.root / "fixture-current-nle-receipt.json"
+        nle_receipt.write_text("{}", encoding="utf-8")
 
         director._start("manual_finish_handoff")
-        with patch.object(director, "_ensure_manual_return_media_report", return_value=media_report):
+        with patch.object(
+            director, "_ensure_manual_return_media_report", return_value=media_report,
+        ), patch.object(
+            director, "_write_manual_nle_package_v2", return_value=(nle_receipt, []),
+        ), patch.object(
+            director, "_write_jianying_native_draft_v1",
+            side_effect=DirectorContractError("native adapter unavailable"),
+        ):
             director.stage_manual_finish_handoff()
         self.assertEqual(director.state["stages"]["manual_finish_handoff"]["status"], "complete")
+        decision = json.loads(
+            (director.manual_finish_dir / "decision.json").read_text(encoding="utf-8")
+        )
+        native_status = Path(decision["jianying_native_draft_status"])
+        self.assertEqual(decision["jianying_native_draft_error"], (
+            "DirectorContractError: native adapter unavailable"
+        ))
+        self.assertEqual(
+            json.loads(native_status.read_text(encoding="utf-8"))["status"],
+            "unavailable",
+        )
+        stage_row = director.state["stages"]["manual_finish_handoff"]
+        self.assertIn(str(native_status), stage_row["artifacts"])
+        record = next(
+            row for row in stage_row["artifact_records"] if row["path"] == str(native_status)
+        )
+        self.assertEqual(record["sha256"], sha256_file(native_status))
 
         returned_stat = returned.stat()
         returned.write_bytes(b"manual-v2")

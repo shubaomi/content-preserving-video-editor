@@ -28,6 +28,13 @@ profile-root/
         ├── hyperframes/
         ├── scripts/
         ├── work/
+        │   └── director/manual-finish/
+        │       ├── nle-package-v2/
+        │       └── jianying-native-draft-v1/
+        │           ├── plan/
+        │           ├── draft-status.json
+        │           ├── README-中文.md
+        │           └── install-proposals/
         └── exports/
 ```
 

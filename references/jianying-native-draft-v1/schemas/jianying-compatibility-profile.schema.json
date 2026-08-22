@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.content-preserving-video-editor/schemas/jianying-compatibility-profile-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "os", "editor", "adapter", "serialization_profile", "draft_layout_signature", "maturity", "capabilities", "canary_receipt"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"},
+    "os": {"type": "object", "required": ["name", "architecture"], "properties": {"name": {"const": "windows"}, "architecture": {"type": "string", "minLength": 1}}, "additionalProperties": false},
+    "editor": {"type": "object", "required": ["product", "version", "executable_sha256"], "properties": {"product": {"const": "jianying_desktop"}, "version": {"type": "string", "minLength": 1}, "executable_sha256": {"$ref": "#/$defs/sha256"}}, "additionalProperties": false},
+    "adapter": {"type": "object", "required": ["id", "version", "artifact_sha256", "license"], "properties": {"id": {"enum": ["pyjianyingdraft_0_3", "capcut_cli_jianying_0_20"]}, "version": {"type": "string", "minLength": 1}, "artifact_sha256": {"$ref": "#/$defs/sha256"}, "license": {"enum": ["Apache-2.0", "MIT"]}}, "additionalProperties": false},
+    "serialization_profile": {"type": "string", "minLength": 1},
+    "draft_layout_signature": {"$ref": "#/$defs/sha256"},
+    "maturity": {"enum": ["documented", "fixture_validated", "real_project_validated"]},
+    "capabilities": {"type": "object", "additionalProperties": {"enum": ["supported", "degraded", "unsupported", "unverified"]}},
+    "canary_receipt": {"anyOf": [{"$ref": "#/$defs/file_ref"}, {"type": "null"}]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"maturity": {"const": "real_project_validated"}}},
+      "then": {"properties": {"canary_receipt": {"$ref": "#/$defs/file_ref"}}}
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "file_ref": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1}, "sha256": {"$ref": "#/$defs/sha256"}}}
+  }
+}

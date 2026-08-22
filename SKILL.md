@@ -851,7 +851,7 @@ an absolute path and current SHA-256 plus type, purpose, and provenance. Mark a
 missing optional asset `unavailable`; never invent a file or hash. Continue to
 deliver only one universal MP4.
 
-When schema-v12 `delivery.manual_finish.nle_package.enabled` is explicitly true,
+When schema-v13 `delivery.manual_finish.nle_package.enabled` is explicitly true,
 also build the editor-neutral `nle-package-v2` from current, hash-bound assets.
 At minimum `balanced` contains the immutable automatic reference, clean A-roll,
 UTF-8 SRT, available semantic-caption references, layer timeline/OTIO, rights and
@@ -886,6 +886,25 @@ clean exit, exact canvas/rate/duration, and black/white/busy-background proofs,
 then package the ProRes 4444 candidates with exact timeline offsets and a
 deterministic HyperFrames source-project ZIP. Keep Jianying alpha compatibility
 pending until the named human canary; a verified codec is not an import claim.
+
+When schema-v13 `delivery.manual_finish.jianying_native_draft.enabled` is also
+explicitly true, require backend `other_nle` and the current layered NLE package.
+Compile its EDL, SRT, layer timeline and available asset hashes into one
+frame-exact `jianying-draft-plan.json`; emit `draft-status.json`, a Chinese guide
+and a target-free install proposal. This WP0–WP3 route must remain default-off,
+must not launch Jianying, inspect or write its draft store, install dependencies,
+or claim a real native project. Isolated synthetic fixtures are test evidence
+only. Preserve the automatic master and editor-neutral package on any native
+adapter failure. Real materialization/install and exact-version short canary are
+separate WP4/WP5 approvals.
+In `layered_reconstruction`, project one base clip per EDL output range and
+preserve gaps as empty timeline time. `clean_a_roll` is a conformed output-time
+asset, so the native projection derives each base `source_start_frame` from its
+output start; event-local media uses source frame zero. Bind event SFX to probed
+48 kHz stream metadata and the current audio-plan gain. Re-parse the source
+plan, all package JSON, fallbacks, inventories and size limit independently;
+unknown programming errors must surface, while expected optional-adapter
+failures write a tracked `unavailable` status without invalidating fallbacks.
 
 Record every approved adjustment in `correction-ledger.json` with event ID,
 file/selector target, property, before/after values, reason, approver, approval

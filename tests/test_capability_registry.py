@@ -164,6 +164,7 @@ class CapabilityRegistryTests(unittest.TestCase):
             "current_golden_runtime_evidence",
             "advanced_runtime_gate",
             "typed_nle_handoff",
+            "jianying_native_draft_v1",
             "optional_media_adapters",
         } <= set(by_name))
         self.assertEqual(by_name["adaptive_layout"]["declared_maturity"], "fixture_validated")
@@ -184,9 +185,15 @@ class CapabilityRegistryTests(unittest.TestCase):
             "content_format_motion_grammar", "perceptual_motion_audio",
             "caption_sync_closure", "editorial_promise_closure",
             "current_golden_runtime_evidence", "advanced_runtime_gate",
-            "typed_nle_handoff", "optional_media_adapters",
+            "typed_nle_handoff", "jianying_native_draft_v1",
+            "optional_media_adapters",
         ):
             self.assertEqual(by_name[name]["declared_maturity"], "fixture_validated")
+        self.assertFalse(by_name["jianying_native_draft_v1"]["enabled"])
+        self.assertEqual(
+            by_name["jianying_native_draft_v1"]["configuration_route"],
+            "delivery.manual_finish.jianying_native_draft",
+        )
         self.assertFalse(by_name["openmontage_handoff"]["enabled"])
         self.assertEqual(by_name["production_contract"]["maturity"], "director_integrated")
         required = {
