@@ -21,7 +21,11 @@ Schema v13 also contains a separate default-off Jianying native-draft adapter.
 Its currently integrated route generates only a frame-exact plan, Chinese
 status/usage guide and target-free install proposal; isolated synthetic fixtures
 do not prove real Jianying compatibility. Draft-store installation and the real
-45–60 second open/edit/export canary remain separately approved WP4/WP5 work.
+45–60 second open/edit/export canary remain separately gated. WP4 now supplies a
+standalone install/rollback boundary for one fixed target inside a marker-bound,
+project-local synthetic test store. It never enumerates sibling drafts and
+cannot address a real Jianying store. Real short-project installation, opening,
+editing and export remain WP5 and require another explicit approval.
 For `layered_reconstruction`, `video.base` contains one clip per EDL output
 range; explicit gaps remain empty. Because `clean_a_roll` is already conformed
 to the output timeline, synthetic native records derive each base source-in
@@ -29,6 +33,8 @@ from that clip's output start. Event-local motion/SFX assets start at source
 frame zero. Package validation re-parses the source plan, fallbacks and every
 JSON record, and any optional-adapter failure leaves an `unavailable` receipt.
 See [`references/jianying-native-draft-v1/README.md`](references/jianying-native-draft-v1/README.md).
+The approved WP4-only boundary is documented separately in
+[`references/jianying-native-draft-v1/wp4-install-boundary.md`](references/jianying-native-draft-v1/wp4-install-boundary.md).
 
 ## Local setup
 

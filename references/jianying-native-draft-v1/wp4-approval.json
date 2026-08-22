@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "kind": "jianying_native_draft_v1_wp4_approval",
+  "status": "approved",
+  "actor": "HongRun",
+  "approved_at": "2026-08-22T08:38:39.9319459-07:00",
+  "approval_text": "批准 jianying-native-draft-v1 WP4：按照已冻结设计实现剪映草稿安装边界。仅允许创建一个全新且确认不存在的测试草稿，不得读取、修改、合并、覆盖或删除任何现有剪映草稿；不得启动剪映、导出视频或进入 WP5。完成实现、隔离测试、安全复审、证据刷新、提交并推送 GitHub后，等待我批准真实短片 canary",
+  "design_candidate": {
+    "path": "design-freeze-candidate.json",
+    "sha256": "233fb713dbca2a470e1df604114bb76a9757451655c176309e5f027bede7f0fe"
+  },
+  "authorized_scope": "isolated_test_store_install_boundary_implementation_only",
+  "prohibited_scope": [
+    "real_jianying_draft_store_installation",
+    "existing_draft_read_modify_merge_overwrite_or_delete",
+    "launch_jianying",
+    "export_video",
+    "wp5_real_short_canary",
+    "long_or_full_video_render"
+  ]
+}

@@ -476,9 +476,11 @@ target-free install proposal. The adapter remains default-off, does not launch
 Jianying, does not read or write its draft store, and does not produce a real
 native draft. `install` must remain `false`; unknown adapter/profile/asset mode,
 non-finite size budgets, or extra secret-bearing fields fail validation. Real
-materialization/installation requires separate WP4 approval and exact-version
-compatibility; a short named-user canary is required before any real-project
-claim.
+materialization/installation requires exact-version compatibility and the WP5
+short named-user canary before any real-project claim. The separately approved
+WP4 installer is not configured by this block: it accepts only a validated
+synthetic fixture, one fixed nonexistent target, and a marker-bound test store
+inside the authorized project root. It cannot be switched to a real draft store.
 `layered_reconstruction` preserves one base clip per EDL output range. Its clean
 A-roll is already conformed, so native source-in equals the output start;
 `repair_draft` instead uses one full-duration baked pre-caption candidate and

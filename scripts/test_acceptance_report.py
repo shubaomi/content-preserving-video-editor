@@ -20,6 +20,12 @@ REQUIRED_TEST_IDS = (
     "test_old_state_migration_invalidates_all_unverifiable_completed_work",
     "test_concurrent_identical_request_set_serializes_manifest_creation",
     "test_platform_validation_rebuilds_reports_when_cover_bytes_change",
+    "test_wp4_install_creates_only_fixed_new_test_target_without_store_enumeration",
+    "test_wp4_install_cleans_staging_when_atomic_promotion_fails",
+    "test_wp4_install_cleans_identity_bound_partial_staging_on_copy_failure",
+    "test_wp4_receipt_validation_returns_error_on_target_identity_race",
+    "test_wp4_validation_and_rollback_reject_project_root_as_store",
+    "test_wp4_rollback_requires_exact_unchanged_generated_inventory",
 )
 REQUIRED_TEST_CASES = (
     "test_technical_qa.TechnicalQaTests."
@@ -32,6 +38,18 @@ REQUIRED_TEST_CASES = (
     "test_concurrent_identical_request_set_serializes_manifest_creation",
     "test_director.DirectorTests."
     "test_platform_validation_rebuilds_reports_when_cover_bytes_change",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests."
+    "test_wp4_install_creates_only_fixed_new_test_target_without_store_enumeration",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests."
+    "test_wp4_install_cleans_staging_when_atomic_promotion_fails",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests."
+    "test_wp4_install_cleans_identity_bound_partial_staging_on_copy_failure",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests."
+    "test_wp4_receipt_validation_returns_error_on_target_identity_race",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests."
+    "test_wp4_validation_and_rollback_reject_project_root_as_store",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests."
+    "test_wp4_rollback_requires_exact_unchanged_generated_inventory",
 )
 
 

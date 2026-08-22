@@ -194,6 +194,10 @@ class CapabilityRegistryTests(unittest.TestCase):
             by_name["jianying_native_draft_v1"]["configuration_route"],
             "delivery.manual_finish.jianying_native_draft",
         )
+        self.assertIn(
+            "isolated_test_install_receipt",
+            by_name["jianying_native_draft_v1"]["outputs"],
+        )
         self.assertFalse(by_name["openmontage_handoff"]["enabled"])
         self.assertEqual(by_name["production_contract"]["maturity"], "director_integrated")
         required = {

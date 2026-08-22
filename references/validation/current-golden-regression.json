@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite_version": "2026.08-p0p1p2",
-  "generated_at": "2026-08-22T14:27:23.092795+00:00",
+  "generated_at": "2026-08-22T16:58:21.664226+00:00",
   "status": "pass",
   "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
   "source": {
@@ -25,7 +25,7 @@
       "scripts/director.py": "210d7cd05ebdbffda5cc05974eed731c3309c9745f419dc84268c0d4b317544d",
       "scripts/project_config.py": "01741b759cd1bf2dbf95c1ededaace0e4787f522d70574584378c681384c3581",
       "scripts/delivery_readiness.py": "4a409e9deb1abe2663dfb9e6145fc3334649197266bf072cd7c395349ab7d4ac",
-      "scripts/capability_registry.py": "4a6cdb4db90da8b9aa2971c773a86e2b628fb7244fba5ea160267b3e264b9c7b",
+      "scripts/capability_registry.py": "394daa6297d0757948cb046681e1f0090ce1e323613fa6885311fd2a465a45f9",
       "scripts/production_contract.py": "7ec71315a6a9e87bc2f74cfa015de4e3394a3143a072995efd7f23433b422195",
       "scripts/completion_audit.py": "4450b68f45d036ebe9bed7bc08667aeed6e999b0d719d55a91cabf39a81bb5d5",
       "scripts/fixture_acceptance.py": "de36fdd4b468d739c7ef0be06d945f8ca1ca69de71075aca73d49e2ecbe532f5",
@@ -549,5 +549,5 @@
       }
     }
   ],
-  "report_integrity_sha256": "dbdd47804d32e34ce724a7c0f543b82bf7556bad366e8b15f68f84fe9a1cab25"
+  "report_integrity_sha256": "136a79a50b701d9c5e1188cd70ff930ebbf7a7aedb90298c6f928b668438d2c7"
 }

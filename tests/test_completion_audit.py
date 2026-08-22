@@ -905,7 +905,7 @@ class CompletionAuditTests(unittest.TestCase):
             test_log = "\n".join([
                 *(f"{test_id} ({test_case}) ... ok"
                   for test_id, test_case in zip(REQUIRED_TEST_IDS, REQUIRED_TEST_CASES)),
-                "Ran 5 tests in 1.0s", "", "OK",
+                f"Ran {len(REQUIRED_TEST_IDS)} tests in 1.0s", "", "OK",
             ])
             write_report_from_output(
                 ROOT, test_log, test_report, root / "tests.log", returncode=0,

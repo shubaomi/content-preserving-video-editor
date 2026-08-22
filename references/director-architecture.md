@@ -183,7 +183,12 @@ fixtures may prove `fixture_validated`, but they are never emitted as real
 Jianying projects. Unknown editor versions, plan/asset drift or adapter failure
 leave the automatic master and editor-neutral package current and usable; no
 route launches Jianying or reads/writes its draft store. Real package creation,
-installation and open/edit/export canary remain separate WP4/WP5 gates.
+installation and open/edit/export canary remain separate gates. The approved
+WP4 standalone boundary is intentionally narrower than the Director: it can
+copy one validated synthetic fixture into one fixed, nonexistent target inside
+a marker-bound project-local test store, without enumerating siblings. Its
+receipt-bound rollback refuses any changed byte. It cannot address the real
+Jianying store; that and all open/edit/export activity remain WP5.
 The layered base inventory mirrors EDL output ranges, including empty gaps.
 Since the clean A-roll is already conformed, its native source-in is derived
 from each output start; event-local overlays and cues start at source frame

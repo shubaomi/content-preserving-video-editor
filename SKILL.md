@@ -891,12 +891,15 @@ When schema-v13 `delivery.manual_finish.jianying_native_draft.enabled` is also
 explicitly true, require backend `other_nle` and the current layered NLE package.
 Compile its EDL, SRT, layer timeline and available asset hashes into one
 frame-exact `jianying-draft-plan.json`; emit `draft-status.json`, a Chinese guide
-and a target-free install proposal. This WP0–WP3 route must remain default-off,
+and a target-free install proposal. This Director route must remain default-off,
 must not launch Jianying, inspect or write its draft store, install dependencies,
 or claim a real native project. Isolated synthetic fixtures are test evidence
-only. Preserve the automatic master and editor-neutral package on any native
-adapter failure. Real materialization/install and exact-version short canary are
-separate WP4/WP5 approvals.
+only. The separately approved WP4 boundary may install exactly one fixed target
+only inside a marker-bound project-local synthetic test store, without
+enumerating siblings, and may roll it back only while its complete receipt
+inventory is unchanged. It cannot address the real Jianying store. Preserve the
+automatic master and editor-neutral package on any native-adapter failure. Real
+short-project installation/open/edit/export remains the separate WP5 user gate.
 In `layered_reconstruction`, project one base clip per EDL output range and
 preserve gaps as empty timeline time. `clean_a_roll` is a conformed output-time
 asset, so the native projection derives each base `source_start_frame` from its

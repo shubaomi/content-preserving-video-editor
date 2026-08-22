@@ -419,6 +419,13 @@ Complete a video only when applicable gates pass.
   contain no proprietary effect/resource IDs or privacy metadata, rebuild to the
   same canonical hash, and refuse traversal, symlink/Junction and existing
   targets. Never install it into Jianying.
+- WP4 installation-boundary evidence must use only the fixed target inside a
+  marker-bound synthetic test store under the authorized project root. Reject
+  any existing target, store/root redirection, outside receipt, sibling
+  enumeration, partial promotion, stale approval or changed rollback inventory.
+  The receipt must explicitly record no existing-draft read/modify, editor
+  launch, export, network, secret or WP5 activity. This does not prove or permit
+  a real Jianying-store installation.
 - Require layered base clips to equal EDL output ranges and require the native
   projection to derive conformed clean-A-roll source-in from each output start.
   Permit one motion clip and its paired SFX to share a semantic/render binding,
@@ -427,9 +434,9 @@ Complete a video only when applicable gates pass.
   native plan, adapter report and every package JSON. Reject absolute
   home/cache paths, URLs, secret-bearing fields, source-plan drift and package
   size overrun even when hashes were recomputed after tampering.
-- Native-plan or adapter failure must not remove or invalidate the automatic
+- Native-plan, test-install or adapter failure must not remove or invalidate the automatic
   master or `nle-package-v2`. Real draft generation/install and the five-task
-  short-video canary remain unresolved until separately authorized WP4/WP5.
+  short-video canary remain unresolved until separately authorized WP5.
 
 ## Optional derived outputs
 

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import hashlib
+import contextlib
+import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -15,21 +18,67 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from director_contracts import sha256_file  # noqa: E402
 from editable_delivery import build_editable_delivery  # noqa: E402
 from jianying_native_draft import (  # noqa: E402
+    WP4_TEST_STORE_MARKER_FILENAME,
+    WP4_TEST_TARGET_NAME,
     JianyingNativeDraftError,
     build_fixture_compatibility_profile,
     compile_draft_plan,
     discover_jianying_executable,
+    install_isolated_test_draft,
     materialize_synthetic_fixture,
+    rollback_isolated_test_draft,
     validate_adapter_lock,
     validate_compatibility_profile,
     validate_draft_package,
     validate_draft_plan,
+    validate_install_receipt,
 )
 from nle_handoff_v2 import build_nle_handoff_package  # noqa: E402
 import jianying_native_package as native_package_module  # noqa: E402
+import jianying_native_install as native_install_module  # noqa: E402
+import jianying_native_install_contracts as native_install_contracts_module  # noqa: E402
+import jianying_native_install_fs as native_install_fs_module  # noqa: E402
 
 
 class JianyingNativeDraftV1Tests(unittest.TestCase):
+    def _materialized_fixture(self, root: Path, *, build_id: str = "wp4") -> Path:
+        receipt = self._package(root)
+        plan_path = root / "native" / "plan" / "jianying-draft-plan.json"
+        compile_draft_plan(
+            nle_package_receipt=receipt,
+            output_path=plan_path,
+            authorized_root=root,
+            draft_id="wp4-isolated-test",
+            profile="layered_reconstruction",
+            asset_mode="linked",
+        )
+        compatibility_path = root / "compatibility.json"
+        compatibility_path.write_text(
+            json.dumps(build_fixture_compatibility_profile()), encoding="utf-8"
+        )
+        output_root = root / "native"
+        materialize_synthetic_fixture(
+            plan_path=plan_path,
+            compatibility_profile_path=compatibility_path,
+            output_root=output_root,
+            authorized_root=root,
+            build_id=build_id,
+            standard_editable_delivery=self._standard_editable(root),
+        )
+        return output_root / "published" / build_id / "draft-package-manifest.json"
+
+    @staticmethod
+    def _isolated_test_store(root: Path) -> Path:
+        store = root / "isolated-test-store"
+        store.mkdir()
+        (store / WP4_TEST_STORE_MARKER_FILENAME).write_text(json.dumps({
+            "schema_version": 1,
+            "kind": "jianying_wp4_isolated_test_store",
+            "purpose": "wp4_install_boundary_test_only",
+            "real_jianying_store": False,
+        }), encoding="utf-8")
+        return store
+
     def _standard_editable(self, root: Path) -> Path:
         automatic = root / "standard-automatic.mp4"
         candidate = root / "standard-candidate.mp4"
@@ -880,6 +929,556 @@ class JianyingNativeDraftV1Tests(unittest.TestCase):
                     build_id="outside",
                     standard_editable_delivery=standard_editable,
                 )
+
+    def test_wp4_install_creates_only_fixed_new_test_target_without_store_enumeration(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            existing = store / "Existing-User-Draft"
+            existing.mkdir()
+            existing_file = existing / "must-remain.txt"
+            existing_file.write_text("untouched", encoding="utf-8")
+            existing_hash = sha256_file(existing_file)
+            receipt_path = root / "receipts" / "wp4-install-receipt.json"
+
+            original_scandir = __import__("os").scandir
+
+            def guarded_scandir(path):
+                if Path(path).resolve() == store.resolve():
+                    raise AssertionError("the installer enumerated the test-store root")
+                return original_scandir(path)
+
+            with patch("jianying_native_install_fs.os.scandir", side_effect=guarded_scandir):
+                receipt = install_isolated_test_draft(
+                    package_manifest_path=manifest_path,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                    receipt_path=receipt_path,
+                )
+
+            target = store / WP4_TEST_TARGET_NAME
+            self.assertTrue(target.is_dir())
+            self.assertEqual(sha256_file(existing_file), existing_hash)
+            self.assertEqual(receipt["status"], "installed_test_only")
+            self.assertFalse(receipt["safety"]["existing_drafts_enumerated"])
+            self.assertFalse(receipt["safety"]["existing_drafts_read"])
+            self.assertFalse(receipt["safety"]["editor_launched"])
+            self.assertEqual(
+                validate_install_receipt(
+                    receipt_path,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                ),
+                [],
+            )
+            with self.assertRaisesRegex(JianyingNativeDraftError, "already exists"):
+                install_isolated_test_draft(
+                    package_manifest_path=manifest_path,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                    receipt_path=root / "receipts" / "second.json",
+                )
+
+    def test_wp4_install_keeps_success_if_pending_intent_cleanup_is_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            receipt_path = root / "receipts" / "install.json"
+            original_lock = native_install_fs_module._locked_directory
+
+            @contextlib.contextmanager
+            def block_final_pending_cleanup(path, expected_identity):
+                if Path(path) == receipt_path.parent and receipt_path.exists():
+                    raise JianyingNativeDraftError("injected pending cleanup block")
+                with original_lock(path, expected_identity) as handle:
+                    yield handle
+
+            with patch(
+                "jianying_native_install_fs._locked_directory",
+                side_effect=block_final_pending_cleanup,
+            ):
+                receipt = install_isolated_test_draft(
+                    package_manifest_path=manifest_path,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                    receipt_path=receipt_path,
+                )
+
+            self.assertEqual(receipt["status"], "installed_test_only")
+            self.assertTrue((store / WP4_TEST_TARGET_NAME).is_dir())
+            self.assertTrue(receipt_path.is_file())
+            self.assertEqual(
+                len(list(receipt_path.parent.glob(".install.json.pending-*.json"))),
+                1,
+            )
+
+    def test_wp4_receipt_validation_returns_error_on_target_identity_race(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            receipt_path = root / "receipts" / "install.json"
+            install_isolated_test_draft(
+                package_manifest_path=manifest_path,
+                authorized_project_root=root,
+                test_store_root=store,
+                receipt_path=receipt_path,
+            )
+            target = store / WP4_TEST_TARGET_NAME
+            original_identity = native_install_contracts_module._identity
+
+            def disappear_during_identity(path):
+                if Path(path) == target:
+                    raise FileNotFoundError("injected target race")
+                return original_identity(path)
+
+            with patch(
+                "jianying_native_install_contracts._identity",
+                side_effect=disappear_during_identity,
+            ):
+                errors = validate_install_receipt(
+                    receipt_path,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                )
+            self.assertTrue(errors)
+
+    def test_wp4_validation_and_rollback_reject_project_root_as_store(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            receipt_path = root / "receipts" / "install.json"
+            install_isolated_test_draft(
+                package_manifest_path=manifest_path,
+                authorized_project_root=root,
+                test_store_root=store,
+                receipt_path=receipt_path,
+            )
+            (root / WP4_TEST_STORE_MARKER_FILENAME).write_text(
+                json.dumps({
+                    "schema_version": 1,
+                    "kind": "jianying_wp4_isolated_test_store",
+                    "purpose": "wp4_install_boundary_test_only",
+                    "real_jianying_store": False,
+                }),
+                encoding="utf-8",
+            )
+            errors = validate_install_receipt(
+                receipt_path,
+                authorized_project_root=root,
+                test_store_root=root,
+            )
+            self.assertTrue(any("below project root" in error for error in errors))
+            with self.assertRaisesRegex(JianyingNativeDraftError, "below project root"):
+                rollback_isolated_test_draft(
+                    install_receipt_path=receipt_path,
+                    authorized_project_root=root,
+                    test_store_root=root,
+                    rollback_receipt_path=root / "receipts" / "rollback.json",
+                )
+
+    def test_wp4_install_rejects_existing_target_redirection_and_outside_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as outside:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            target = store / WP4_TEST_TARGET_NAME
+            target.mkdir()
+            marker = target / "existing.txt"
+            marker.write_text("do-not-overwrite", encoding="utf-8")
+            with self.assertRaisesRegex(JianyingNativeDraftError, "already exists"):
+                install_isolated_test_draft(
+                    package_manifest_path=manifest_path,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                    receipt_path=root / "receipt.json",
+                )
+            self.assertEqual(marker.read_text(encoding="utf-8"), "do-not-overwrite")
+            marker.unlink()
+            target.rmdir()
+
+            with self.assertRaisesRegex(JianyingNativeDraftError, "receipt"):
+                install_isolated_test_draft(
+                    package_manifest_path=manifest_path,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                    receipt_path=Path(outside) / "receipt.json",
+                )
+            original_redirected = native_install_contracts_module._is_redirected
+
+            def redirect_test_store(path):
+                return (
+                    Path(path).resolve(strict=False) == store.resolve(strict=False)
+                    or original_redirected(path)
+                )
+
+            with patch(
+                "jianying_native_install_contracts._is_redirected",
+                side_effect=redirect_test_store,
+            ):
+                with self.assertRaisesRegex(JianyingNativeDraftError, "redirected"):
+                    install_isolated_test_draft(
+                        package_manifest_path=manifest_path,
+                        authorized_project_root=root,
+                        test_store_root=store,
+                        receipt_path=root / "receipt.json",
+                    )
+            self.assertFalse(target.exists())
+
+    def test_wp4_install_cleans_staging_when_atomic_promotion_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            original_rename = native_install_module.os.rename
+
+            def fail_promotion(source, destination):
+                if Path(destination).name == WP4_TEST_TARGET_NAME:
+                    raise OSError("injected atomic promotion failure")
+                return original_rename(source, destination)
+
+            with patch(
+                "jianying_native_install.os.rename",
+                side_effect=fail_promotion,
+            ):
+                with self.assertRaisesRegex(OSError, "injected"):
+                    install_isolated_test_draft(
+                        package_manifest_path=manifest_path,
+                        authorized_project_root=root,
+                        test_store_root=store,
+                        receipt_path=root / "receipts" / "install.json",
+                    )
+            self.assertFalse((store / WP4_TEST_TARGET_NAME).exists())
+            self.assertEqual(
+                [path.name for path in store.iterdir()],
+                [WP4_TEST_STORE_MARKER_FILENAME],
+            )
+
+    def test_wp4_install_cleans_identity_bound_partial_staging_on_copy_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+
+            def fail_mid_copy(source, staging, **kwargs):
+                (Path(staging) / "partial.json").write_text(
+                    "partial", encoding="utf-8"
+                )
+                raise OSError("injected mid-copy failure")
+
+            with patch(
+                "jianying_native_install._copy_tree", side_effect=fail_mid_copy,
+            ):
+                with self.assertRaisesRegex(OSError, "mid-copy"):
+                    install_isolated_test_draft(
+                        package_manifest_path=manifest_path,
+                        authorized_project_root=root,
+                        test_store_root=store,
+                        receipt_path=root / "receipts" / "install.json",
+                    )
+            self.assertEqual(
+                [path.name for path in store.iterdir()],
+                [WP4_TEST_STORE_MARKER_FILENAME],
+            )
+            self.assertFalse((root / "receipts" / "install.json").exists())
+
+    def test_wp4_install_quarantines_staging_swap_and_keeps_intent(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            receipt_path = root / "receipts" / "install.json"
+            target = store / WP4_TEST_TARGET_NAME
+            displaced = store / ".displaced-generated-staging"
+            original_rename = native_install_module.os.rename
+
+            def swap_at_promotion(source, destination):
+                if Path(destination) == target and ".staging-" in Path(source).name:
+                    original_rename(source, displaced)
+                    Path(source).mkdir()
+                    (Path(source) / "attacker.txt").write_text(
+                        "replacement", encoding="utf-8"
+                    )
+                return original_rename(source, destination)
+
+            with patch(
+                "jianying_native_install.os.rename",
+                side_effect=swap_at_promotion,
+            ):
+                with self.assertRaisesRegex(JianyingNativeDraftError, "quarantined"):
+                    install_isolated_test_draft(
+                        package_manifest_path=manifest_path,
+                        authorized_project_root=root,
+                        test_store_root=store,
+                        receipt_path=receipt_path,
+                    )
+            self.assertFalse(target.exists())
+            self.assertTrue(displaced.is_dir())
+            quarantine = list(store.glob(f".{WP4_TEST_TARGET_NAME}.untrusted-*"))
+            self.assertEqual(len(quarantine), 1)
+            self.assertTrue((quarantine[0] / "attacker.txt").is_file())
+            self.assertFalse(receipt_path.exists())
+            intents = list((root / "receipts").glob(".install.json.pending-*.json"))
+            self.assertEqual(len(intents), 1)
+
+    def test_wp4_exclusive_receipt_failure_never_deletes_an_existing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            existing = Path(folder) / "existing.json"
+            existing.write_text("owned-by-another-writer", encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                native_install_fs_module._exclusive_write_json(
+                    existing, {"status": "must-not-replace"}
+                )
+            self.assertEqual(
+                existing.read_text(encoding="utf-8"), "owned-by-another-writer"
+            )
+
+    def test_wp4_malformed_receipt_returns_errors_instead_of_raising(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            store = self._isolated_test_store(root)
+            malformed = root / "malformed.json"
+            malformed.write_text("[]", encoding="utf-8")
+            errors = validate_install_receipt(
+                malformed,
+                authorized_project_root=root,
+                test_store_root=store,
+            )
+            self.assertTrue(any("object" in row for row in errors), errors)
+            with self.assertRaisesRegex(JianyingNativeDraftError, "drift"):
+                rollback_isolated_test_draft(
+                    install_receipt_path=malformed,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                    rollback_receipt_path=root / "rollback.json",
+                )
+
+    def test_wp4_install_rejects_manifest_swap_before_unvalidated_ref_read(self) -> None:
+        with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as outside:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            outside_report = Path(outside) / "outside-adapter.json"
+            outside_report.write_text('{"synthetic_fixture_only":true}', encoding="utf-8")
+            original_reader = native_install_contracts_module._read_stable_json
+
+            def guarded_reader(path, *, label, parent_identity=None):
+                if Path(path).resolve() == outside_report.resolve():
+                    raise AssertionError("unvalidated outside adapter report was read")
+                return original_reader(
+                    path, label=label, parent_identity=parent_identity
+                )
+
+            def swap_manifest(_path, *, authorized_root):
+                payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+                payload["adapter_report"]["path"] = str(outside_report)
+                manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+                return []
+
+            with patch(
+                "jianying_native_install_contracts._read_stable_json",
+                side_effect=guarded_reader,
+            ), patch(
+                "jianying_native_install_contracts.validate_draft_package",
+                side_effect=swap_manifest,
+            ):
+                with self.assertRaisesRegex(JianyingNativeDraftError, "changed"):
+                    install_isolated_test_draft(
+                        package_manifest_path=manifest_path,
+                        authorized_project_root=root,
+                        test_store_root=self._isolated_test_store(root),
+                        receipt_path=root / "receipt.json",
+                    )
+
+    def test_wp4_rollback_rejects_byte_identical_replacement_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            receipt_path = root / "receipts" / "install.json"
+            install_isolated_test_draft(
+                package_manifest_path=manifest_path,
+                authorized_project_root=root,
+                test_store_root=store,
+                receipt_path=receipt_path,
+            )
+            target = store / WP4_TEST_TARGET_NAME
+            original_tree = store / "original-generated-tree"
+            os.rename(target, original_tree)
+            shutil.copytree(original_tree, target)
+            self.assertEqual(
+                native_install_fs_module._inventory(target),
+                native_install_fs_module._inventory(original_tree),
+            )
+            with self.assertRaisesRegex(JianyingNativeDraftError, "drift"):
+                rollback_isolated_test_draft(
+                    install_receipt_path=receipt_path,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                    rollback_receipt_path=root / "receipts" / "rollback.json",
+                )
+            self.assertTrue(target.is_dir())
+            self.assertTrue(original_tree.is_dir())
+
+    def test_wp4_rollback_keeps_durable_intent_if_final_receipt_write_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            receipt_path = root / "receipts" / "install.json"
+            rollback_path = root / "receipts" / "rollback.json"
+            install_isolated_test_draft(
+                package_manifest_path=manifest_path,
+                authorized_project_root=root,
+                test_store_root=store,
+                receipt_path=receipt_path,
+            )
+            original_writer = native_install_module._exclusive_write_json
+
+            def fail_final_receipt(path, payload, *, parent_identity=None):
+                if Path(path) == rollback_path:
+                    raise OSError("injected final receipt failure")
+                return original_writer(
+                    path, payload, parent_identity=parent_identity
+                )
+
+            with patch(
+                "jianying_native_install._exclusive_write_json",
+                side_effect=fail_final_receipt,
+            ):
+                with self.assertRaisesRegex(OSError, "injected"):
+                    rollback_isolated_test_draft(
+                        install_receipt_path=receipt_path,
+                        authorized_project_root=root,
+                        test_store_root=store,
+                        rollback_receipt_path=rollback_path,
+                    )
+            self.assertFalse((store / WP4_TEST_TARGET_NAME).exists())
+            intents = list((root / "receipts").glob(".rollback.json.pending-*.json"))
+            self.assertEqual(len(intents), 1)
+            self.assertEqual(
+                json.loads(intents[0].read_text(encoding="utf-8"))["status"],
+                "prepared_test_only",
+            )
+
+    def test_wp4_rollback_quarantines_then_restores_on_post_rename_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            receipt_path = root / "receipts" / "install.json"
+            install_isolated_test_draft(
+                package_manifest_path=manifest_path,
+                authorized_project_root=root,
+                test_store_root=store,
+                receipt_path=receipt_path,
+            )
+            target = store / WP4_TEST_TARGET_NAME
+            original_rename = native_install_fs_module.os.rename
+
+            def drift_after_quarantine(source, destination):
+                original_rename(source, destination)
+                if (
+                    Path(source) == target
+                    and ".quarantine-" in Path(destination).name
+                ):
+                    (Path(destination) / "raced.txt").write_text("drift", encoding="utf-8")
+
+            with patch(
+                "jianying_native_install_fs.os.rename",
+                side_effect=drift_after_quarantine,
+            ):
+                with self.assertRaisesRegex(JianyingNativeDraftError, "drift"):
+                    rollback_isolated_test_draft(
+                        install_receipt_path=receipt_path,
+                        authorized_project_root=root,
+                        test_store_root=store,
+                        rollback_receipt_path=root / "receipts" / "rollback.json",
+                    )
+            self.assertTrue(target.is_dir())
+            self.assertTrue((target / "raced.txt").is_file())
+
+    def test_wp4_rollback_rejects_receipt_swap_after_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            receipt_path = root / "receipts" / "install.json"
+            install_isolated_test_draft(
+                package_manifest_path=manifest_path,
+                authorized_project_root=root,
+                test_store_root=store,
+                receipt_path=receipt_path,
+            )
+            target = store / WP4_TEST_TARGET_NAME
+            original_validator = native_install_contracts_module.validate_install_receipt
+
+            def swap_after_validation(*args, **kwargs):
+                errors = original_validator(*args, **kwargs)
+                payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+                payload["status"] = "tampered-after-validation"
+                receipt_path.write_text(json.dumps(payload), encoding="utf-8")
+                return errors
+
+            with patch(
+                "jianying_native_install_contracts.validate_install_receipt",
+                side_effect=swap_after_validation,
+            ):
+                with self.assertRaisesRegex(JianyingNativeDraftError, "changed"):
+                    rollback_isolated_test_draft(
+                        install_receipt_path=receipt_path,
+                        authorized_project_root=root,
+                        test_store_root=store,
+                        rollback_receipt_path=root / "receipts" / "rollback.json",
+                    )
+            self.assertTrue(target.is_dir())
+
+    def test_wp4_rollback_requires_exact_unchanged_generated_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest_path = self._materialized_fixture(root)
+            store = self._isolated_test_store(root)
+            receipt_path = root / "receipts" / "install.json"
+            install_isolated_test_draft(
+                package_manifest_path=manifest_path,
+                authorized_project_root=root,
+                test_store_root=store,
+                receipt_path=receipt_path,
+            )
+            target = store / WP4_TEST_TARGET_NAME
+            changed = target / "draft_content.json"
+            original = changed.read_bytes()
+            changed.write_bytes(original + b"drift")
+            with self.assertRaisesRegex(JianyingNativeDraftError, "drift"):
+                rollback_isolated_test_draft(
+                    install_receipt_path=receipt_path,
+                    authorized_project_root=root,
+                    test_store_root=store,
+                    rollback_receipt_path=root / "receipts" / "rollback.json",
+                )
+            self.assertTrue(target.is_dir())
+
+            changed.write_bytes(original)
+            with tempfile.TemporaryDirectory() as outside:
+                with self.assertRaisesRegex(JianyingNativeDraftError, "rollback receipt"):
+                    rollback_isolated_test_draft(
+                        install_receipt_path=receipt_path,
+                        authorized_project_root=root,
+                        test_store_root=store,
+                        rollback_receipt_path=Path(outside) / "rollback.json",
+                    )
+            self.assertTrue(target.is_dir())
+            rollback = rollback_isolated_test_draft(
+                install_receipt_path=receipt_path,
+                authorized_project_root=root,
+                test_store_root=store,
+                rollback_receipt_path=root / "receipts" / "rollback.json",
+            )
+            self.assertEqual(rollback["status"], "rolled_back_test_only")
+            self.assertFalse(target.exists())
+            self.assertTrue((store / WP4_TEST_STORE_MARKER_FILENAME).is_file())
 
 
 if __name__ == "__main__":
