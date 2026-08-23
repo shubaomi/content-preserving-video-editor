@@ -42,6 +42,7 @@ def _neutral_transform() -> dict[str, float]:
 def _clip(
     *, clip_id: str, role: str, start: int, duration: int, source: Path,
     payload: Mapping[str, Any], editable: bool, fidelity: str,
+    source_start: int = 0,
     semantic_event_id: str | None = None, render_event_id: str | None = None,
 ) -> dict[str, Any]:
     return {
@@ -50,6 +51,7 @@ def _clip(
         "semantic_event_id": semantic_event_id,
         "render_event_id": render_event_id,
         "start_frame": start,
+        "source_start_frame": source_start,
         "duration_frames": duration,
         "source": _file_ref(source),
         "editable": editable,
@@ -188,6 +190,9 @@ def _compile_base_track(
                 raise JianyingNativeDraftError("EDL range ID is invalid")
             base_clips.append(_clip(
                 clip_id=f"base.{range_id}", role="base", start=output_start,
+                # clean_a_roll is explicitly a video-use output-timeline asset;
+                # its source in-point follows output placement, not raw EDL time.
+                source_start=output_start,
                 duration=output_end - output_start, source=base_path,
                 payload={
                     "type": "video", "alpha_mode": "none",
@@ -527,6 +532,17 @@ def _compile_audio_and_outro_tracks(
             raise JianyingNativeDraftError("event SFX requires current gain_db metadata")
         start = _frame(placement.get("start_seconds"), numerator=numerator, denominator=denominator)
         end = _frame(placement.get("end_seconds"), numerator=numerator, denominator=denominator)
+        declared_duration = audio.get("duration_seconds")
+        if not _finite(declared_duration, minimum=0.000001):
+            raise JianyingNativeDraftError("event SFX requires current duration metadata")
+        source_frames = int(
+            float(declared_duration) * numerator / denominator + 1e-9
+        )
+        if source_frames < 1:
+            raise JianyingNativeDraftError("event SFX duration rounds below one frame")
+        end = min(end, start + source_frames)
+        if end <= start:
+            raise JianyingNativeDraftError("event SFX projected duration is empty")
         render_id = str(row.get("render_event_id") or row.get("asset_id"))
         tracks.append(_track(f"audio.sfx.{render_id}", 320 + len(tracks), "audio", [_clip(
             clip_id=f"sfx.{render_id}", role="sfx", start=start, duration=end - start,
@@ -614,5 +630,3 @@ def compile_draft_plan(
         context, draft_id=draft_id, profile=profile,
         asset_mode=asset_mode, tracks=tracks,
     )
-
-

@@ -164,7 +164,10 @@ class JianyingNativeDraftV1Tests(unittest.TestCase):
                     authorized_install_roots=[install_root],
                 )
 
-    def _package(self, root: Path, *, optional_visuals: bool = False) -> Path:
+    def _package(
+        self, root: Path, *, optional_visuals: bool = False,
+        sfx_end_seconds: float = 1.0,
+    ) -> Path:
         project = root / "project.yaml"
         source = root / "source.mp4"
         automatic = root / "automatic.mp4"
@@ -224,7 +227,7 @@ class JianyingNativeDraftV1Tests(unittest.TestCase):
                 "path": sfx,
                 "semantic_event_id": "semantic-1",
                 "render_event_id": "render-1",
-                "timeline": {"start_seconds": 0.5, "end_seconds": 1.0,
+                "timeline": {"start_seconds": 0.5, "end_seconds": sfx_end_seconds,
                              "frame_rate": 25.0},
                 "audio": {"sample_rate": 48000, "duration_seconds": 0.5,
                           "gain_db": -6.0, "channels": 2},
@@ -286,6 +289,21 @@ class JianyingNativeDraftV1Tests(unittest.TestCase):
             assets=assets,
         )
         return package / "10-evidence" / "nle-handoff-package.json"
+
+    def test_sfx_projection_never_exceeds_the_decoded_source_duration(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            plan = compile_draft_plan(
+                nle_package_receipt=self._package(root, sfx_end_seconds=1.02),
+                output_path=root / "plan.json", authorized_root=root,
+                draft_id="sfx-source-bound", profile="layered_reconstruction",
+                asset_mode="linked",
+            )
+            sfx = next(
+                track for track in plan["tracks"]
+                if track["track_id"] == "audio.sfx.render-1"
+            )["clips"][0]
+            self.assertEqual(sfx["duration_frames"], 12)
 
     def test_compiles_frame_exact_layered_plan_from_current_authorities(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

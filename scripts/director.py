@@ -6286,8 +6286,8 @@ class Director:
             root_relative = self.jianying_native_draft_root.relative_to(self.context.root)
             root = safe_generated_directory(self.context.root, root_relative)
             plan_dir = safe_generated_directory(self.context.root, root_relative / "plan")
-            proposal_dir = safe_generated_directory(
-                self.context.root, root_relative / "install-proposals"
+            handoff_dir = safe_generated_directory(
+                self.context.root, root_relative / "manual-copy-handoffs"
             )
         except (ValueError, SafeGeneratedOutputError) as error:
             raise DirectorContractError(
@@ -6304,7 +6304,7 @@ class Director:
             "plan_path": plan_dir / "jianying-draft-plan.json",
             "status_path": root / "draft-status.json",
             "guide_path": root / "README-中文.md",
-            "proposal_path": proposal_dir / f"{draft_id}.json",
+            "handoff_path": handoff_dir / f"{draft_id}.json",
         }
 
     def _jianying_repair_candidate(self, profile: str) -> Path | None:
@@ -6341,7 +6341,7 @@ class Director:
     ) -> list[Path]:
         plan_path = Path(prepared["plan_path"])
         status_path = Path(prepared["status_path"])
-        proposal_path = Path(prepared["proposal_path"])
+        handoff_path = Path(prepared["handoff_path"])
         guide_path = Path(prepared["guide_path"])
         plan_current = plan_error is None
         fallbacks = {
@@ -6367,7 +6367,7 @@ class Director:
                 if plan_current else None
             ),
             "reason": (
-                "真实剪映草稿生成与安装尚未获 WP4/WP5 授权；需要精确版本兼容档案和短片人工 canary。"
+                "当前仅生成权威时间轴计划；项目内真实草稿候选须由已批准的 WP5 适配器路径另行生成，随后由用户手动复制并完成人工 canary。"
                 if plan_error is None else "剪映计划无法从当前权威资产安全生成。"
             ),
             "errors": [plan_error] if plan_error else [],
@@ -6376,37 +6376,42 @@ class Director:
             "draft_store_read": False,
             "draft_store_written": False,
             "native_package_generated": False,
+            "candidate": None,
             "fallbacks": fallbacks,
         }
         write_json(status_path, status)
-        write_json(proposal_path, {
+        write_json(handoff_path, {
             "schema_version": 1,
-            "kind": "jianying_install_proposal",
-            "status": "blocked_by_separate_approval",
+            "kind": "jianying_manual_copy_handoff",
+            "status": "requires_project_local_candidate",
             "draft_id": prepared["draft_id"],
             "source_plan": status["plan"],
-            "target": None,
+            "candidate_root": None,
+            "candidate_manifest": None,
+            "jianying_draft_store_parameter": None,
+            "user_finds_current_store_in_app_settings": True,
+            "manual_whole_folder_copy": True,
             "draft_store_inspected": False,
             "draft_store_written": False,
-            "required_before_install": [
-                "HongRun separately approves WP4 draft-store write",
-                "exact Jianying executable version and hash are detected read-only",
-                "exact compatibility tuple is approved",
-                "new target is proven nonexistent without reading existing draft contents",
+            "required_before_copy": [
+                "project-local native-draft candidate passes automated validation",
+                "HongRun finds the current draft location in Jianying settings",
+                "the user copies the whole native-draft folder as a new child",
+                "same-name targets are never merged or overwritten",
             ],
         })
         guide_path.write_text(
             "# 剪映原生可编辑草稿 v1（当前状态）\n\n"
-            "当前只完成权威时间轴计划与安全提案，尚未生成、安装或打开真实剪映草稿。\n\n"
+            "当前只完成权威时间轴计划与手动复制交接说明，尚未生成或打开真实剪映草稿。\n\n"
             "1. 自动成片和 `nle-package-v2` 仍是可用兜底。\n"
             "2. `plan/jianying-draft-plan.json` 是从当前 EDL、SRT 和分层资产生成的只读投影。\n"
-            "3. `draft-status.json` 记录兼容性与边界；`install-proposals` 不包含真实目标路径。\n"
-            "4. 进入真实剪映前，必须另行批准 WP4，并对精确安装版本运行 45–60 秒短片 canary。\n"
+            "3. `draft-status.json` 记录兼容性与边界；`manual-copy-handoffs` 不接收剪映 APP 草稿位置。\n"
+            "4. 项目内候选生成后，由用户在剪映设置中查找当前草稿位置并手动复制整个 `native-draft` 文件夹。\n"
             "5. 本阶段不会启动剪映、读取已有草稿、覆盖项目或导出视频。\n",
             encoding="utf-8",
         )
         return ([plan_path] if plan_current else []) + [
-            status_path, proposal_path, guide_path,
+            status_path, handoff_path, guide_path,
         ]
 
     def _write_jianying_native_draft_v1(

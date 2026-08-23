@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "kind": "jianying_native_draft_v1_wp5_boundary_decision",
+  "decision_date": "2026-08-22",
+  "status": "approved",
+  "decision": "generate_project_local_native_draft_for_manual_copy",
+  "approval_text": "剪映设置里的草稿位置是剪映APP的内容，我们现在只需要生成剪映草稿内容，而不是直接关联到剪映APP的相关目录，需要区分开的，因为剪映APP在每台电脑上面都是不一样的，就算在同一台电脑上面也有可能会修改的，所以不能指定死目录，后面生成剪映草稿之后手动复制到对应的剪映APP的草稿目录就好了",
+  "required_boundaries": {
+    "project_local_generation_only": true,
+    "draft_store_parameter_for_generation": false,
+    "draft_store_discovery": false,
+    "draft_store_read": false,
+    "draft_store_write": false,
+    "launch_jianying": false,
+    "manual_whole_folder_copy": true,
+    "existing_draft_merge_or_overwrite": false
+  }
+}

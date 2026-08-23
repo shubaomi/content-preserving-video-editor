@@ -1841,8 +1841,8 @@ class DirectorTests(unittest.TestCase):
 
         plan = director.jianying_native_draft_root / "plan" / "jianying-draft-plan.json"
         status_path = director.jianying_native_draft_root / "draft-status.json"
-        proposal = next(
-            (director.jianying_native_draft_root / "install-proposals").glob("*.json")
+        handoff = next(
+            (director.jianying_native_draft_root / "manual-copy-handoffs").glob("*.json")
         )
         guide = director.jianying_native_draft_root / "README-中文.md"
         self.assertTrue(plan.is_file())
@@ -1868,10 +1868,11 @@ class DirectorTests(unittest.TestCase):
             status["fallbacks"]["nle_package"]["sha256"],
             sha256_file(director.manual_nle_package_root / "10-evidence" / "nle-handoff-package.json"),
         )
-        install = json.loads(proposal.read_text(encoding="utf-8"))
-        self.assertEqual(install["status"], "blocked_by_separate_approval")
-        self.assertIsNone(install["target"])
-        self.assertFalse(install["draft_store_inspected"])
+        copy_handoff = json.loads(handoff.read_text(encoding="utf-8"))
+        self.assertEqual(copy_handoff["status"], "requires_project_local_candidate")
+        self.assertIsNone(copy_handoff["candidate_root"])
+        self.assertIsNone(copy_handoff["jianying_draft_store_parameter"])
+        self.assertFalse(copy_handoff["draft_store_inspected"])
         action = json.loads(director.action_path.read_text(encoding="utf-8"))
         self.assertEqual(action["actions"][0]["jianying_native_draft_status"], str(status_path))
         self.assertFalse((director.jianying_native_draft_root / "published").exists())

@@ -143,8 +143,12 @@ def _validate_role_payload(
 ) -> None:
     base_inventory = state["base_inventory"]
     event_bindings = state["event_bindings"]
-    if role == "base" and isinstance(start, int) and isinstance(clip_duration, int):
-        base_inventory.append((start, start + clip_duration))
+    source_start = clip.get("source_start_frame")
+    if (
+        role == "base" and isinstance(start, int)
+        and isinstance(source_start, int) and isinstance(clip_duration, int)
+    ):
+        base_inventory.append((start, start + clip_duration, source_start))
     if expected_type == "audio":
         gain = payload_row.get("gain_db")
         if (
@@ -223,8 +227,8 @@ def _validate_clip_contract(
     clip_ids = state["clip_ids"]
     if set(clip) != {
         "clip_id", "role", "semantic_event_id", "render_event_id",
-        "start_frame", "duration_frames", "source", "editable", "fidelity",
-        "payload",
+        "start_frame", "source_start_frame", "duration_frames", "source",
+        "editable", "fidelity", "payload",
     }:
         errors.append("draft clip shape is invalid")
     clip_id = clip.get("clip_id")
@@ -235,9 +239,17 @@ def _validate_clip_contract(
         errors.append("draft clip ID is missing or duplicate")
     else:
         clip_ids.add(clip_id)
-    start, clip_duration = clip.get("start_frame"), clip.get("duration_frames")
+    start = clip.get("start_frame")
+    source_start = clip.get("source_start_frame")
+    clip_duration = clip.get("duration_frames")
     if isinstance(start, bool) or not isinstance(start, int) or start < 0:
         errors.append(f"draft clip {clip_id} start_frame is invalid")
+    if (
+        isinstance(source_start, bool)
+        or not isinstance(source_start, int)
+        or source_start < 0
+    ):
+        errors.append(f"draft clip {clip_id} source_start_frame is invalid")
     if (
         isinstance(clip_duration, bool)
         or not isinstance(clip_duration, int)
@@ -344,7 +356,7 @@ def _validate_authoritative_roundtrips(
     payload: Mapping[str, Any], *, authority_paths: Mapping[str, Path],
     timebase: Mapping[str, Any], duration: int,
     caption_inventory: list[tuple[str, int, int]],
-    base_inventory: list[tuple[int, int]], errors: list[str],
+    base_inventory: list[tuple[int, int, int]], errors: list[str],
 ) -> None:
     master_srt = authority_paths.get("master_srt")
     if master_srt and master_srt.is_file() and isinstance(timebase, Mapping):
@@ -368,7 +380,7 @@ def _validate_authoritative_roundtrips(
                 ranges = read_json(edl_path).get("ranges", [])
                 if not isinstance(ranges, list) or not ranges:
                     raise JianyingNativeDraftError("authoritative EDL ranges are missing")
-                expected_base: list[tuple[int, int]] = []
+                expected_base: list[tuple[int, int, int]] = []
                 cursor_seconds = 0.0
                 for row in ranges:
                     if not isinstance(row, Mapping):
@@ -392,7 +404,11 @@ def _validate_authoritative_roundtrips(
                         numerator=int(timebase["numerator"]),
                         denominator=int(timebase["denominator"]),
                     )
-                    expected_base.append((output_start, output_end))
+                    expected_base.append((
+                        output_start,
+                        output_end,
+                        output_start,
+                    ))
                     cursor_seconds = max(
                         cursor_seconds,
                         float(timeline_start) + float(source_end) - float(source_start),
@@ -401,7 +417,7 @@ def _validate_authoritative_roundtrips(
                     errors.append("layered draft base inventory differs from EDL output ranges")
             except (KeyError, TypeError, ValueError, JianyingNativeDraftError):
                 errors.append("authoritative EDL base inventory is unreadable")
-    elif payload.get("profile") == "repair_draft" and base_inventory != [(0, duration)]:
+    elif payload.get("profile") == "repair_draft" and base_inventory != [(0, duration, 0)]:
         errors.append("repair draft must contain exactly one full-duration base clip")
 
 

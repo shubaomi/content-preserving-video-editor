@@ -51,7 +51,9 @@ def _win_open_no_reparse(path: Path, *, directory: bool) -> int:
     # DELETE access plus no FILE_SHARE_DELETE makes a directory handle an
     # effective exchange lock on Windows; FILE_READ_ATTRIBUTES alone still
     # permits rename-to-junction races.
-    desired_access = (0x00010000 | 0x00000080) if directory else 0x80000000
+    desired_access = (
+        0x00010000 | 0x00000080 | 0x00000001
+    ) if directory else 0x80000000
     share_mode = 0x00000001 | (0x00000002 if directory else 0)
     flags = 0x00200000 | (0x02000000 if directory else 0)
     handle = create_file(str(path), desired_access, share_mode, None, 3, flags, None)
@@ -76,9 +78,49 @@ def _locked_directory(path: Path, expected_identity: tuple[int, int]):
     try:
         if _identity(path) != expected_identity or _is_redirected(path):
             raise JianyingNativeDraftError("WP4 locked directory identity changed")
-        yield
+        yield handle
     finally:
         ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(handle))
+
+
+def _rename_locked_directory(
+    source_handle: int, *, target_path: Path,
+) -> None:
+    """Rename one locked directory by handle without reopening its source path."""
+    if os.name != "nt":
+        raise JianyingNativeDraftError("locked directory promotion is Windows-only")
+    target_path = Path(os.path.abspath(target_path))
+    if not target_path.name or target_path.name in {".", ".."}:
+        raise JianyingNativeDraftError("locked directory promotion target is invalid")
+    target_text = str(target_path)
+    encoded_name = target_text.encode("utf-16-le")
+
+    class _FileRenameInfo(ctypes.Structure):
+        _fields_ = [
+            ("replace_if_exists", ctypes.c_ubyte),
+            ("root_directory", ctypes.c_void_p),
+            ("file_name_length", ctypes.c_uint32),
+            ("file_name", ctypes.c_wchar * len(target_text)),
+        ]
+
+    information = _FileRenameInfo()
+    information.replace_if_exists = 0
+    information.root_directory = None
+    information.file_name_length = len(encoded_name)
+    information.file_name = target_text
+    set_information = ctypes.WinDLL("kernel32", use_last_error=True).SetFileInformationByHandle
+    set_information.argtypes = [
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32,
+    ]
+    set_information.restype = ctypes.c_int
+    if not set_information(
+        ctypes.c_void_p(source_handle), 3, ctypes.byref(information),
+        ctypes.sizeof(information),
+    ):
+        error = ctypes.get_last_error()
+        raise JianyingNativeDraftError(
+            f"locked directory promotion failed with Win32 error {error}"
+        )
 
 
 def _read_file_no_reparse(path: Path) -> bytes:
@@ -92,6 +134,26 @@ def _read_file_no_reparse(path: Path) -> bytes:
         raise
     with os.fdopen(descriptor, "rb") as stream:
         return stream.read()
+
+
+@contextmanager
+def _locked_file(
+    path: Path, *, expected_identity: tuple[int, int], expected_sha256: str,
+):
+    """Hold one stable, read-only file handle across a later path-based use."""
+    handle = _win_open_no_reparse(path, directory=False)
+    try:
+        if _identity(path) != expected_identity:
+            raise JianyingNativeDraftError("WP4 locked file identity changed")
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
+        if digest.hexdigest() != expected_sha256:
+            raise JianyingNativeDraftError("WP4 locked file hash changed")
+        yield handle
+    finally:
+        ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(handle))
 
 
 def _read_file_snapshot(path: Path) -> tuple[bytes, tuple[int, int]]:
@@ -111,6 +173,30 @@ def _read_file_snapshot(path: Path) -> tuple[bytes, tuple[int, int]]:
         if identity != (current.st_dev, current.st_ino) or _is_redirected(path):
             raise JianyingNativeDraftError("WP4 locked file identity changed")
         return stream.read(), identity
+
+
+def _sha256_file_snapshot(path: Path) -> tuple[str, int, tuple[int, int]]:
+    """Hash one regular file while its non-reparse identity is pinned."""
+    handle = _win_open_no_reparse(path, directory=False)
+    try:
+        descriptor = msvcrt.open_osfhandle(
+            handle, os.O_RDONLY | getattr(os, "O_BINARY", 0)
+        )
+    except Exception:
+        ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(handle))
+        raise
+    with os.fdopen(descriptor, "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        current = path.stat(follow_symlinks=False)
+        identity = (opened.st_dev, opened.st_ino)
+        if identity != (current.st_dev, current.st_ino) or _is_redirected(path):
+            raise JianyingNativeDraftError("WP4 locked file identity changed")
+        digest = hashlib.sha256()
+        size = 0
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+            size += len(block)
+        return digest.hexdigest(), size, identity
 
 
 def _identity(path: Path) -> tuple[int, int]:
@@ -152,7 +238,7 @@ def _lexical_project_child(path: Path, root: Path, *, label: str) -> Path:
 
 def _inventory(
     root: Path, *, expected_identity: tuple[int, int] | None = None,
-    allow_empty: bool = False,
+    allow_empty: bool = False, root_already_locked: bool = False,
 ) -> list[dict[str, Any]]:
     """Inventory without following a directory redirect or an unpinned file."""
     if not root.is_dir():
@@ -184,7 +270,8 @@ def _inventory(
                 )
 
     with ExitStack() as locks:
-        locks.enter_context(_locked_directory(root, root_identity))
+        if not root_already_locked:
+            locks.enter_context(_locked_directory(root, root_identity))
         visit(root, Path("."), locks)
     if not rows and not allow_empty:
         raise JianyingNativeDraftError("WP4 generated test draft is empty")

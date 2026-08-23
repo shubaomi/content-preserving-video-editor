@@ -29,6 +29,10 @@ cross-record rules that JSON Schema cannot express compactly:
 - track IDs, orders, clip IDs, cue IDs and event IDs are unique and deterministic;
 - track `kind`, clip `role` and payload `type` form an allowed tuple;
 - every clip ends within canonical duration and inventories equal authorities;
+- every media source in-point is an explicit `source_start_frame`; conformed
+  `video-use output timeline` A-roll uses its output-frame in-point, while
+  event-local assets start at zero. Raw EDL source time must not be applied to
+  an already conformed base asset;
 - caption emphasis ranges are ordered, non-overlapping and within UTF-16 text;
 - semantic/render IDs are mandatory only for event-bound motion/SFX;
 - repair and layered profiles obey their distinct base/audio/duplication rules;

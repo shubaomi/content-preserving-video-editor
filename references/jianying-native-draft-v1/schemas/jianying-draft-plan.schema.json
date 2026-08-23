@@ -141,13 +141,14 @@
     "clip": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["clip_id", "role", "start_frame", "duration_frames", "source", "editable", "fidelity", "payload"],
+      "required": ["clip_id", "role", "start_frame", "source_start_frame", "duration_frames", "source", "editable", "fidelity", "payload"],
       "properties": {
         "clip_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]+$"},
         "role": {"enum": ["base", "motion", "ip", "caption", "outro", "dialogue", "bgm", "sfx", "reference"]},
         "semantic_event_id": {"type": ["string", "null"]},
         "render_event_id": {"type": ["string", "null"]},
         "start_frame": {"type": "integer", "minimum": 0},
+        "source_start_frame": {"type": "integer", "minimum": 0},
         "duration_frames": {"type": "integer", "minimum": 1},
         "source": {"$ref": "#/$defs/file_ref"},
         "editable": {"type": "boolean"},

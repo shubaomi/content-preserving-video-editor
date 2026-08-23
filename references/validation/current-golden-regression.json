@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite_version": "2026.08-p0p1p2",
-  "generated_at": "2026-08-22T16:58:21.664226+00:00",
+  "generated_at": "2026-08-23T05:40:25.663661+00:00",
   "status": "pass",
   "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
   "source": {
@@ -22,7 +22,7 @@
     "project_schema_version": 13,
     "implementation_sha256": {
       "scripts/current_golden_regression.py": "f4792699876268449c49e820040fb4e108df26fa0492b69630737f501fb67405",
-      "scripts/director.py": "210d7cd05ebdbffda5cc05974eed731c3309c9745f419dc84268c0d4b317544d",
+      "scripts/director.py": "3ae9dc18b071c2f1eae18bb004d4269f7b6c39c976b64a248a7941dce9bdfbd7",
       "scripts/project_config.py": "01741b759cd1bf2dbf95c1ededaace0e4787f522d70574584378c681384c3581",
       "scripts/delivery_readiness.py": "4a409e9deb1abe2663dfb9e6145fc3334649197266bf072cd7c395349ab7d4ac",
       "scripts/capability_registry.py": "394daa6297d0757948cb046681e1f0090ce1e323613fa6885311fd2a465a45f9",
@@ -549,5 +549,5 @@
       }
     }
   ],
-  "report_integrity_sha256": "136a79a50b701d9c5e1188cd70ff930ebbf7a7aedb90298c6f928b668438d2c7"
+  "report_integrity_sha256": "5107adf978e1206c752a263fd0103ed985aa11d3729ce9c89d37921250b93411"
 }

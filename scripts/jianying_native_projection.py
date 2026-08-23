@@ -35,14 +35,9 @@ def sanitize_fixture_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
         }
         for clip in track.get("clips", []):
             clean_clip = _sanitize_fixture_value(dict(clip))
-            # Clean A-roll is conformed to output time, while event-local
-            # assets start at their own source frame zero.
-            clean_clip["source_start_frame"] = (
-                int(clip["start_frame"])
-                if plan.get("profile") == "layered_reconstruction"
-                and clip.get("role") == "base"
-                else 0
-            )
+            # Source in-points are canonical plan data derived from the EDL;
+            # they must never be inferred from output placement.
+            clean_clip["source_start_frame"] = int(clip["source_start_frame"])
             clean_clip["source_duration_frames"] = int(clip["duration_frames"])
             clean_track["clips"].append(clean_clip)
         tracks.append(clean_track)

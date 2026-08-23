@@ -890,20 +890,42 @@ pending until the named human canary; a verified codec is not an import claim.
 When schema-v13 `delivery.manual_finish.jianying_native_draft.enabled` is also
 explicitly true, require backend `other_nle` and the current layered NLE package.
 Compile its EDL, SRT, layer timeline and available asset hashes into one
-frame-exact `jianying-draft-plan.json`; emit `draft-status.json`, a Chinese guide
-and a target-free install proposal. This Director route must remain default-off,
-must not launch Jianying, inspect or write its draft store, install dependencies,
-or claim a real native project. Isolated synthetic fixtures are test evidence
-only. The separately approved WP4 boundary may install exactly one fixed target
-only inside a marker-bound project-local synthetic test store, without
-enumerating siblings, and may roll it back only while its complete receipt
-inventory is unchanged. It cannot address the real Jianying store. Preserve the
-automatic master and editor-neutral package on any native-adapter failure. Real
-short-project installation/open/edit/export remains the separate WP5 user gate.
+frame-exact `jianying-draft-plan.json`; emit `draft-status.json` and a Chinese
+guide. This Director route must remain default-off, must not launch Jianying,
+inspect or write its draft store, install dependencies, or claim a real native
+project. Isolated synthetic fixtures are test evidence only. The separately
+approved WP4 boundary may install exactly one fixed target only inside a
+marker-bound project-local synthetic test store, without enumerating siblings,
+and may roll it back only while its complete receipt inventory is unchanged. It
+cannot address the real Jianying store. The approved WP5 generation route may
+execute the exact pinned adapter only to create a new candidate below the video
+project's own output root. Its unpublished tree is a hidden sibling of the
+final build under `published/`, protected by output/tree handles and promoted
+by the already-open tree handle. Its API must not accept or discover a
+Jianying APP draft location; it emits a Chinese whole-folder manual-copy guide.
+Preserve the automatic master and editor-neutral package on any native-adapter
+failure. Run the project-local entry point in
+`scripts/jianying_native_real.py` only with the canonical plan, project-local
+virtual-environment Python, exact approved interpreter/`pyvenv.cfg` hashes,
+pinned wheel set and editable-delivery manifest;
+optionally pass the matching Director status and handoff together so successful
+validation refreshes `native_package_generated` and `candidate_root`. No CLI
+argument may represent the Jianying APP draft location. Use Python `-I -S`, the
+exact offline adapter/dependency wheel hash lock, a controlled project-local cwd
+and a reduced environment. Bind the request bytes, authorized root and every
+media source path/hash before loading the adapter. Pin the complete authorized
+directory chain and file handle for every child-process input, including the
+runner/lock/locked-I/O source chain, until the child exits. Because this Windows
+route does not enforce or audit network blocking, record network evidence as
+`unknown`, never as a proven `false`. The orchestrator passes no APP draft-store
+path, but third-party file access is not OS-audited and must also remain
+`unknown`. Real Jianying open/edit/export remains a
+separate human gate.
 In `layered_reconstruction`, project one base clip per EDL output range and
 preserve gaps as empty timeline time. `clean_a_roll` is a conformed output-time
-asset, so the native projection derives each base `source_start_frame` from its
-output start; event-local media uses source frame zero. Bind event SFX to probed
+asset, so the canonical plan records each base `source_start_frame` from its
+output start; the real adapter must consume that explicit field and must not
+substitute the raw EDL source in-point. Event-local media uses source frame zero. Bind event SFX to probed
 48 kHz stream metadata and the current audio-plan gain. Re-parse the source
 plan, all package JSON, fallbacks, inventories and size limit independently;
 unknown programming errors must surface, while expected optional-adapter

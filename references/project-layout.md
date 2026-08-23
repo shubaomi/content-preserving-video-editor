@@ -32,9 +32,16 @@ profile-root/
         │       ├── nle-package-v2/
         │       └── jianying-native-draft-v1/
         │           ├── plan/
+        │           ├── staging/  # retained plan-only compatibility root
+        │           ├── published/.<build-id>.staging-<nonce>/  # transient, handle-locked
+        │           ├── published/<build-id>/
+        │           │   ├── candidate-manifest.json
+        │           │   ├── README-中文.md
+        │           │   ├── guide-assets/
+        │           │   └── native-draft/
         │           ├── draft-status.json
         │           ├── README-中文.md
-        │           └── install-proposals/
+        │           └── manual-copy-handoffs/
         └── exports/
 ```
 
