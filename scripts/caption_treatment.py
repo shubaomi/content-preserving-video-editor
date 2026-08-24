@@ -133,8 +133,10 @@ def materialize_sample_caption_authority(
     """Create a sample-local caption authority from the immutable output timeline.
 
     The review sample can begin later than the full output timeline.  This helper
-    retains only intersecting caption rows and rebases their timings; wording is
-    copied verbatim and the paired JSON/SRT remain exact equivalents.
+    retains intersecting caption rows with a usable display duration and rebases
+    their timings; wording is copied verbatim and the paired JSON/SRT remain
+    exact equivalents.  Boundary slivers shorter than 250 ms are omitted so a
+    sample cannot flash the entire next sentence for only a few frames.
     """
     start = _finite(source_start, "sample source_start")
     end = _finite(source_end, "sample source_end")
@@ -156,6 +158,9 @@ def materialize_sample_caption_authority(
         local_end = min(end, row["end"]) - start
         if _ass_centiseconds(local_end) <= _ass_centiseconds(local_start):
             raise CaptionTreatmentError("sample caption loses its display duration after rebasing")
+        clipped_at_boundary = row["start"] < start or row["end"] > end
+        if clipped_at_boundary and local_end - local_start < 0.25:
+            continue
         sliced.append({
             "start": round(local_start, 3), "end": round(local_end, 3),
             "text": row["text"], "timeline": "sample_output",

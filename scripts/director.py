@@ -261,6 +261,33 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _caption_segmentation_options(project: Mapping[str, Any]) -> dict[str, int | float]:
+    editing = project.get("editing") or {}
+    if not isinstance(editing, Mapping):
+        raise DirectorContractError("editing must be an object")
+    configured = editing.get("caption_segmentation") or {}
+    if not isinstance(configured, Mapping):
+        raise DirectorContractError("editing.caption_segmentation must be an object")
+    values: dict[str, int | float] = {
+        "max_chars": configured.get("max_chars", 24),
+        "max_duration": configured.get("max_duration", 6.5),
+        "pause_break": configured.get("pause_break", 0.5),
+    }
+    max_chars = values["max_chars"]
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 8 <= max_chars <= 32:
+        raise DirectorContractError(
+            "editing.caption_segmentation.max_chars must be an integer from 8 to 32"
+        )
+    for name, lower, upper in (("max_duration", 1.0, 10.0), ("pause_break", 0.15, 2.0)):
+        value = values[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not lower <= float(value) <= upper:
+            raise DirectorContractError(
+                f"editing.caption_segmentation.{name} must be a number from {lower} to {upper}"
+            )
+        values[name] = float(value)
+    return values
+
+
 def _json_sha256(value: Any) -> str:
     encoded = json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
@@ -2126,6 +2153,7 @@ class Director:
             ),
             "video-use edit correctness preflight",
         )
+        caption_segmentation = _caption_segmentation_options(self.project)
         plan = {
             "schema_version": 1,
             "owner": "video-use",
@@ -2138,7 +2166,9 @@ class Director:
                 sys.executable, str(Path(__file__).with_name("video_use_bridge.py")),
                 "--edl", str(edl_path), "--transcript", f"{source_name}={transcript_path}",
                 "--out-dir", str(self.video_use_dir),
-                "--max-chars", "24", "--max-duration", "6.5", "--pause-break", "0.5",
+                "--max-chars", str(caption_segmentation["max_chars"]),
+                "--max-duration", str(caption_segmentation["max_duration"]),
+                "--pause-break", str(caption_segmentation["pause_break"]),
                 "--punctuation-style", str(
                     self.project.get("editing", {}).get("caption_punctuation", "spoken_clean")
                 ),

@@ -19,6 +19,7 @@ from director import (  # noqa: E402
     Director,
     ROLE_CONTRACT,
     _cover_delivery_gate,
+    _caption_segmentation_options,
     _artifact_records,
     _artifact_records_current,
     _json_file_content_sha256,
@@ -52,6 +53,24 @@ class DirectorTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def test_caption_segmentation_options_are_project_configurable(self) -> None:
+        self.assertEqual(_caption_segmentation_options({}), {
+            "max_chars": 24, "max_duration": 6.5, "pause_break": 0.5,
+        })
+        self.assertEqual(_caption_segmentation_options({"editing": {
+            "caption_segmentation": {
+                "max_chars": 14, "max_duration": 4.2, "pause_break": 0.35,
+            }
+        }}), {
+            "max_chars": 14, "max_duration": 4.2, "pause_break": 0.35,
+        })
+
+    def test_caption_segmentation_options_reject_unsafe_values(self) -> None:
+        with self.assertRaisesRegex(DirectorContractError, "max_chars"):
+            _caption_segmentation_options({"editing": {
+                "caption_segmentation": {"max_chars": 2},
+            }})
 
     @staticmethod
     def _write_master_srt(director: Director) -> Path:

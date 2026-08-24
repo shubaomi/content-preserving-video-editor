@@ -246,9 +246,31 @@ def build_captions(mapped_words: list[dict[str, Any]], *, max_chars: int = 24,
         current.extend(unit)
     if current:
         groups.append(current)
+
+    # Audited corrections may introduce punctuation as standalone timestamped
+    # tokens.  Display styles such as ``spoken_clean`` intentionally hide that
+    # punctuation, so a standalone group would otherwise become an empty
+    # caption flash.  Keep the timing/alignment authority by folding such
+    # tokens into an adjacent visible group instead of dropping them.
+    visible_groups: list[list[dict[str, Any]]] = []
+    pending_prefix: list[dict[str, Any]] = []
+    for group in groups:
+        if not _display_caption_text(_join(group), punctuation_style).strip():
+            if visible_groups:
+                visible_groups[-1].extend(group)
+            else:
+                pending_prefix.extend(group)
+            continue
+        if pending_prefix:
+            group = pending_prefix + group
+            pending_prefix = []
+        visible_groups.append(group)
+    if pending_prefix and visible_groups:
+        visible_groups[-1].extend(pending_prefix)
+
     captions = []
     word_cursor = 0
-    for group in groups:
+    for group in visible_groups:
         captions.append({
             "start": round(float(group[0]["start"]), 3),
             "end": round(float(group[-1]["end"]), 3),

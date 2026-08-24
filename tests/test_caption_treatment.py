@@ -246,6 +246,36 @@ class CaptionTreatmentTests(unittest.TestCase):
             ])
             self.assertEqual([row["text"] for row in __import__("caption_treatment").parse_srt(sample_srt)], ["前一句", "后一句"])
 
+    def test_sample_caption_authority_drops_a_tail_sliver_from_the_next_sentence(self) -> None:
+        import json
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            captions = root / "captions.json"
+            master_srt = root / "master.srt"
+            captions.write_text(json.dumps({"segments": [
+                {"start": 8.0, "end": 8.8, "text": "完整句子"},
+                {"start": 9.0, "end": 9.15, "text": "短答"},
+                {"start": 9.88, "end": 15.0, "text": "不应提前显示的下一整句"},
+            ]}, ensure_ascii=False), encoding="utf-8")
+            master_srt.write_text(
+                "1\n00:00:08,000 --> 00:00:08,800\n完整句子\n\n"
+                "2\n00:00:09,000 --> 00:00:09,150\n短答\n\n"
+                "3\n00:00:09,880 --> 00:00:15,000\n不应提前显示的下一整句\n",
+                encoding="utf-8",
+            )
+            sample_json, sample_srt = materialize_sample_caption_authority(
+                captions_path=captions, master_srt_path=master_srt,
+                source_start=8.0, source_end=10.0,
+                output_captions=root / "sample-captions.json",
+                output_srt=root / "sample-master.srt", authorized_root=root,
+            )
+            sample = json.loads(sample_json.read_text(encoding="utf-8"))
+            self.assertEqual([row["text"] for row in sample["segments"]], ["完整句子", "短答"])
+            self.assertEqual(
+                [row["text"] for row in __import__("caption_treatment").parse_srt(sample_srt)],
+                ["完整句子", "短答"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

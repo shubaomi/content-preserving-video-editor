@@ -42,6 +42,24 @@ exclamation marks remain when they carry spoken tone. `none` is an explicit
 project choice and removes all displayed punctuation without changing word
 timings or sentence segmentation.
 
+`editing.caption_segmentation` optionally tunes the word-timestamp grouping
+used by the Director's video-use bridge:
+
+```yaml
+caption_segmentation:
+  max_chars: 14
+  max_duration: 4.2
+  pause_break: 0.5
+```
+
+Defaults remain `24`, `6.5`, and `0.5` for backward compatibility. `max_chars`
+must be an integer from 8–32, `max_duration` a number from 1–10 seconds, and
+`pause_break` a number from 0.15–2 seconds. These are grouping targets rather
+than permission to rewrite speech; audited terminology and semantic-punctuation
+corrections remain separate, traceable inputs. Director execution plans must
+record the resolved values so a resume cannot silently revert project-specific
+single-line caption settings.
+
 Allow `editing.caption_delivery: auto` or `none`; migration defaults to `auto`.
 `auto` requires output-timeline `video-use/master.srt` whenever the source lacks
 an independently verified subtitle stream or burned-caption layer, including

@@ -234,6 +234,20 @@ class VideoUseBridgeTests(unittest.TestCase):
         self.assertEqual(bridge._display_caption_text("你理解了吗？", "spoken_clean"), "你理解了吗？")
         self.assertEqual(bridge._display_caption_text("概念，原理。", "none"), "概念原理")
 
+    def test_spoken_clean_never_emits_a_punctuation_only_caption(self) -> None:
+        words = [
+            {"text": "说明文档。", "start": 1.0, "end": 1.8, "source_word_count": 1},
+            {"text": "。", "start": 1.8, "end": 2.0, "source_word_count": 0},
+            {"text": "然后", "start": 2.6, "end": 3.0, "source_word_count": 1},
+            {"text": "继续", "start": 3.0, "end": 3.5, "source_word_count": 1},
+        ]
+        captions = bridge.build_captions(
+            words, max_duration=4.2, max_chars=14, pause_break=0.5,
+            punctuation_style="spoken_clean",
+        )
+        self.assertEqual([caption["text"] for caption in captions], ["说明文档", "然后继续"])
+        self.assertFalse(any(not caption["text"].strip() for caption in captions))
+
     def test_hard_split_rebalances_incomplete_tail_to_next_caption(self) -> None:
         text = "通过一个Skill来在不改变原产品的基础之上去做一个原产品核心功能一次完整请求的拆解。"
         tokens = [*"通过一个", "Skill", *"来在不改变原产品的基础之上去做一个原产品核心功能一次完整请求的拆解。"]
