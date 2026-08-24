@@ -6055,8 +6055,11 @@ class Director:
     def _write_manual_handoff_manifest(self) -> Path:
         config = self.manual_finish_config
         assets = config.get("assets") or {}
-        clean_a_roll = self._optional_project_path(
-            assets.get("clean_a_roll") or (self.video_use_dir / "base-preview.mp4")
+        configured_clean_a_roll = assets.get("clean_a_roll")
+        clean_a_roll = (
+            self._optional_project_path(configured_clean_a_roll)
+            if configured_clean_a_roll
+            else self._default_manual_clean_a_roll()
         )
         captions = self._optional_project_path(
             assets.get("captions") or (self.video_use_dir / "master.srt")
@@ -6090,6 +6093,16 @@ class Director:
             production_contract=self.production_contract_path,
         )
         return path
+
+    def _default_manual_clean_a_roll(self) -> Path:
+        """Prefer the current full caption-free delivery over a sample preview."""
+        editable_manifest = self.editable_delivery_root / "editable-delivery-manifest.json"
+        if editable_manifest.is_file() and not validate_editable_delivery(editable_manifest):
+            candidate = read_json(editable_manifest).get("caption_free_candidate") or {}
+            path = self._optional_project_path(candidate.get("path"))
+            if path is not None and path.is_file():
+                return path
+        return self.video_use_dir / "base-preview.mp4"
 
     def _write_standard_editable_delivery(self, motion: Path) -> tuple[Path, list[Path]]:
         """Write the always-on editor-neutral repair kit for a completed full render."""
@@ -6171,7 +6184,7 @@ class Director:
         if not isinstance(assets_config, dict):
             raise DirectorContractError("manual finish assets must be a mapping")
         defaults: dict[str, Path] = {
-            "clean_a_roll": self.video_use_dir / "base-preview.mp4",
+            "clean_a_roll": self._default_manual_clean_a_roll(),
             "caption_srt": self.video_use_dir / "master.srt",
             "caption_ass_reference": self.root / "caption-treatment" / "full" / "master.ass",
             "caption_style_plan": (

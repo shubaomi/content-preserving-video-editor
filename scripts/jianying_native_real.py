@@ -288,20 +288,23 @@ def _adapter_request(context: Mapping[str, Any], *, staging: Path) -> dict[str, 
             start = int(clip["start_frame"])
             duration = int(clip["duration_frames"])
             source_start = int(clip["source_start_frame"])
+            target_start_us = _frame_to_us(
+                start, numerator=numerator, denominator=denominator
+            )
+            source_start_us = _frame_to_us(
+                source_start, numerator=numerator, denominator=denominator
+            )
             row = {
                 "clip_id": clip["clip_id"], "role": clip["role"],
-                "target_start_us": _frame_to_us(
-                    start, numerator=numerator, denominator=denominator
-                ),
+                "target_start_us": target_start_us,
                 "target_duration_us": _frame_to_us(
-                    duration, numerator=numerator, denominator=denominator
-                ),
-                "source_start_us": _frame_to_us(
-                    source_start, numerator=numerator, denominator=denominator
-                ),
+                    start + duration, numerator=numerator, denominator=denominator
+                ) - target_start_us,
+                "source_start_us": source_start_us,
                 "source_duration_us": _frame_to_us(
-                    duration, numerator=numerator, denominator=denominator
-                ),
+                    source_start + duration,
+                    numerator=numerator, denominator=denominator,
+                ) - source_start_us,
                 "source_path": clip["source"]["path"],
                 "source_sha256": clip["source"]["sha256"],
                 "payload": clip["payload"],
@@ -658,9 +661,15 @@ def _native_projection_errors(
                 "start": _frame_to_us(
                     int(clip["start_frame"]), numerator=numerator, denominator=denominator
                 ),
-                "duration": _frame_to_us(
-                    int(clip["duration_frames"]), numerator=numerator,
-                    denominator=denominator,
+                "duration": (
+                    _frame_to_us(
+                        int(clip["start_frame"]) + int(clip["duration_frames"]),
+                        numerator=numerator, denominator=denominator,
+                    )
+                    - _frame_to_us(
+                        int(clip["start_frame"]),
+                        numerator=numerator, denominator=denominator,
+                    )
                 ),
             }
             if target != expected_target:
@@ -680,7 +689,15 @@ def _native_projection_errors(
                     "start": _frame_to_us(
                         source_start, numerator=numerator, denominator=denominator
                     ),
-                    "duration": expected_target["duration"],
+                    "duration": (
+                        _frame_to_us(
+                            source_start + int(clip["duration_frames"]),
+                            numerator=numerator, denominator=denominator,
+                        )
+                        - _frame_to_us(
+                            source_start, numerator=numerator, denominator=denominator,
+                        )
+                    ),
                 }
                 if source != expected_source:
                     errors.append(f"native source timeline differs for {clip_id}")

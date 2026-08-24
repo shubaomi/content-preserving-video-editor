@@ -343,6 +343,29 @@ def _make_segment(draft, *, kind: str, clip: Mapping[str, Any]):
     )
 
 
+def _add_segment_with_exact_touching_boundary(script, segment, track_ref) -> None:
+    """Work around the pinned adapter treating exact end/start contact as overlap.
+
+    The canonical frame plan remains authoritative. We temporarily shorten only
+    an existing segment whose end exactly equals the new segment's start, let
+    the pinned library register the new segment and its materials, then restore
+    the exact duration before the draft is serialized and validated.
+    """
+    track = script._resolve_track_ref(track_ref)
+    touching = [
+        existing for existing in track.segments
+        if existing.target_timerange.end == segment.target_timerange.start
+        and existing.target_timerange.duration > 1
+    ]
+    for existing in touching:
+        existing.target_timerange.duration -= 1
+    try:
+        script.add_segment(segment, track_ref)
+    finally:
+        for existing in touching:
+            existing.target_timerange.duration += 1
+
+
 def _project_tracks(draft, *, script, tracks: list[Any]) -> list[dict[str, Any]]:
     projected: list[dict[str, Any]] = []
     type_map = {
@@ -357,7 +380,7 @@ def _project_tracks(draft, *, script, tracks: list[Any]) -> list[dict[str, Any]]
         track_ref = script.append_track(draft.TrackSpec(type_map[kind], track["track_id"]))
         for clip in track["clips"]:
             segment = _make_segment(draft, kind=kind, clip=clip)
-            script.add_segment(segment, track_ref)
+            _add_segment_with_exact_touching_boundary(script, segment, track_ref)
             projected.append({
                 "clip_id": clip["clip_id"], "track_id": track["track_id"],
                 "segment_id": segment.segment_id, "status": "projected",

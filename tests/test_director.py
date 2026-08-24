@@ -2090,6 +2090,57 @@ class DirectorTests(unittest.TestCase):
             "the expanded layered NLE package remains optional",
         )
 
+    def test_manual_nle_defaults_to_full_caption_free_delivery_not_sample_preview(self) -> None:
+        config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
+        config["delivery"]["manual_finish"] = {
+            "enabled": True,
+            "backend": "other_nle",
+            "modifications": [],
+            "nle_package": {
+                "enabled": True,
+                "profile": "jianying_desktop_compatible_v1",
+                "level": "balanced",
+            },
+        }
+        self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
+        director = Director(self.project)
+        self._write_master_srt(director)
+        self._write_standard_editable_delivery_authorities(director)
+        (director.video_use_dir / "base-preview.mp4").write_bytes(b"stale-sample-preview")
+        (director.video_use_dir / "edl.json").write_text(json.dumps({
+            "owner": "video-use", "sources": {"input": str(director.context.source_video)},
+            "ranges": [{"id": "c1", "source": "input", "start": 0.0,
+                        "end": 1.0, "timeline_start": 0.0}],
+            "gaps": [], "transitions": [], "metadata": {"video_id": "sample"},
+        }), encoding="utf-8")
+        director.delivery_output.parent.mkdir(parents=True, exist_ok=True)
+        director.delivery_output.write_bytes(b"automatic-captioned-master")
+        motion = director.root / "render" / "full-hyperframes.mp4"
+        motion.parent.mkdir(parents=True, exist_ok=True)
+        motion.write_bytes(b"full-caption-free-render")
+
+        with patch.object(
+            director, "_motion_source_media",
+            return_value={"width": 1080, "height": 1920, "duration_seconds": 1.0},
+        ), patch("director.probe_video_frame_rate", return_value=25.0):
+            director._write_standard_editable_delivery(motion)
+            handoff = json.loads(
+                director._write_manual_handoff_manifest().read_text(encoding="utf-8")
+            )
+            receipt, _ = director._write_manual_nle_package_v2()
+
+        self.assertEqual(director._default_manual_clean_a_roll(), motion.resolve())
+        self.assertEqual(
+            Path(handoff["assets"]["clean_a_roll"]["path"]), motion.resolve(),
+        )
+        package = json.loads(receipt.read_text(encoding="utf-8"))
+        clean = next(row for row in package["assets"] if row["role"] == "clean_a_roll")
+        copied = director.manual_nle_package_root / clean["path"]
+        self.assertEqual(sha256_file(copied), sha256_file(motion))
+        self.assertNotEqual(
+            sha256_file(copied), sha256_file(director.video_use_dir / "base-preview.mp4"),
+        )
+
     def test_layered_nle_package_materializes_current_hyperframes_event_layers(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["delivery"]["manual_finish"] = {

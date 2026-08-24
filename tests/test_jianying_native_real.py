@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
@@ -19,12 +20,14 @@ from director_contracts import sha256_file  # noqa: E402
 from editable_delivery import build_editable_delivery  # noqa: E402
 from jianying_native_real import (  # noqa: E402
     JianyingNativeDraftError,
+    _adapter_request,
     bind_project_local_candidate,
     materialize_project_local_candidate,
     validate_project_local_candidate,
 )
 from jianying_native_plan import validate_draft_plan  # noqa: E402
 from jianying_native_adapter_runner import (  # noqa: E402
+    _add_segment_with_exact_touching_boundary,
     _locked_authorized_bytes, _locked_authorized_hash,
     execute as execute_adapter_request,
 )
@@ -53,6 +56,88 @@ class JianyingProjectLocalCandidateTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._dependency_lock_patch.stop()
         cls._runtime_lock_patch.stop()
+
+    def test_pinned_adapter_touching_boundary_workaround_preserves_exact_times(self) -> None:
+        class FakeRange:
+            def __init__(self, start: int, duration: int) -> None:
+                self.start = start
+                self.duration = duration
+
+            @property
+            def end(self) -> int:
+                return self.start + self.duration
+
+        class FakeScript:
+            def __init__(self) -> None:
+                self.track = SimpleNamespace(segments=[])
+
+            def _resolve_track_ref(self, _track_ref):
+                return self.track
+
+            def add_segment(self, segment, _track_ref) -> None:
+                for existing in self.track.segments:
+                    if not (
+                        existing.target_timerange.end < segment.target_timerange.start
+                        or segment.target_timerange.end < existing.target_timerange.start
+                    ):
+                        raise ValueError("inclusive overlap")
+                self.track.segments.append(segment)
+
+        script = FakeScript()
+        first = SimpleNamespace(
+            target_timerange=FakeRange(0, 100),
+        )
+        script.track.segments.append(first)
+        second_range = FakeRange(100, 50)
+        second = SimpleNamespace(target_timerange=second_range)
+
+        _add_segment_with_exact_touching_boundary(script, second, object())
+
+        self.assertEqual(first.target_timerange.duration, 100)
+        self.assertEqual(script.track.segments, [first, second])
+
+        overlapping = SimpleNamespace(
+            target_timerange=FakeRange(99, 10),
+        )
+        with self.assertRaisesRegex(ValueError, "inclusive overlap"):
+            _add_segment_with_exact_touching_boundary(script, overlapping, object())
+
+    def test_adapter_request_uses_frame_endpoints_at_fractional_microseconds(self) -> None:
+        root = Path("C:/authorized")
+        context = {
+            "plan": {
+                "plan_sha256": "0" * 64,
+                "draft_id": "fractional-boundary",
+                "timebase": {"numerator": 30, "denominator": 1},
+                "tracks": [{
+                    "track_id": "text.captions", "order": 200, "kind": "text",
+                    "clips": [
+                        {"clip_id": "caption.1", "role": "caption",
+                         "start_frame": 1097, "source_start_frame": 0,
+                         "duration_frames": 53, "source": {"path": "a", "sha256": "a"},
+                         "payload": {"text": "前句"}},
+                        {"clip_id": "caption.2", "role": "caption",
+                         "start_frame": 1150, "source_start_frame": 0,
+                         "duration_frames": 48, "source": {"path": "b", "sha256": "b"},
+                         "payload": {"text": "后句"}},
+                    ],
+                }],
+            },
+            "fps": 30, "canvas": {"width": 960, "height": 624},
+            "adapter_wheel": root / "adapter.whl", "adapter_dependencies": [],
+            "adapter_runtime_lock": {}, "adapter_lock_sha256": "1" * 64,
+            "adapter_locked_io_sha256": "2" * 64,
+            "adapter_python": root / "python.exe", "adapter_runner_sha256": "3" * 64,
+            "authorized_root": root,
+        }
+        with patch("jianying_native_real.sha256_file", return_value="4" * 64):
+            clips = _adapter_request(
+                context, staging=root / "staging"
+            )["tracks"][0]["clips"]
+        self.assertEqual(
+            clips[0]["target_start_us"] + clips[0]["target_duration_us"],
+            clips[1]["target_start_us"],
+        )
 
     @staticmethod
     def _refresh_candidate_manifest(manifest_path: Path) -> None:
