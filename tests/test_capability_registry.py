@@ -24,6 +24,14 @@ from director import Director  # noqa: E402
 
 
 class CapabilityRegistryTests(unittest.TestCase):
+    @patch("portrait_golden.validate_retained_real_project_portrait_validation")
+    @patch("test_acceptance_report.validate_report", return_value=["fixture evidence is stale"])
+    def test_stale_fixture_receipt_does_not_launch_unusable_live_validation(self, _fixture, live):
+        inventory = build_capability_inventory({})
+        live.assert_not_called()
+        portrait = next(row for row in inventory["capabilities"] if row["name"] == "portrait_brand_motion_v2")
+        self.assertEqual(portrait["maturity"], "director_integrated")
+
     def test_maturity_vocabulary_matches_the_approved_five_states(self) -> None:
         self.assertEqual(CAPABILITY_LEVELS, (
             "documented",

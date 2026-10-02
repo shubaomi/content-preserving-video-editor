@@ -9,8 +9,11 @@ in [`references/reference-led-ip-direction.md`](references/reference-led-ip-dire
 The [2026-10-02 research](references/open-source-video-research-20261002.md)
 compares Hypit, FunClip, Auto-Editor, OpenCut and OpenTimelineIO against existing
 capabilities. Hypit is an independently installed optional tool, not a Director
-backend. The proposed [IP content loop v1](references/ip-content-loop-v1/README.md)
-remains a design candidate awaiting approval; its runtime is not implemented.
+backend. The approved [IP content loop v1](references/ip-content-loop-v1/runtime-guide.md)
+adds default-off evidence-bound editorial sidecars, same-master platform metadata,
+and offline cross-publication learning candidates. It does not authorize publishing
+or claim validated business results. The immutable design and separate approval
+receipt are retained under `references/ip-content-loop-v1/`.
 See the [local recovery record](references/operations/recovery-20261002.md) for
 the restored checkout and Codex Skill paths.
 

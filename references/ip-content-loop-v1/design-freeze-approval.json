@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "candidate_id": "hongrun-ip-content-loop-v1-20261002",
+  "candidate_sha256": "7f0f6d1cf2548f9d3a6acafa4bfed7d8456898b36d688036cb0378c0a1e95497",
+  "approval_date": "2026-10-02",
+  "authority": "explicit_user_message",
+  "user_message": "批准 hongrun-ip-content-loop-v1-20261002，按 WP0–WP5 实施、验证并提交推送。",
+  "approved_work_packages": ["WP0", "WP1", "WP2", "WP3", "WP4", "WP5"],
+  "scope": "Bound design only; existing human gates remain. No paid calls, full render, publication or production-default promotion."
+}

@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -25,6 +26,7 @@ class ProviderGovernanceTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        self.evidence_time = datetime.now(timezone.utc).isoformat()
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -46,8 +48,8 @@ class ProviderGovernanceTests(unittest.TestCase):
                 {"name": "identity-api", "available": True, "paid_call_authorized": True,
                  "requires_paid_call": True, "verified_pricing_basis": True,
                  "pricing_source": "user_plan", "cost_basis": "user token plan",
-                 "evidence_timestamp": "2026-08-01T00:00:00+00:00",
-                 "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+                 "evidence_timestamp": self.evidence_time,
+                 "quota_evidence_timestamp": self.evidence_time,
                  "actual_cost_strategy": "fixed", "failure_incremental_cost": 0.0,
                  "task_fit": 1.0, "chinese": 0.9, "identity_preservation": 1.0,
                  "quality": 0.95, "reliability": 0.8, "privacy_locality": 0.4,
@@ -70,8 +72,8 @@ class ProviderGovernanceTests(unittest.TestCase):
                      "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.75,
                      "failure_incremental_cost": 0.0, "paid_call_authorized": True,
                      "verified_pricing_basis": True, "pricing_source": "user_plan",
-                     "evidence_timestamp": "2026-08-01T00:00:00+00:00",
-                     "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+                     "evidence_timestamp": self.evidence_time,
+                     "quota_evidence_timestamp": self.evidence_time,
                      "remaining_quota": 10}],
             "image_generation": [{"name": "fixture-cover", "available": True,
                                   "task_fit": 1.0, "incremental_cost": 1.5,
@@ -81,8 +83,8 @@ class ProviderGovernanceTests(unittest.TestCase):
                                   "paid_call_authorized": True,
                                   "verified_pricing_basis": True,
                                   "pricing_source": "user_plan",
-                                  "evidence_timestamp": "2026-08-01T00:00:00+00:00",
-                                  "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+                                  "evidence_timestamp": self.evidence_time,
+                                  "quota_evidence_timestamp": self.evidence_time,
                                   "remaining_quota": 10}],
         }}
         ledger = create_cost_ledger(
@@ -134,8 +136,8 @@ class ProviderGovernanceTests(unittest.TestCase):
             "actual_cost_strategy": "fixed", "fixed_actual_cost": 0.2,
             "failure_incremental_cost": 0.0, "paid_call_authorized": True,
             "verified_pricing_basis": True, "pricing_source": "user_plan",
-            "evidence_timestamp": "2026-08-01T00:00:00+00:00",
-            "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+            "evidence_timestamp": self.evidence_time,
+            "quota_evidence_timestamp": self.evidence_time,
             "remaining_quota": 10,
         }]}}
         decision = build_decision_report(config=config, project_hash="2" * 64)
@@ -167,8 +169,8 @@ class ProviderGovernanceTests(unittest.TestCase):
             "actual_cost_strategy": "fixed", "fixed_actual_cost": 100.0,
             "failure_incremental_cost": 0.0, "paid_call_authorized": True,
             "verified_pricing_basis": True, "pricing_source": "user_contract",
-            "evidence_timestamp": "2026-08-01T00:00:00+00:00",
-            "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+            "evidence_timestamp": self.evidence_time,
+            "quota_evidence_timestamp": self.evidence_time,
             "remaining_quota": 1000,
         }]}}
         decision = build_decision_report(config=config, project_hash="3" * 64)
@@ -307,8 +309,8 @@ class ProviderGovernanceTests(unittest.TestCase):
             "fixed_actual_cost": 0.2, "failure_incremental_cost": 0.0,
             "paid_call_authorized": True, "verified_pricing_basis": True,
             "pricing_source": "user_plan",
-            "evidence_timestamp": "2026-08-01T00:00:00+00:00",
-            "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+            "evidence_timestamp": self.evidence_time,
+            "quota_evidence_timestamp": self.evidence_time,
             "task_fit": 1.0,
             "remaining_quota": 10,
         }]}}

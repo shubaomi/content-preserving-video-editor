@@ -4,14 +4,24 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 13. New projects write both
-`schema_version: 13` and `version: 13`. Legacy projects from v1 through v12 are
+The current project schema is version 14. New projects write both
+`schema_version: 14` and `version: 14`. Legacy projects from v1 through v13 are
 deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
 Schema versions must be real integers, not booleans or numeric strings. Audio
 normalization targets must be finite numeric values; boolean, NaN, and infinite
 LUFS/true-peak/LRA values are rejected before execution.
+
+## Optional editorial loop (v14)
+
+`editorial_loop: {enabled: false, strategy_path: null}` is the default.
+Enabled must be a boolean; strategy_path is null or a non-empty path (relative
+to the project root). Unknown keys are rejected. A configured shared strategy is
+read-only and is never followed when disabled. Enabling the loop also enables
+the existing editorial-intent validation, not rendering or publishing permission.
+See [runtime-guide.md](ip-content-loop-v1/runtime-guide.md) for the four sidecars,
+unknown facts, source bindings, and offline learning.
 
 ## Profile
 

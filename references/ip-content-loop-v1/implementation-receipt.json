@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "candidate_id": "hongrun-ip-content-loop-v1-20261002",
+  "candidate_sha256": "7f0f6d1cf2548f9d3a6acafa4bfed7d8456898b36d688036cb0378c0a1e95497",
+  "approval_receipt": "references/ip-content-loop-v1/design-freeze-approval.json",
+  "implementation_base_commit": "ddf70b0d0aff5f8627c25b2d451f121e07d57670",
+  "source_tree_sha256": "2b5722e71985fb4df9084c3854d0efd324715a4b64820a00edcce3ccfec32fff",
+  "status": "implemented_automated_validation_passed",
+  "work_packages": {
+    "WP0": "implemented_validated",
+    "WP1": "implemented_validated",
+    "WP2": "implemented_validated",
+    "WP3": "implemented_validated",
+    "WP4": "implemented_validated",
+    "WP5": "automated_validation_complete_real_canary_pending"
+  },
+  "project_schema_version": 14,
+  "director_stage_count": 19,
+  "default_enabled": false,
+  "test_evidence": {
+    "report": "references/validation/test-suite-report.json",
+    "report_sha256": "01a3a9645a6c2b72900450fad6baf9e2a8e76d09144b0abcd03cb866d8458a98",
+    "log": "references/validation/test-suite.log",
+    "log_sha256": "2d14228f9fac1d61b6f39225bda26dc11c90452d0f640aa7bdddacf69c4cc03a",
+    "test_count": 1037,
+    "failed": 0,
+    "skipped": 0,
+    "exit_code": 0,
+    "receipt_revalidation_errors": []
+  },
+  "other_checks": {
+    "six_type_fixture_acceptance": "pass",
+    "current_golden_generation_and_revalidation": "pass",
+    "compileall": "pass",
+    "skill_quick_validate": "pass",
+    "frozen_design_inventory": "unchanged",
+    "global_skill_junction": "same_canonical_source"
+  },
+  "review": "author_code_and_security_self_review_not_independent_expert_review",
+  "remaining_human_evidence": [
+    "new_ip_loop_self_portrait_and_third_party_screen_short_canaries",
+    "jianying_desktop_manual_editability"
+  ],
+  "hypit_director_adapter": false,
+  "paid_generation_performed": false,
+  "full_user_video_render_performed": false,
+  "publication_performed": false,
+  "production_default": false,
+  "automatic_profile_updates": false
+}

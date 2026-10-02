@@ -70,6 +70,7 @@ from cover_reference_pack import (
 )
 from conditional_extensions import route_extensions, run_extension_adapters
 from director_adapters import AdapterExecutionError, AdapterRunner
+import editorial_loop
 from director_contracts import (
     STAGES,
     DirectorContractError,
@@ -772,6 +773,14 @@ class Director:
                             state, name, f"completed stage artifact changed or lacks hash evidence: {name}",
                         )
                         break
+                # A schema upgrade changes deterministic production-contract policy
+                # even when project.yaml bytes are unchanged. Keep expensive upstream
+                # evidence, but do not reuse a completed contract from the old schema.
+                if stages["production_contract"].get("status") == "complete" and self.production_contract_path.is_file():
+                    old_schema = read_json(self.production_contract_path).get("project_schema_version")
+                    if type(old_schema) is int and old_schema < self.project["schema_version"]:
+                        self._invalidate_from(state, "production_contract",
+                                              "project schema migration requires refreshed downstream contracts")
             state["input_fingerprints"] = current_inputs
             state["schema_version"] = STATE_VERSION
             state["director_version"] = DIRECTOR_VERSION
@@ -2435,6 +2444,15 @@ class Director:
                 "output": str(self.semantic_brief_path),
                 "deterministic_rules_role": "reject low-information, repeats, overlap, overflow, duplication, and filler only",
                 "forbidden": ["keyword score as semantic author", "project script hardcoded events", "density quota filler"],
+                **({"editorial_loop": {
+                    "schema": str(editorial_loop.SCHEMA),
+                    "directory": str(self.root / "editorial-loop"),
+                    "required_sidecars": editorial_loop.FILES,
+                    "author": "director_with_llm_after_reading_current_evidence",
+                    "unknown_positioning_allowed": True,
+                    "no_profile_inheritance_for_third_party_or_generic": True,
+                    "no_automatic_readiness_mutation_or_publication": True,
+                }} if self.project["editorial_loop"]["enabled"] else {}),
                 **({
                     "editorial_intent": self.project.get("editorial_intent"),
                     "promise_ledger_required": True,
@@ -2511,8 +2529,11 @@ class Director:
             brief, transcript_path=transcript, evidence_bundle_path=self.evidence_bundle_path,
         ), "semantic brief evidence binding")
         editorial_config = self.project.get("editorial_intent") or {}
+        loop_intent, loop_dependencies = self._editorial_loop_gate("semantic_brief")
         if editorial_config.get("enabled") is True:
             brief_for_ledger = dict(brief)
+            if loop_intent is not None:
+                brief_for_ledger["editorial_intent"] = loop_intent
             if not isinstance(brief_for_ledger.get("editorial_intent"), dict):
                 configured = {key: value for key, value in editorial_config.items() if key != "enabled"}
                 if configured.get("mode") == "explicit":
@@ -2541,7 +2562,7 @@ class Director:
                     "expected_artifact": str(self.semantic_brief_path),
                 }],
             )
-        artifacts = [self.semantic_brief_path]
+        artifacts = [self.semantic_brief_path, *loop_dependencies]
         if editorial_config.get("enabled") is True:
             artifacts.append(self.root / "editorial-promise-ledger.json")
         artifacts.extend(self._semantic_confidence_gate(brief))
@@ -2794,7 +2815,91 @@ class Director:
             )
         return [output]
 
+    def _editorial_loop_gate(self, stage: str) -> tuple[dict | None, list[Path]]:
+        if not self.project.get("editorial_loop", {}).get("enabled"):
+            return None, []
+        directory = self.root / "editorial-loop"
+        transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
+        strategy_value = self.project["editorial_loop"].get("strategy_path")
+        strategy_path = Path(strategy_value) if strategy_value else None
+        if strategy_path is not None and not strategy_path.is_absolute():
+            strategy_path = self.context.root / strategy_path
+        try:
+            intent, dependencies = editorial_loop.load_bundle(
+                directory, self.context.root, transcript=transcript,
+                edl=self.video_use_dir / "edl.json", source=self.context.source_video,
+                semantic_brief=self.semantic_brief_path, evidence_bundle=self.evidence_bundle_path,
+                project_file=self.context.project_file,
+                identity_mode=self.project["identity"]["mode"], strategy_path=strategy_path,
+            )
+            configured = self.project.get("editorial_intent") or {}
+            if configured.get("mode") == "explicit" and any(
+                configured.get(key) != value for key, value in intent.items()
+            ):
+                raise ValueError("configured editorial intent conflicts with the sidecar projection")
+            if stage != "semantic_brief":
+                ledger_path = self.root / "editorial-promise-ledger.json"
+                expected = build_promise_ledger({**read_json(self.semantic_brief_path), "editorial_intent": intent})
+                expected["semantic_brief"] = {"path": str(self.semantic_brief_path.resolve()),
+                                               "sha256": sha256_file(self.semantic_brief_path)}
+                if not ledger_path.is_file() or read_json(ledger_path) != expected:
+                    raise ValueError("promise ledger is missing or differs from the current sidecar projection")
+            dependencies.extend([Path(__file__), Path(__file__).with_name("production_contract.py"),
+                                 Path(__file__).with_name("project_config.py")])
+            return intent, dependencies
+        except (OSError, ValueError, KeyError, TypeError, ImportError) as error:
+            request = directory / "editorial-request.json"
+            # Never follow an escaped sidecar directory even to write an error packet.
+            try:
+                editorial_loop.save(request, {
+                    "schema_version": 1, "owner": "director_with_llm", "error": str(error),
+                    "schema": str(editorial_loop.SCHEMA), "required_files": editorial_loop.FILES,
+                    "authoritative_inputs": {"transcript": str(transcript),
+                        "edl": str(self.video_use_dir / "edl.json"),
+                        "source": str(self.context.source_video),
+                        "semantic_brief": str(self.semantic_brief_path),
+                        "evidence_bundle": str(self.evidence_bundle_path),
+                        "strategy": str(strategy_path) if strategy_path else None},
+                    "identity_mode": self.project["identity"]["mode"],
+                    "instructions": ["Read evidence before authoring; unknown strategy is allowed.",
+                        "Use current word/event IDs, never reference-video seconds.",
+                        "Readiness is advisory, not render/publication approval.",
+                        "Shared strategy is read-only; no automatic personal-profile inheritance.",
+                        "Bind current source, transcript, EDL and semantic brief hashes.",
+                        "Record real user confirmations only in user-record.json; never invent approval."],
+                }, self.context.root)
+            except ValueError:
+                request = self.action_path
+            self._action_required(stage, "Editorial sidecar requires valid current evidence: " + str(error),
+                                  [{"owner": "director_with_llm", "request": str(request),
+                                    "expected_artifact": str(directory)}])
+
+    def _editorial_platform_packages(self, output: Path) -> list[Path]:
+        if not self.project.get("editorial_loop", {}).get("enabled"):
+            return []
+        self._editorial_loop_gate("delivery_qa")
+        copy_path = self.root / "publish-metadata.json"
+        ledger_path = self.root / "editorial-promise-ledger.json"
+        try:
+            cover_copy = None
+            cover_plan = self.context.edit_dir / "cover" / "cover-editorial-plan.json"
+            if cover_plan.is_file():
+                cover_copy = ((read_json(cover_plan).get("editorial_promise") or {}).get("binding") or {}).get("copy")
+            docs = editorial_loop.build_platform_packages(copy_path, ledger_path, output,
+                                                          self.context.root, cover_copy=cover_copy)
+            paths = []
+            for doc in docs:
+                path = self.root / "editorial-loop" / doc["payload"]["platform"] / "platform-package.json"
+                editorial_loop.save(path, doc, self.context.root)
+                paths.append(path)
+            return [*paths, copy_path, ledger_path, *([cover_plan] if cover_plan.is_file() else [])]
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            self._action_required("delivery_qa", "Platform packaging needs current promise-bound copy: " + str(error),
+                                  [{"owner": "director_with_llm", "expected_artifact": str(copy_path),
+                                    "promise_ledger": str(ledger_path)}])
+
     def stage_production_contract(self) -> None:
+        self._editorial_loop_gate("production_contract")
         transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
         edl = self.video_use_dir / "edl.json"
         required = [transcript, edl, self.semantic_brief_path]
@@ -2826,6 +2931,7 @@ class Director:
         self._complete("production_contract", [self.production_contract_path])
 
     def _validate_current_production_contract(self) -> None:
+        self._editorial_loop_gate(self.state.get("current_stage") or "production_contract")
         if not self.production_contract_path.is_file():
             raise DirectorContractError("current production contract is missing")
         transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
@@ -7071,11 +7177,12 @@ class Director:
                              ),
                              "automatic_master": str(self.delivery_output),
                             "manual_finish": self.manual_finish_active})
+        editorial_packages = self._editorial_platform_packages(output)
         optional_delivery = self._build_optional_delivery_packages(
             output=output, cover=cover_path, delivery_contract=report,
             required_evidence=required,
         )
-        delivery_artifacts = [output, report, *required,
+        delivery_artifacts = [output, report, *required, *editorial_packages,
                                        *optional_delivery,
                                        *_review_evidence_files(final_review)]
         delivery_artifacts.extend(audio_assets)

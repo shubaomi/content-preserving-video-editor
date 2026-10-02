@@ -125,7 +125,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "size_px": 4.0,
             "time_seconds": 0.05,
         })
-        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 13)
+        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 14)
         self.assertTrue(migrated["workflow"]["production_contract"]["enabled"])
         self.assertEqual(migrated["provider_governance"]["max_evidence_age_days"], 30)
         self.assertTrue(migrated["qa"]["visual_dynamics"]["enabled"])
@@ -271,8 +271,8 @@ class ProjectConfigMigrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "manual_finish.backend"):
             migrate_project_config(project)
 
-    def test_all_v1_through_v12_configs_migrate_to_v13_without_mutation(self) -> None:
-        for version in range(1, 13):
+    def test_all_v1_through_v13_configs_migrate_to_v14_without_mutation(self) -> None:
+        for version in range(1, 14):
             original = {
                 "schema_version": version,
                 "version": version,
@@ -282,8 +282,8 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             with self.subTest(version=version):
                 migrated = migrate_project_config(original)
                 self.assertEqual(original, before)
-                self.assertEqual(migrated["schema_version"], 13)
-                self.assertEqual(migrated["version"], 13)
+                self.assertEqual(migrated["schema_version"], 14)
+                self.assertEqual(migrated["version"], 14)
                 self.assertEqual(migrated["identity"]["mode"], "generic")
                 self.assertFalse(migrated["motion_quality"]["enabled"])
                 self.assertFalse(migrated["motion_quality"]["portrait_brand"]["enabled"])

@@ -1,8 +1,13 @@
-schema_version: 9
-version: 9
+schema_version: 14
+version: 14
 video_id: example-video
 title: Example Video
 profile: ..\..\profile.yaml
+
+# Optional evidence-bound IP loop; does not enable publishing or render approval.
+editorial_loop:
+  enabled: false
+  strategy_path: null
 
 paths:
   root: E:\Media\IP\ExamplePerson\videos\example-video

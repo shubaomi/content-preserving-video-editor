@@ -6,6 +6,19 @@ from scripts.build_phrase_captions import build_phrase_rows
 
 
 class BuildPhraseCaptionsTests(unittest.TestCase):
+    def test_fast_product_speech_keeps_craft_complement_with_previous_clause(self) -> None:
+        # Semantic decisions are authored upstream, not guessed from a short pause.
+        tokens = ["采用了", "磁吸", "的工艺", "制作的", "轻轻", "一放"]
+        transcript = {"words": [
+            {"id": f"w{i}", "text": token, "start": i * 0.2, "end": (i + 1) * 0.2}
+            for i, token in enumerate(tokens)
+        ]}
+        rows = build_phrase_rows(transcript, ["w3", "w5"])
+        self.assertEqual([r["text"] for r in rows], ["采用了磁吸的工艺制作的", "轻轻一放"])
+        self.assertEqual([w for r in rows for w in r["word_ids"]], [f"w{i}" for i in range(6)])
+        self.assertEqual(rows[0]["start"], transcript["words"][0]["start"])
+        self.assertAlmostEqual(rows[-1]["end"], transcript["words"][-1]["end"], places=6)
+
     def test_segments_without_rewriting_word_text(self) -> None:
         transcript = {"words": [
             {"id": "w1", "text": "以前", "start": 0.0, "end": 0.4},

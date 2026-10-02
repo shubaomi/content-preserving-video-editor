@@ -44,10 +44,13 @@ when selecting external tools. Hypit may be installed independently, but no
 Hypit Director adapter is implemented or selected by installing it. Keep reference
 analysis, source-preserving editing, and newly generated adaptations distinct.
 
-The proposed automated IP loop is tracked in
-[ip-content-loop-v1/README.md](references/ip-content-loop-v1/README.md).
-Its design candidate is not an approved runtime contract. Continue the stable
-workflow while that proposal is pending; do not fabricate its reports or stages.
+The approved, default-off IP loop is described in
+[ip-content-loop-v1/runtime-guide.md](references/ip-content-loop-v1/runtime-guide.md).
+When `editorial_loop.enabled=true`, author the four evidence-bound sidecars after
+reading the transcript and source frames; the Director projects them into the
+existing promise ledger. Do not invent personal positioning or user confirmations.
+Readiness is advice, not approval. Offline post-publish learning never changes the
+Profile or authorizes publishing. Do not enable the feature silently for old projects.
 
 ## Start with one guided intake
 
@@ -108,7 +111,7 @@ moving projects.
 
 Load legacy project YAML through the versioned in-memory migrator. Never rewrite
 an existing `project.yaml` merely to add defaults. New projects use project
-schema version 13; migrated v1-v12 projects receive disabled optional adapters,
+schema version 14; migrated v1-v13 projects receive disabled optional adapters,
 disabled manual finishing, disabled HongRun portrait-brand v2, and the current
 preview/render parity tolerances in memory.
 

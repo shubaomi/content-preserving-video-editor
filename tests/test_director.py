@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -939,6 +940,7 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(action["actions"][0]["opportunity_ids"], ["needs-choice"])
 
     def test_metered_provider_call_reconciles_real_production_wrapper(self) -> None:
+        evidence_time = datetime.now(timezone.utc).isoformat()
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["provider_governance"] = {"enabled": True, "mode": "cap",
             "currency": "USD", "budget_total": 1.0, "providers": {"sfx": [{
@@ -948,8 +950,8 @@ class DirectorTests(unittest.TestCase):
                 "failure_incremental_cost": 0.0,
                 "paid_call_authorized": True, "verified_pricing_basis": True,
                 "pricing_source": "user_plan", "remaining_quota": 10,
-                "evidence_timestamp": "2026-08-01T00:00:00+00:00",
-                "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+                "evidence_timestamp": evidence_time,
+                "quota_evidence_timestamp": evidence_time,
             }]}}
         self.project.write_text(yaml.safe_dump(config), encoding="utf-8")
         director = Director(self.project)
@@ -2309,6 +2311,7 @@ class DirectorTests(unittest.TestCase):
         self.assertEqual(json.loads(manifest.read_text(encoding="utf-8"))["status"], "selected")
 
     def test_invalid_localization_result_reconciles_reserved_provider_as_failed(self) -> None:
+        evidence_time = datetime.now(timezone.utc).isoformat()
         result = self.root / "work" / "translation-result.json"
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["derived_content"] = {
@@ -2328,8 +2331,8 @@ class DirectorTests(unittest.TestCase):
                 "failure_incremental_cost": 0.05,
                 "paid_call_authorized": True, "verified_pricing_basis": True,
                 "pricing_source": "user_plan", "remaining_quota": 10,
-                "evidence_timestamp": "2026-08-01T00:00:00+00:00",
-                "quota_evidence_timestamp": "2026-08-01T00:00:00+00:00",
+                "evidence_timestamp": evidence_time,
+                "quota_evidence_timestamp": evidence_time,
             }]},
         }
         self.project.write_text(yaml.safe_dump(config), encoding="utf-8")

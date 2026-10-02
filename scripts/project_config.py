@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 13
+CURRENT_PROJECT_SCHEMA_VERSION = 14
 IDENTITY_MODES = {"self", "third_party", "generic"}
 REQUIRED_ASSET_APPLICABILITY = {"required", "optional", "not_applicable"}
 DELIVERABLE_READINESS = {"ready", "asset_ready", "not_applicable"}
@@ -241,6 +241,16 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("project configuration must be a mapping")
     source_version = _source_version(project)
     migrated = deepcopy(project)
+    editorial_loop = migrated.setdefault("editorial_loop", {})
+    if not isinstance(editorial_loop, dict) or set(editorial_loop) - {"enabled", "strategy_path"}:
+        raise ValueError("editorial_loop must contain only enabled and strategy_path")
+    editorial_loop.setdefault("enabled", False)
+    editorial_loop.setdefault("strategy_path", None)
+    if not isinstance(editorial_loop["enabled"], bool):
+        raise ValueError("editorial_loop.enabled must be a boolean")
+    strategy_path = editorial_loop["strategy_path"]
+    if strategy_path is not None and (not isinstance(strategy_path, str) or not strategy_path.strip()):
+        raise ValueError("editorial_loop.strategy_path must be null or a non-empty path")
     source = migrated.setdefault("source", {})
     if not isinstance(source, dict):
         raise ValueError("source must be a mapping")
@@ -923,6 +933,8 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("editorial_intent must be a mapping")
     for key, value in EDITORIAL_INTENT_DEFAULTS.items():
         editorial_intent.setdefault(key, deepcopy(value))
+    if editorial_loop["enabled"]:
+        editorial_intent["enabled"] = True
     if not isinstance(editorial_intent.get("enabled"), bool):
         raise ValueError("editorial_intent.enabled must be a boolean")
     if editorial_intent.get("mode") not in {"neutral_education", "explicit"}:

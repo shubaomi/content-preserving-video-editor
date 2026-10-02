@@ -44,6 +44,8 @@ IMPLEMENTATION_PATHS = (
     Path("scripts/portable_audit_bundle.py"),
     Path("scripts/release_delivery_pack.py"),
     Path("scripts/feedback_loop.py"),
+    Path("scripts/editorial_loop.py"),
+    Path("references/ip-content-loop-v1/editorial-envelope.schema.json"),
     Path("scripts/representative_short_media.py"),
     Path("scripts/motion_contracts.py"),
     Path("scripts/motion_quality_engine.py"),

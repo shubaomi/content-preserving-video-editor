@@ -510,7 +510,9 @@ def build_capability_inventory(project: dict[str, Any]) -> dict[str, Any]:
         / "portrait-brand-motion-v2-real-project-validation.json"
     )
     portrait_evidence: dict[str, Any] | None = None
-    if portrait_receipt.is_file():
+    # Real-project maturity cannot be used without current fixture evidence.
+    # Fail closed before launching costly live renderer checks of an unusable receipt.
+    if fixture_evidence is not None and portrait_receipt.is_file():
         try:
             candidate = json.loads(portrait_receipt.read_text(encoding="utf-8"))
             if (

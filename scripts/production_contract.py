@@ -166,6 +166,18 @@ def build_contract(
             "human_aesthetic_review_required": True,
         },
     }
+    if project.get("editorial_loop", {}).get("enabled"):
+        from editorial_loop import FILES
+        directory = semantic_brief_path.parent / "editorial-loop"
+        contract["editorial_loop"] = {
+            "schema_version": 1,
+            "sidecars": {kind: _binding(directory / name, "validated editorial sidecar")
+                         for kind, name in FILES.items()},
+            "promise": _binding(semantic_brief_path.parent / "editorial-promise-ledger.json",
+                                "existing editorial promise authority"),
+            "readiness_is_advisory": True,
+            "publication_authorized": False,
+        }
     contract["integrity_sha256"] = _stable_hash(contract)
     return contract
 

@@ -85,3 +85,10 @@ Do not require account-strategy homework to edit an ordinary video. Mark inferre
 answers as proposals, leave unknown personal facts unknown, and use
 `reference-led-ip-direction.md` for the editorial pass. A reference supplied for
 style does not authorize replacing the source speaker, words, or chronology.
+
+For an explicitly requested IP loop, offer the default-off `editorial_loop`
+option in this same batch, reusing any known answer. If enabled, the Agent (not
+the user) authors the sidecars using the current evidence and marks unknown
+positioning honestly. Follow `ip-content-loop-v1/runtime-guide.md`. Never inherit
+a self-recorded HongRun strategy into third-party/generic footage. A daily/priority
+choice changes optional experiments only, not rights, subtitles or approval gates.
