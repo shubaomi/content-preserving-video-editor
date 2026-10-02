@@ -33,6 +33,22 @@ Read [director-architecture.md](references/director-architecture.md) before
 execution. Read [config-schema.md](references/config-schema.md) when resolving
 configuration and [quality-gates.md](references/quality-gates.md) before QA.
 
+## Reference-led and personal-IP direction
+
+For a supplied reference video, a personal-IP improvement request, or iterative
+creative corrections, read [reference-led-ip-direction.md](references/reference-led-ip-direction.md).
+It adds evidence-led editorial guidance within the existing owners and gates;
+it is not a new Director stage or permission to rewrite a recorded performance.
+Read [open-source-video-research-20261002.md](references/open-source-video-research-20261002.md)
+when selecting external tools. Hypit may be installed independently, but no
+Hypit Director adapter is implemented or selected by installing it. Keep reference
+analysis, source-preserving editing, and newly generated adaptations distinct.
+
+The proposed automated IP loop is tracked in
+[ip-content-loop-v1/README.md](references/ip-content-loop-v1/README.md).
+Its design candidate is not an approved runtime contract. Continue the stable
+workflow while that proposal is pending; do not fabricate its reports or stages.
+
 ## Start with one guided intake
 
 Do not require the user to remember a long invocation prompt. When a user says
@@ -92,7 +108,7 @@ moving projects.
 
 Load legacy project YAML through the versioned in-memory migrator. Never rewrite
 an existing `project.yaml` merely to add defaults. New projects use project
-schema version 11; migrated v1-v10 projects receive disabled optional adapters,
+schema version 13; migrated v1-v12 projects receive disabled optional adapters,
 disabled manual finishing, disabled HongRun portrait-brand v2, and the current
 preview/render parity tolerances in memory.
 

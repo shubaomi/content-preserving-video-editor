@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:content-preserving-video-editor:ip-loop:editorial-envelope:1",
+  "title": "Proposed editorial sidecar, not an active Director contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "status", "bindings", "payload"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"enum": ["strategy", "episode", "readiness", "proof", "platform", "learning"]},
+    "id": {"$ref": "#/$defs/id"},
+    "status": {"enum": ["draft", "validated", "pending_user_review", "stale", "no_observations", "insufficient_evidence"]},
+    "bindings": {"type": "array", "items": {"$ref": "#/$defs/fileRef"}, "minItems": 1},
+    "payload": {"type": "object"}
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "strategy"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/strategy"}}}},
+    {"if": {"properties": {"kind": {"const": "episode"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/episode"}}}},
+    {"if": {"properties": {"kind": {"const": "readiness"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/readiness"}}}},
+    {"if": {"properties": {"kind": {"const": "proof"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/proof"}}}},
+    {"if": {"properties": {"kind": {"const": "platform"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/platform"}}}},
+    {"if": {"properties": {"kind": {"const": "learning"}}}, "then": {"properties": {"payload": {"$ref": "#/$defs/learning"}}}},
+    {"if": {"properties": {"status": {"enum": ["no_observations", "insufficient_evidence"]}}}, "then": {"properties": {"kind": {"const": "learning"}}}}
+  ],
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "text": {"type": "string", "minLength": 1},
+    "ids": {"type": "array", "items": {"$ref": "#/$defs/id"}, "uniqueItems": true},
+    "texts": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+    "fileRef": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "path", "sha256", "role"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "path": {"$ref": "#/$defs/text"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "role": {"enum": ["user_record", "source", "transcript", "edl", "frame", "strategy", "brief", "semantic_brief", "proof", "promise", "master", "release", "metrics", "comments"]}
+      }
+    },
+    "fact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "basis", "evidence_ids"],
+      "properties": {
+        "value": {"type": ["string", "null"], "minLength": 1},
+        "basis": {"enum": ["user_confirmed", "source_observed", "editorial_inference", "unknown"]},
+        "evidence_ids": {"$ref": "#/$defs/ids"}
+      },
+      "allOf": [
+        {"if": {"properties": {"basis": {"const": "unknown"}}}, "then": {"properties": {"value": {"type": "null"}}}, "else": {"properties": {"value": {"type": "string", "minLength": 1}}}},
+        {"if": {"properties": {"basis": {"enum": ["user_confirmed", "source_observed"]}}}, "then": {"properties": {"evidence_ids": {"minItems": 1}}}}
+      ]
+    },
+    "strategy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity_mode", "audience", "promise", "pillars", "tone", "boundaries", "series_id"],
+      "properties": {
+        "identity_mode": {"enum": ["self", "third_party", "generic"]},
+        "audience": {"$ref": "#/$defs/fact"}, "promise": {"$ref": "#/$defs/fact"},
+        "pillars": {"type": "array", "items": {"$ref": "#/$defs/fact"}},
+        "tone": {"$ref": "#/$defs/fact"}, "boundaries": {"$ref": "#/$defs/texts"},
+        "series_id": {"type": ["string", "null"], "minLength": 1}
+      }
+    },
+    "episode": {
+      "type": "object", "additionalProperties": false,
+      "required": ["viewer_job", "thesis", "takeaway", "proof_ids", "cta", "series_id"],
+      "properties": {
+        "viewer_job": {"$ref": "#/$defs/fact"}, "thesis": {"$ref": "#/$defs/fact"},
+        "takeaway": {"$ref": "#/$defs/fact"}, "proof_ids": {"$ref": "#/$defs/ids"},
+        "cta": {"$ref": "#/$defs/fact"}, "series_id": {"type": ["string", "null"], "minLength": 1}
+      }
+    },
+    "readiness": {
+      "type": "object", "additionalProperties": false,
+      "required": ["recommendation", "reasons", "missing_evidence", "automatic_mutation"],
+      "properties": {
+        "recommendation": {"enum": ["publish", "sample", "reshoot", "split", "hold"]},
+        "reasons": {"type": "array", "items": {"$ref": "#/$defs/fact"}, "minItems": 1},
+        "missing_evidence": {"$ref": "#/$defs/texts"}, "automatic_mutation": {"const": false}
+      }
+    },
+    "claim": {
+      "type": "object", "additionalProperties": false,
+      "required": ["claim_id", "claim", "word_ids", "event_ids", "evidence_ids", "support"],
+      "properties": {
+        "claim_id": {"$ref": "#/$defs/id"}, "claim": {"$ref": "#/$defs/text"},
+        "word_ids": {"$ref": "#/$defs/ids"}, "event_ids": {"$ref": "#/$defs/ids"},
+        "evidence_ids": {"$ref": "#/$defs/ids"}, "support": {"enum": ["supported", "partial", "missing"]}
+      },
+      "allOf": [{"if": {"properties": {"support": {"const": "supported"}}}, "then": {"properties": {"word_ids": {"minItems": 1}, "event_ids": {"minItems": 1}, "evidence_ids": {"minItems": 1}}}}]
+    },
+    "proof": {
+      "type": "object", "additionalProperties": false, "required": ["claims"],
+      "properties": {"claims": {"type": "array", "items": {"$ref": "#/$defs/claim"}}}
+    },
+    "platform": {
+      "type": "object", "additionalProperties": false,
+      "required": ["platform", "promise_ref", "title", "description", "cover_copy", "cta", "master_ref", "publish_authorized"],
+      "properties": {
+        "platform": {"enum": ["douyin", "wechat_channels", "other"]},
+        "promise_ref": {"$ref": "#/$defs/id"}, "master_ref": {"$ref": "#/$defs/id"},
+        "title": {"$ref": "#/$defs/text"}, "description": {"$ref": "#/$defs/text"},
+        "cover_copy": {"type": ["string", "null"], "minLength": 1},
+        "cta": {"$ref": "#/$defs/text"}, "publish_authorized": {"const": false}
+      }
+    },
+    "observation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["publication_id", "platform", "version_id", "snapshot_ref", "window_hours", "metric_definition", "denominator", "traffic_source"],
+      "properties": {
+        "publication_id": {"$ref": "#/$defs/id"}, "platform": {"$ref": "#/$defs/text"},
+        "version_id": {"$ref": "#/$defs/id"}, "snapshot_ref": {"$ref": "#/$defs/id"},
+        "window_hours": {"type": "number", "minimum": 0},
+        "metric_definition": {"$ref": "#/$defs/text"},
+        "denominator": {"type": ["integer", "null"], "minimum": 0},
+        "traffic_source": {"type": ["string", "null"], "minLength": 1}
+      }
+    },
+    "learning": {
+      "type": "object", "additionalProperties": false,
+      "required": ["observations", "hypotheses", "next_experiment", "automatic_apply"],
+      "properties": {
+        "observations": {"type": "array", "items": {"$ref": "#/$defs/observation"}},
+        "hypotheses": {"type": "array", "items": {"$ref": "#/$defs/fact"}},
+        "next_experiment": {"type": ["string", "null"], "minLength": 1},
+        "automatic_apply": {"const": false}
+      }
+    }
+  }
+}

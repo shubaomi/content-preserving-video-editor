@@ -1,2 +1,14 @@
-# Design-freeze hashes bind exact UTF-8/LF bytes across Windows checkouts.
+# Evidence manifests bind exact source/report bytes across Windows and POSIX.
+* text=auto eol=lf
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.webp -text
+*.mp4 -text
+*.mov -text
+*.wav -text
+*.mp3 -text
+*.zip -text
+*.whl -text
+# Retain the original explicit design-freeze rule.
 references/jianying-native-draft-v1/** text eol=lf

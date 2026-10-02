@@ -4,6 +4,16 @@ This repository is the source of the preservation-first Director Skill. It
 coordinates video-use, HyperFrames, FFmpeg, optional providers, human approvals,
 QA, and one Universal MP4; it does not vendor or replace upstream Skills.
 
+Reference-led creative direction and personal-IP editorial guidance are described
+in [`references/reference-led-ip-direction.md`](references/reference-led-ip-direction.md).
+The [2026-10-02 research](references/open-source-video-research-20261002.md)
+compares Hypit, FunClip, Auto-Editor, OpenCut and OpenTimelineIO against existing
+capabilities. Hypit is an independently installed optional tool, not a Director
+backend. The proposed [IP content loop v1](references/ip-content-loop-v1/README.md)
+remains a design candidate awaiting approval; its runtime is not implemented.
+See the [local recovery record](references/operations/recovery-20261002.md) for
+the restored checkout and Codex Skill paths.
+
 Creators do not need to memorize the command sequence below. The normal Skill
 entry is a one-batch guided intake: provide (or be asked once for) the source
 path, identity/rights, sample-or-approved-resume choice, optional HongRun

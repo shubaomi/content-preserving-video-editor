@@ -74,3 +74,14 @@ authorization already exist.
 After intake, present one short summary and continue without further setup
 questions. Stop only at a real owner handoff or user gate, and consolidate any
 required user decisions into one minimal decision packet.
+
+## Optional editorial context
+
+For personal-IP or reference-led work, reuse the known audience, purpose,
+series, and desired viewer action. If one missing answer would materially
+change the result, include this optional question in the same intake batch:
+“这条视频主要想让谁看，看完记住什么或采取什么行动？也可以让我根据内容提出建议。”
+Do not require account-strategy homework to edit an ordinary video. Mark inferred
+answers as proposals, leave unknown personal facts unknown, and use
+`reference-led-ip-direction.md` for the editorial pass. A reference supplied for
+style does not authorize replacing the source speaker, words, or chronology.

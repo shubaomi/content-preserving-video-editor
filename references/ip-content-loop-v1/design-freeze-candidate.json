@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "candidate_id": "hongrun-ip-content-loop-v1-20261002",
+  "title": "HongRun 个人 IP 内容经营闭环 v1",
+  "status": "pending_user_approval",
+  "created_date": "2026-10-02",
+  "repository": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor",
+    "branch": "main",
+    "base_commit": "bcb426dac51a07dd94aaeddef7dea969509c2c70"
+  },
+  "resume_rule": "Read every bound design document in full and recompute its SHA-256 after resume, context compaction or model switch. A changed inventory requires a refreshed candidate before approval.",
+  "decision": {
+    "architecture": "optional_editorial_sidecar_reusing_existing_director_authorities",
+    "implementation_work_packages": ["WP0", "WP1", "WP2", "WP3", "WP4", "WP5"],
+    "future_project_schema": 14,
+    "current_project_schema": 13,
+    "default_enabled": false,
+    "director_stage_count": 19,
+    "timeline_owner": "video-use",
+    "full_motion_owner": "HyperFrames",
+    "hypit_runtime_adapter_in_scope": false,
+    "paid_calls_authorized": false,
+    "full_video_render_authorized": false,
+    "publication_authorized": false,
+    "production_default": false
+  },
+  "current_delivery": {
+    "repository_restored": true,
+    "hypit_cli_version": "0.2.17",
+    "hypit_reference_commit": "e8f94006e1eed9b299448fe5bce6afa5646e2ba5",
+    "editorial_guidance": "documented",
+    "new_runtime_implemented": false,
+    "design_review": "author_self_review_only",
+    "human_approval": null
+  },
+  "artifact_inventory": [
+    {"path": "references/ip-content-loop-v1/README.md", "sha256": "80910700a20836367d63e18db1fc3be34835b11ed220be1754a2d06a1d0b48ac"},
+    {"path": "references/ip-content-loop-v1/requirements.md", "sha256": "390dafd3564e446f260ea9ddd4505cae3ce7aa122bd40a7909e0c42d1a4e8bb1"},
+    {"path": "references/ip-content-loop-v1/architecture.md", "sha256": "aa4b74719d751fb4a1258b924998243ecea80177eb7a4acb7405c5e44c9bc0c3"},
+    {"path": "references/ip-content-loop-v1/contracts.md", "sha256": "96d0a9fb8c40f47f9f7259932117937a0356a66603a0eadf8174e42085945f88"},
+    {"path": "references/ip-content-loop-v1/editorial-envelope.schema.json", "sha256": "8e73e532580cbf507c15e499191ea951e912da0cc64d461c734234dc725e0628"},
+    {"path": "references/ip-content-loop-v1/implementation-and-acceptance.md", "sha256": "65958f889c0ece3825d27f6412d5a57d670e84542f2ada76e6874a1cfd5ec90e"},
+    {"path": "references/ip-content-loop-v1/review.md", "sha256": "e4a6a7da4edbfeed48c394822df8bc6023c9d792c7e01f201f7094c5631dafb7"},
+    {"path": "references/open-source-video-research-20261002.md", "sha256": "e2c09ab8a4e88c0859c60fbec36abdd4ccc2d35ac1ffb88b624e8cf1ee2fb7e5"},
+    {"path": "references/reference-led-ip-direction.md", "sha256": "bfbca192c0db6720aa23e6603219188e0cbbe68f0a6821a0cf2538240076b532"}
+  ],
+  "approval_request": "Approve hongrun-ip-content-loop-v1-20261002 for WP0-WP5 implementation with the bound scope and existing human gates."
+}
