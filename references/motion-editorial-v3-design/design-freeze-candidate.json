@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "candidate_id": "motion-editorial-v3-20261012",
+  "title": "镜头优先的动效与真实开场 v3",
+  "status": "pending_user_approval",
+  "created_date": "2026-10-12",
+  "repository": {
+    "path": "E:\\Projects\\Skills\\content-preserving-video-editor",
+    "branch": "main",
+    "base_commit": "0af6aa20ef664a20ffa3b886d3834af06394e971",
+    "runtime_worktree_changed": false,
+    "design_files_uncommitted": true
+  },
+  "resume_rule": "Read README.md, objective-and-requirements.md, architecture-and-contracts.md, visual-and-audio-spec.md, implementation-and-acceptance.md and this candidate in full; recompute every inventory hash after recovery, context compaction or model switch. Do not infer approval from file existence.",
+  "direction_confirmation": {
+    "path": "direction-confirmation.json",
+    "scope": "directions_and_design_preparation_only",
+    "directions": [
+      "authentic_product_editorial",
+      "professional_software_demo"
+    ],
+    "hook_method": "duplicate_real_excerpt_keep_body"
+  },
+  "decisions": {
+    "current_project_schema": 14,
+    "proposed_project_schema": 15,
+    "current_source_semantic_schema_preserved": 3,
+    "new_output_instance_schema": 4,
+    "director_stage_count": 19,
+    "timeline_owner": "video-use",
+    "motion_owner": "HyperFrames",
+    "default_enabled": false,
+    "old_portrait_brand_and_new_runtime_mutually_exclusive": true,
+    "new_external_runtimes_in_scope": false
+  },
+  "artifact_inventory": [
+    {
+      "path": "architecture-and-contracts.md",
+      "sha256": "0c812c9ff7bbc2f25960dcfc557a46607c34590a45d574a81b9672b4a85dc3f1"
+    },
+    {
+      "path": "design-review.md",
+      "sha256": "ab9be6f379c09dbf21c8a304d3ffa7bb7e71b0dde8fe4bf0c20e9c8b48c26d02"
+    },
+    {
+      "path": "design-validation.json",
+      "sha256": "bb162d7d0a5781cbbf7c0d931720a16ab0a6c887a4a637343697bd34202f6a9c"
+    },
+    {
+      "path": "direction-confirmation.json",
+      "sha256": "73dc93dc6e848c3678f455d65d0de2ed0f8ee1258e62005fdea6e529145940f5"
+    },
+    {
+      "path": "examples/contracts.json",
+      "sha256": "72640ab097f2da1aabe152d059c99eca007997f63133b809c9da5cf2c0514fba"
+    },
+    {
+      "path": "implementation-and-acceptance.md",
+      "sha256": "95ec8327fbebd5d2255d5e1a8f4a78eb4fd0a09fb5143dffb4e4879a46cb1356"
+    },
+    {
+      "path": "objective-and-requirements.md",
+      "sha256": "4718a76ab96f19213fb2e0ef1ff7b8939e63afb6bbd1492926ac73f3b1bbb125"
+    },
+    {
+      "path": "README.md",
+      "sha256": "1edc8db946c3d191ded216e6153f07af248d19a8a0248274ba59361f01272cb9"
+    },
+    {
+      "path": "research-and-redesign-proposal.md",
+      "sha256": "7d0723efc12fdb9f4570746b33f4f6583a770ef8cae8086c642034929528907a"
+    },
+    {
+      "path": "schemas/editorial-motion.schema.json",
+      "sha256": "0401a523bae16f72626168eb3267c7280f38849de5eb8bc81012d80c888ddcf7"
+    },
+    {
+      "path": "visual-and-audio-spec.md",
+      "sha256": "50ad3c860a728471cb031236dce60fd4f0e4eee38bc5ed7f7d4509159bb3e12f"
+    }
+  ],
+  "code_evidence": [
+    {
+      "path": "scripts/video_use_bridge.py",
+      "sha256": "678244b192fa3effc632098c19ee7b980845f0e06569d94f2390eab856a4e607"
+    },
+    {
+      "path": "scripts/audit_hook_pacing.py",
+      "sha256": "6c5c8febbdc3aae8f3471eefeb034a5c8165150b0dacec0a17ebe947f7125244"
+    },
+    {
+      "path": "scripts/director_contracts.py",
+      "sha256": "857118686a22aad0d52a05bdb8a9875540401230d08f06a979768a339f69685b"
+    },
+    {
+      "path": "scripts/project_config.py",
+      "sha256": "40df78ececf74b50583f15f0e7be26757bc34117160c3819d4bebab2af2abe7a"
+    }
+  ],
+  "validation": {
+    "design_structure": "pass",
+    "positive_examples": 4,
+    "negative_cases_rejected": 10,
+    "requirements": "ME-01 through ME-10",
+    "planned_acceptance_cases": "T01 through T20",
+    "runtime_acceptance": "not_run",
+    "real_short_render": "not_run",
+    "review": "author_self_review_only",
+    "user_aesthetic": "pending"
+  },
+  "approval_request": {
+    "required_actor": "HongRun",
+    "decision": "pending",
+    "phrase": "批准 motion-editorial-v3-20261012 design-freeze-candidate，执行 WP0–WP2 的隔离短片验证，不进入正式集成或完整视频渲染。",
+    "scope_on_approval": [
+      "WP0 isolated contract validators and regression fixtures",
+      "WP1 evidence-bound shot plan and isolated prototype",
+      "WP2 two 10-15 second motion-style candidates with aligned baselines"
+    ],
+    "maximum_initial_new_motion_seconds": 30,
+    "maximum_new_motion_seconds_including_one_revision_per_direction": 60,
+    "max_attempts_per_direction": 2,
+    "stop_after": "WP2 real visual and listening review",
+    "requires_further_decision": [
+      "each new style aesthetic acceptance",
+      "exact source ranges for hook insertion",
+      "WP3 production integration",
+      "WP4 45-60 second opening canaries"
+    ]
+  },
+  "not_authorized": [
+    "production integration before WP2 aesthetic gate and explicit WP3 approval",
+    "full_video_render",
+    "paid_or_cloud_calls",
+    "new_runtime_installation",
+    "publication",
+    "shared_profile_auto_update",
+    "production_default_promotion",
+    "Jianying_app_or_existing_draft_mutation",
+    "commit_or_push_this_pending_design"
+  ],
+  "current_state": {
+    "formal_implementation": false,
+    "new_sample_rendered": false,
+    "exact_hook_window_approved": false,
+    "full_render_authorized": false,
+    "publication_authorized": false
+  }
+}

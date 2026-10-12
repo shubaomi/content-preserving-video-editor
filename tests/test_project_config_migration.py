@@ -125,7 +125,7 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             "size_px": 4.0,
             "time_seconds": 0.05,
         })
-        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 14)
+        self.assertEqual(CURRENT_PROJECT_SCHEMA_VERSION, 15)
         self.assertTrue(migrated["workflow"]["production_contract"]["enabled"])
         self.assertEqual(migrated["provider_governance"]["max_evidence_age_days"], 30)
         self.assertTrue(migrated["qa"]["visual_dynamics"]["enabled"])
@@ -282,8 +282,8 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             with self.subTest(version=version):
                 migrated = migrate_project_config(original)
                 self.assertEqual(original, before)
-                self.assertEqual(migrated["schema_version"], 14)
-                self.assertEqual(migrated["version"], 14)
+                self.assertEqual(migrated["schema_version"], 15)
+                self.assertEqual(migrated["version"], 15)
                 self.assertEqual(migrated["identity"]["mode"], "generic")
                 self.assertFalse(migrated["motion_quality"]["enabled"])
                 self.assertFalse(migrated["motion_quality"]["portrait_brand"]["enabled"])

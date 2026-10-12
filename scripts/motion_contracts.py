@@ -45,6 +45,8 @@ def _schema_errors(name: str, payload: Any) -> list[str]:
     if not path.is_file():
         return [f"contract schema is missing: {path}"]
     schema = read_json(path)
+    from editorial_schema import runtime_schema
+    schema = runtime_schema(name, schema, payload)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     return [
         f"{name} schema "

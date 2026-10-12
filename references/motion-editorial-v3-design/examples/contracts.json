@@ -1,0 +1,288 @@
+{
+  "scope": "schema_only_not_real_media_or_authorization",
+  "examples": [
+    {
+      "schema_version": 1,
+      "artifact_id": "fixture-hook_plan",
+      "kind": "hook_plan",
+      "evidence_tier": "synthetic_fixture",
+      "inputs": [
+        {
+          "id": "source",
+          "role": "source",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/source.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "transcript",
+          "role": "transcript",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/transcript.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "base_edl",
+          "role": "base_edl",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/base_edl.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "evidence",
+          "role": "evidence",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/evidence.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "payload": {
+        "state": "proposed",
+        "method": "duplicate_real_excerpt_keep_body",
+        "reason": "合成例子，只测结构，不是实际选段",
+        "candidates": [
+          {
+            "id": "h1",
+            "source_ref": "source",
+            "source_range": {
+              "start": 10,
+              "end": 13
+            },
+            "word_ids": [
+              "w1"
+            ],
+            "quote": "合成测试",
+            "context_before": "合成前文",
+            "context_after": "合成后文",
+            "frame_refs": [
+              "evidence"
+            ],
+            "promise": "测试主张",
+            "payoff_semantic_ids": [
+              "s1"
+            ],
+            "rationale": "不是真实视频证据"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": 1,
+      "artifact_id": "fixture-timeline_projection",
+      "kind": "timeline_projection",
+      "evidence_tier": "synthetic_fixture",
+      "inputs": [
+        {
+          "id": "source",
+          "role": "source",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/source.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "transcript",
+          "role": "transcript",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/transcript.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "base_edl",
+          "role": "base_edl",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/base_edl.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "candidate_edl",
+          "role": "candidate_edl",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/candidate_edl.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "hook_plan",
+          "role": "hook_plan",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/hook_plan.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "approval",
+          "role": "approval",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/approval.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "payload": {
+        "edl_ref": "candidate_edl",
+        "approval_ref": "approval",
+        "fps": {
+          "numerator": 30,
+          "denominator": 1
+        },
+        "segments": [
+          {
+            "segment_id": "hook1",
+            "role": "hook",
+            "source_ref": "source",
+            "source_range": {
+              "start": 10,
+              "end": 13
+            },
+            "output_start": 0,
+            "base_segment_id": null,
+            "speed": 1
+          },
+          {
+            "segment_id": "body1",
+            "role": "body",
+            "source_ref": "source",
+            "source_range": {
+              "start": 0,
+              "end": 20
+            },
+            "output_start": 3,
+            "base_segment_id": "original1",
+            "speed": 1
+          }
+        ],
+        "words": [
+          {
+            "occurrence_id": "hook1:w1",
+            "segment_id": "hook1",
+            "source_word_id": "w1",
+            "text": "测试",
+            "source_range": {
+              "start": 10,
+              "end": 11
+            },
+            "output_range": {
+              "start": 0,
+              "end": 1
+            }
+          },
+          {
+            "occurrence_id": "body1:w1",
+            "segment_id": "body1",
+            "source_word_id": "w1",
+            "text": "测试",
+            "source_range": {
+              "start": 10,
+              "end": 11
+            },
+            "output_range": {
+              "start": 13,
+              "end": 14
+            }
+          }
+        ],
+        "output_duration": 23,
+        "transition": "hard_cut_edge_audio_fade_no_overlap"
+      }
+    },
+    {
+      "schema_version": 1,
+      "artifact_id": "fixture-shot_motion_plan",
+      "kind": "shot_motion_plan",
+      "evidence_tier": "synthetic_fixture",
+      "inputs": [
+        {
+          "id": "projection",
+          "role": "projection",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/projection.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "semantic_brief",
+          "role": "semantic_brief",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/semantic_brief.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "evidence",
+          "role": "evidence",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/evidence.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "design",
+          "role": "design",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/design.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "payload": {
+        "direction": "authentic_product_editorial",
+        "projection_ref": "projection",
+        "default_decorations": false,
+        "events": [
+          {
+            "instance_id": "s1@body1",
+            "semantic_id": "s1",
+            "segment_id": "body1",
+            "word_occurrence_ids": [
+              "body1:w1"
+            ],
+            "output_range": {
+              "start": 13,
+              "end": 14
+            },
+            "viewer_task": "看清合成动作",
+            "information_gain": "测试信息",
+            "decision": "caption_only",
+            "recipe": null,
+            "primary_focus": "source-product",
+            "source_crop": null,
+            "target_binding_ids": [],
+            "visible_copy": [],
+            "sound": {
+              "decision": "intentionally_silent",
+              "reason": "合成例子",
+              "asset_ref": null
+            },
+            "phases": [],
+            "rationale": "测试回退结构，不是真实画面"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": 1,
+      "artifact_id": "fixture-short_validation_plan",
+      "kind": "short_validation_plan",
+      "evidence_tier": "synthetic_fixture",
+      "inputs": [
+        {
+          "id": "plan",
+          "role": "plan",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/plan.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "source",
+          "role": "source",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/source.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "baseline",
+          "role": "baseline",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/baseline.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "id": "shot_plan",
+          "role": "shot_plan",
+          "path": "C:/__DESIGN_FIXTURE_NOT_REAL__/shot_plan.json",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "payload": {
+        "purpose": "motion_style",
+        "direction": "authentic_product_editorial",
+        "output_start": 10,
+        "duration": 12,
+        "baseline_ref": "baseline",
+        "shot_plan_ref": "shot_plan",
+        "comparison": "same_source_aligned_style",
+        "max_new_motion_seconds": 60,
+        "max_attempts_per_direction": 2,
+        "user_review": "pending",
+        "paid_calls_authorized": false,
+        "full_render_authorized": false
+      }
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 """Build the always-on, editor-neutral repair kit for a completed automatic edit."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -52,16 +53,105 @@ def _project_inventory(project: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _canonical_hash(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                    separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()
+
+
+def _strict_json(path: Path) -> Any:
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise EditableDeliveryError(f"instance handoff duplicate JSON key: {key}")
+            result[key] = value
+        return result
+    payload = json.loads(path.read_text(encoding="utf-8-sig"), object_pairs_hook=pairs)
+    _canonical_hash(payload)  # Reject nonfinite values, including exponent overflow.
+    return payload
+
+
+def _instance_handoff_summary(path: Path) -> dict[str, Any]:
+    """Validate bundle bytes and rederive whatever has current file authorities.
+
+    Inline-only hashes remain integrity declarations, not current-file evidence.
+    No media is opened/copied and no editor compatibility claim is generated.
+    """
+    try:
+        payload = _strict_json(path)
+        if not isinstance(payload, dict) or payload.get("schema_version") != 1 or payload.get("kind") != "editorial_instance_handoff":
+            raise EditableDeliveryError("instance handoff identity is invalid")
+        unsigned = {key: value for key, value in payload.items() if key != "bundle_sha256"}
+        if payload.get("bundle_sha256") != _canonical_hash(unsigned):
+            raise EditableDeliveryError("instance handoff bundle hash is stale")
+        if payload.get("verification_scope") != "output_instance_linkage_only" or any(
+            payload.get(key) is not False for key in ("native_editor_verified", "assets_copied",
+                                                    "caption_files_generated", "full_render_authorized")
+        ):
+            raise EditableDeliveryError("instance handoff scope claims are invalid")
+        records = payload.get("inputs")
+        required = {"projection", "output_brief", "captions"}
+        optional = {"audio_plan": "audio", "target_bindings": "targets", "promise_ledger": "promises"}
+        if not isinstance(records, dict) or not required <= set(records) or set(records) - required - set(optional):
+            raise EditableDeliveryError("instance handoff input inventory is invalid")
+        file_inputs = {}
+        for name, record in records.items():
+            if not isinstance(record, dict):
+                raise EditableDeliveryError(f"instance handoff {name} record is invalid")
+            canonical = record.get("canonical_sha256")
+            if not isinstance(canonical, str) or len(canonical) != 64 or any(c not in "0123456789abcdef" for c in canonical):
+                raise EditableDeliveryError(f"instance handoff {name} canonical hash is invalid")
+            if record.get("hash_scope") == "current_file_bytes":
+                if set(record) != {"path", "sha256", "canonical_sha256", "hash_scope"} or not Path(str(record.get("path") or "")).is_absolute():
+                    raise EditableDeliveryError(f"instance handoff {name} needs an absolute file path")
+                errors = _artifact_errors(record, f"instance handoff {name}")
+                if errors:
+                    raise EditableDeliveryError("; ".join(errors))
+                if _canonical_hash(_strict_json(Path(record["path"]))) != canonical:
+                    raise EditableDeliveryError(f"instance handoff {name} canonical hash is stale")
+                file_inputs[name] = {"path": record["path"], "sha256": record["sha256"]}
+            elif record.get("hash_scope") != "canonical_json_integrity_only" or set(record) != {"hash_scope", "canonical_sha256"}:
+                raise EditableDeliveryError(f"instance handoff {name} hash scope is invalid")
+        for name in ("captions", "audio", "targets", "promises"):
+            section = payload.get(name)
+            if not isinstance(section, dict) or section.get("status") not in {"linked", "partial", "unavailable", "not_provided"} or not isinstance(section.get("rows"), list) or not isinstance(section.get("unavailable"), list):
+                raise EditableDeliveryError(f"instance handoff {name} section is invalid")
+        recomputed = required <= set(file_inputs)
+        if recomputed:
+            from editorial_handoff import build_handoff
+            rebuilt = build_handoff(**file_inputs)
+            omitted = {"inputs", "bundle_sha256"} | {section for name, section in optional.items()
+                                                     if name in records and name not in file_inputs}
+            if {k: v for k, v in payload.items() if k not in omitted} != {k: v for k, v in rebuilt.items() if k not in omitted}:
+                raise EditableDeliveryError("instance handoff differs from recomputed current file inputs")
+        return {"bundle_sha256": payload["bundle_sha256"],
+                "verification_scope": "output_instance_linkage_only", "native_editor_verified": False,
+                "caption_linkage_status": payload["captions"]["status"],
+                "file_inputs_recomputed": recomputed,
+                "inline_integrity_only_inputs": sorted(set(records) - set(file_inputs))}
+    except (OSError, ValueError, TypeError, KeyError) as error:
+        if isinstance(error, EditableDeliveryError):
+            raise
+        raise EditableDeliveryError(f"instance handoff validation failed: {error}") from error
+
+
 def build_editable_delivery(
     *, output_root: Path, authorized_root: Path, automatic_master: Path,
     caption_free_candidate: Path, caption_srt: Path, caption_ass: Path,
     caption_style_plan: Path, hyperframes_project: Path,
+    instance_handoff: Path | None = None,
 ) -> Path:
     """Materialize the minimum assets needed for local NLE/AI-editor repair.
 
     The large video files remain at their authoritative project paths.  SRT,
     ASS, and the style plan are copied into one stable repair-kit directory.
+    An opt-in instance handoff is copied as JSON only; None retains legacy bytes.
     """
+    instance_source = None
+    instance_summary = None
+    if instance_handoff is not None:
+        instance_source = _require_file(instance_handoff, "instance handoff")
+        instance_summary = _instance_handoff_summary(instance_source)
     lexical_root = Path(os.path.abspath(authorized_root))
     lexical_output = Path(os.path.abspath(output_root))
     try:
@@ -135,6 +225,15 @@ def build_editable_delivery(
             "editor_support_must_be_verified_locally": True,
         },
     }
+    if instance_source is not None:
+        source_record = _file_record(instance_source)
+        target = safe_generated_target(lexical_root, relative_output / "editorial" / "instance-handoff.json")
+        atomic_replace_file(instance_source, target)
+        if sha256_file(target) != source_record["sha256"] or sha256_file(instance_source) != source_record["sha256"]:
+            raise EditableDeliveryError("instance handoff copy differs from its authority")
+        if _instance_handoff_summary(target) != instance_summary:
+            raise EditableDeliveryError("instance handoff changed while copying")
+        manifest["instance_handoff"] = {**_file_record(target), "source": source_record, **instance_summary}
     manifest_path = safe_generated_target(
         lexical_root, relative_output / "editable-delivery-manifest.json",
     )
@@ -216,4 +315,20 @@ def validate_editable_delivery(manifest_path: Path) -> list[str]:
         or interoperability.get("editor_support_must_be_verified_locally") is not True
     ):
         errors.append("editable delivery interoperability claims are invalid")
+    if "instance_handoff" in payload:
+        row = payload["instance_handoff"]
+        current_errors = _artifact_errors(row, "instance handoff")
+        if isinstance(row, Mapping):
+            source = row.get("source")
+            current_errors.extend(_artifact_errors(source, "instance handoff source"))
+            if isinstance(source, Mapping) and row.get("sha256") != source.get("sha256"):
+                current_errors.append("instance handoff copy differs from source")
+            if not current_errors:
+                try:
+                    summary = _instance_handoff_summary(Path(row["path"]))
+                    if any(row.get(key) != value for key, value in summary.items()):
+                        current_errors.append("instance handoff manifest claims differ from bundle")
+                except EditableDeliveryError as error:
+                    current_errors.append(str(error))
+        errors.extend(current_errors)
     return errors

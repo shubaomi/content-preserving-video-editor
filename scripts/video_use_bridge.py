@@ -8,10 +8,12 @@ formula, and groups the mapped verbatim words into readable Chinese phrases.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
 import re
+from itertools import groupby
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +86,43 @@ def map_words_to_output(edl: dict[str, Any], transcripts: dict[str, dict[str, An
             })
         output_cursor = max(output_cursor, timeline_start + end - start)
     return [word for word in mapped if word["text"] and word["end"] > word["start"]]
+
+
+def map_projection_words(projection: dict, edl: dict, transcripts: dict) -> list[dict]:
+    """Recompute a validated projection's words from the actual EDL/transcripts.
+
+    This read-only consumer grants no hook/edit/render authority. File callers
+    must additionally verify current bytes; the CLI does that for its inputs.
+    """
+    from editorial_projection import _normalize_edl, _selected, _transcripts, validate_projection
+    validate_projection(projection)
+    segments, duration = _normalize_edl(edl)
+    keys = ("segment_id", "source_ref", "source_range", "output_start", "output_end", "speed", "role")
+    expected = [{key: row[key] for key in keys} for row in projection["segments"]]
+    if segments != expected or duration != projection["output_duration"]:
+        raise ValueError("actual EDL differs from projection segments/duration")
+    normalized = _transcripts(transcripts, {s["source_ref"] for s in segments})
+    original_ids = {source: {str(word.get("id", word.get("word_id"))): word.get("id", word.get("word_id"))
+                             for word in document["words"]} for source, document in transcripts.items()}
+    recomputed, mapped = [], []
+    for segment in segments:
+        source = segment["source_ref"]
+        offset = segment["output_start"] - segment["source_range"]["start"]
+        for word in _selected(normalized[source], **segment["source_range"]):
+            occurrence = f'{segment["segment_id"]}:{word["id"]}'
+            row = {"occurrence_id": occurrence, "segment_id": segment["segment_id"],
+                   "source_ref": source, "source_word_id": word["id"], "text": word["text"],
+                   "source_start": word["start"], "source_end": word["end"],
+                   "output_start": word["start"] + offset, "output_end": word["end"] + offset}
+            recomputed.append(row)
+            mapped.append({"text": row["text"], "start": row["output_start"], "end": row["output_end"],
+                           "source_start": row["source_start"], "source_end": row["source_end"],
+                           "source": source, "source_word_id": original_ids[source][word["id"]],
+                           "source_word_count": 1, "segment_id": segment["segment_id"],
+                           "word_occurrence_id": occurrence})
+    if recomputed != projection["words"]:
+        raise ValueError("projection word instances differ from current transcript/EDL")
+    return mapped
 
 
 def _visible_chars(text: str) -> int:
@@ -206,7 +245,7 @@ def _split_long_unit(unit: list[dict[str, Any]], hard_duration: float, hard_char
     return [chunk for chunk in chunks if chunk]
 
 
-def build_captions(mapped_words: list[dict[str, Any]], *, max_chars: int = 24,
+def _build_captions_legacy(mapped_words: list[dict[str, Any]], *, max_chars: int = 24,
                    max_duration: float = 6.5, pause_break: float = 0.5,
                    punctuation_style: str = "source") -> list[dict[str, Any]]:
     """Group verbatim mapped words at punctuation/pause boundaries first.
@@ -285,10 +324,62 @@ def build_captions(mapped_words: list[dict[str, Any]], *, max_chars: int = 24,
     return captions
 
 
+def _instance_ids(group: list[dict], plural: str, singular: str) -> list:
+    return list(dict.fromkeys(value for word in group
+                              for value in (word[plural] if plural in word else [word[singular]])))
+
+
+def build_captions(mapped_words: list[dict[str, Any]], *, max_chars: int = 24,
+                   max_duration: float = 6.5, pause_break: float = 0.5,
+                   punctuation_style: str = "source") -> list[dict[str, Any]]:
+    options = dict(max_chars=max_chars, max_duration=max_duration,
+                   pause_break=pause_break, punctuation_style=punctuation_style)
+    if not any("segment_id" in word for word in mapped_words):
+        return _build_captions_legacy(mapped_words, **options)
+    if any(not word.get("segment_id") for word in mapped_words):
+        raise ValueError("mixed projection/legacy word identities")
+    captions, offset = [], 0
+    for segment_id, rows in groupby(mapped_words, key=lambda word: word["segment_id"]):
+        words = list(rows)
+        for caption in _build_captions_legacy(words, **options):
+            group = words[caption["source_word_start"]:caption["source_word_end"] + 1]
+            caption.update(segment_id=segment_id,
+                           word_occurrence_ids=_instance_ids(group, "word_occurrence_ids", "word_occurrence_id"),
+                           source_word_ids=_instance_ids(group, "source_word_ids", "source_word_id"))
+            caption["source_word_start"] += offset
+            caption["source_word_end"] += offset
+            captions.append(caption)
+        offset += len(words)
+    return captions
+
+
 def apply_audited_corrections(mapped_words: list[dict[str, Any]], corrections: dict[str, Any] | None
                               ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     if not corrections:
         return mapped_words, []
+    if any("segment_id" in word for word in mapped_words):
+        corrected, applied = [], []
+        for segment_id, rows in groupby(mapped_words, key=lambda word: word["segment_id"]):
+            originals = list(rows)
+            pieces, changes = apply_replacements(originals, corrections.get("replacements", []))
+            for piece in pieces:
+                if "segment_id" in piece:
+                    continue
+                spans = [change for change in changes
+                         if change["start"] <= piece["start"] and change["end"] >= piece["end"]]
+                if not spans:
+                    raise ValueError("corrected projection token lost its source span")
+                start, end = min(row["start"] for row in spans), max(row["end"] for row in spans)
+                retained = [word for word in originals if word["start"] < end and word["end"] > start]
+                piece.update(segment_id=segment_id, source=retained[0]["source"],
+                             source_start=retained[0]["source_start"], source_end=retained[-1]["source_end"],
+                             source_word_id=retained[0]["source_word_id"],
+                             word_occurrence_id=retained[0]["word_occurrence_id"],
+                             source_word_ids=_instance_ids(retained, "source_word_ids", "source_word_id"),
+                             word_occurrence_ids=_instance_ids(retained, "word_occurrence_ids", "word_occurrence_id"))
+            corrected.extend(pieces)
+            applied.extend(dict(change, segment_id=segment_id) for change in changes)
+        return corrected, applied
     corrected, applied = apply_replacements(mapped_words, corrections.get("replacements", []))
     return corrected, applied
 
@@ -402,12 +493,33 @@ def render_command(edl_path: Path, output_path: Path, *, preview: bool = False) 
     return command
 
 
+def _read_projection_input(path: Path) -> tuple[dict, str]:
+    """Bind parsed strict JSON to the same bytes hashed for projection use."""
+    def pairs(rows):
+        result = {}
+        for key, value in rows:
+            if key in result:
+                raise ValueError(f"duplicate JSON key: {key}")
+            result[key] = value
+        return result
+
+    def constant(value):
+        raise ValueError(f"non-finite JSON value: {value}")
+
+    data = path.read_bytes()
+    value = json.loads(data.decode("utf-8"), object_pairs_hook=pairs, parse_constant=constant)
+    if not isinstance(value, dict):
+        raise ValueError("projection input must be a JSON object")
+    return value, hashlib.sha256(data).hexdigest()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--edl", required=True)
     parser.add_argument("--transcript", action="append", required=True,
                         help="source-name=path-to-video-use-word-transcript.json")
     parser.add_argument("--out-dir", required=True)
+    parser.add_argument("--projection", help="current validated editorial timeline projection; grants no edit authority")
     parser.add_argument("--corrections", help="audited terminology/spelling replacements with evidence")
     parser.add_argument("--max-chars", type=int, default=24)
     parser.add_argument("--max-duration", type=float, default=6.5)
@@ -418,15 +530,35 @@ def main() -> int:
     parser.add_argument("--terminology", action="append", default=[])
     args = parser.parse_args()
     edl_path = Path(args.edl).resolve()
-    edl = json.loads(edl_path.read_text(encoding="utf-8"))
+    current_inputs = {}
+    if args.projection:
+        edl, current_inputs[edl_path] = _read_projection_input(edl_path)
+    else:
+        edl = json.loads(edl_path.read_text(encoding="utf-8"))
     transcripts: dict[str, dict[str, Any]] = {}
     provenance: dict[str, str] = {}
     for item in args.transcript:
         source, path_value = item.split("=", 1)
         path = Path(path_value).resolve()
-        transcripts[source] = json.loads(path.read_text(encoding="utf-8"))
-        provenance[source] = sha256_file(path)
-    mapped = map_words_to_output(edl, transcripts)
+        if args.projection:
+            transcripts[source], provenance[source] = _read_projection_input(path)
+            current_inputs[path] = provenance[source]
+        else:
+            transcripts[source] = json.loads(path.read_text(encoding="utf-8"))
+            provenance[source] = sha256_file(path)
+    if args.projection:
+        from editorial_projection import validate_projection
+        projection_path = Path(args.projection).resolve()
+        projection, current_inputs[projection_path] = _read_projection_input(projection_path)
+        validate_projection(projection)
+        if len(args.transcript) != 1 or len(transcripts) != 1:
+            raise ValueError("projection CLI requires one hash-bound transcript file; multi-file manifest unsupported")
+        hashes = projection["input_hashes"]
+        if hashes["candidate_edl"] != current_inputs[edl_path] or hashes["transcript"] != next(iter(provenance.values())):
+            raise ValueError("projection candidate EDL/transcript file hash is stale")
+        mapped = map_projection_words(projection, edl, transcripts)
+    else:
+        mapped = map_words_to_output(edl, transcripts)
     corrections = json.loads(Path(args.corrections).read_text(encoding="utf-8")) if args.corrections else None
     corrected, applied = apply_audited_corrections(mapped, corrections)
     captions = build_captions(corrected, max_chars=args.max_chars,
@@ -441,6 +573,11 @@ def main() -> int:
     report["edl_sha256"] = sha256_file(edl_path)
     report["transcript_sha256"] = provenance
     report["video_use_helper"] = str(render_helper_path())
+    if args.projection:
+        report["projection_sha256"] = current_inputs[projection_path]
+        report["projection_authority"] = "read_only_current_edl_mapping_not_hook_authorization"
+        if any(sha256_file(path) != digest for path, digest in current_inputs.items()):
+            raise ValueError("projection input changed during caption compilation")
     out = Path(args.out_dir).resolve()
     write_json(out / "mapped-words.json", {"words": corrected})
     write_json(out / "captions.json", {"version": 2, "segments": captions})

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite_version": "2026.08-p0p1p2",
-  "generated_at": "2026-10-02T14:14:03.507569+00:00",
+  "generated_at": "2026-10-12T13:40:39.929150+00:00",
   "status": "pass",
   "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
   "source": {
@@ -19,11 +19,11 @@
   },
   "bindings": {
     "director_version": "2.6.0",
-    "project_schema_version": 14,
+    "project_schema_version": 15,
     "implementation_sha256": {
       "scripts/current_golden_regression.py": "d446185b2cfee27bd54b72f858b119148d30016757c7954a4116c333186a56e3",
-      "scripts/director.py": "cbf3c8085adaadd21ffe78395666a2abe67c2c27d8c4582fdab29c63ff75cb6b",
-      "scripts/project_config.py": "40df78ececf74b50583f15f0e7be26757bc34117160c3819d4bebab2af2abe7a",
+      "scripts/director.py": "8aaf0b70f7755211ac4bed8384aa4f7feb8a30111001cb1f60e248ab4626f126",
+      "scripts/project_config.py": "9cbf4196485a0dadd73fa02f6fd76bb3513989f1ce0f5171a8f6930ee05c8e0c",
       "scripts/delivery_readiness.py": "4a409e9deb1abe2663dfb9e6145fc3334649197266bf072cd7c395349ab7d4ac",
       "scripts/capability_registry.py": "69ba757323777221f31a56aca1a575cb4a71661ffa583bc6b062f08dc6c8d300",
       "scripts/production_contract.py": "f7e751c990512530bf8aef1424d6ff26f97be284d4f7209a7b2b8ff4a00de3f3",
@@ -39,7 +39,7 @@
       "scripts/event_render_pipeline.py": "19924c32ec46b04eb423b6a5f8f2380be423a0ffd8c50ab5b111e1674fc3746d",
       "scripts/review_server.py": "5459606f829805ddcd571a6b4660725aaef19e0b76cce76e8840eb71103ffa6b",
       "scripts/review_dashboard.py": "32ba78cfa8a5994679bdee369c9acfb295c8c0538f7b7685067fc1ad1d004b08",
-      "scripts/creative_review.py": "54100477d5cbf786b6cde04fe79349c3610b155140c0b68b38d25da5abcfe0dd",
+      "scripts/creative_review.py": "1be6a74ba6e46d57f642c4249646190838155eef8667809fd1c0b0c66dbfc57a",
       "scripts/cover_reference_pack.py": "113d239fca4ce1408e4c6bb55d67d35f2358f178fb271455507d6d91a92a4dde",
       "scripts/preference_learning.py": "41d37cd11346f8963e0af04ed251e3318cee1ce7a4a6bcc801e3abb66255f8e6",
       "scripts/portable_audit_bundle.py": "b8be8ba2e4d550369273b056d5e149ffb0d67b80fc10a333a48f93b9be845435",
@@ -48,14 +48,14 @@
       "scripts/editorial_loop.py": "5142c63e3b0d248f3cf530725d94d8e5bdc193a0ca03e70defbe1aef812dc776",
       "references/ip-content-loop-v1/editorial-envelope.schema.json": "8e73e532580cbf507c15e499191ea951e912da0cc64d461c734234dc725e0628",
       "scripts/representative_short_media.py": "b88769ed4aa32cb435b112b0b1771a4cab45fd9c28c6461532ab2517ab911309",
-      "scripts/motion_contracts.py": "c7440a490651365c1ae0f56d807bfc71620acd2b516e007b3179b029737d43dd",
-      "scripts/motion_quality_engine.py": "b74d70d0c2afe9bb7cd3d6b4ca53cf472a27d6c0ee8bb9d8538ae558346b4631",
+      "scripts/motion_contracts.py": "f608aa1ed654bb5ef615f66aa95265ab4de1db21eb68a4f876d6f141a2cef30f",
+      "scripts/motion_quality_engine.py": "f90482b4e802f172f7fea93e967d8f126460e9e927e5d2b2000f823798eb85c7",
       "scripts/keyframe_receipt.py": "b01547467d6cb178867f8f918b5d4d8b740fada29cd9fdec9e63b798aad6c87f",
       "scripts/renderer_project_manifest.py": "6b69c8905f9a0309a4fd6ef77fc2d35161de2de4da4f6c92195f42d365b8ea7d",
       "scripts/build_motion_snapshot_plan.py": "14c7b3e627b98e8d99ac64d7af17c3c20323f45bceba8061112b3247d8fe9e3a",
       "references/motion-recipes-v1.json": "e0cc533c44db17824aca3c889154659e91d8729126b6470815b3fde381e45b44"
     },
-    "fixture_suite_sha256": "2b849362f9ead6b5237a13d14f862ebfb07432c79b3abb14ae39422c609ca8dc"
+    "fixture_suite_sha256": "552a50e4d933bcd793d8c88bd0f24eaca3c1f649c458cef1cfaa6d4d4ab66920"
   },
   "cases": [
     {
@@ -551,5 +551,5 @@
       }
     }
   ],
-  "report_integrity_sha256": "fb215e71522873ad3d0e9f0dd1575db24377bc40cd29a539afc4d92b9b5aa549"
+  "report_integrity_sha256": "b2096399f916cdaea1011ca9f242703717cc52397c8d1c2005f0c34a4f655d6c"
 }

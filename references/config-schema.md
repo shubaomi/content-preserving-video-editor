@@ -4,8 +4,8 @@ Use versioned YAML and relative asset paths where practical. Resolve relative pa
 
 ## Versioning and migration
 
-The current project schema is version 14. New projects write both
-`schema_version: 14` and `version: 14`. Legacy projects from v1 through v13 are
+The current project schema is version 15. New projects write both
+`schema_version: 15` and `version: 15`. Legacy projects from v1 through v14 are
 deep-copied and migrated in memory before
 validation or execution. Migration adds defaults but never rewrites the user's
 existing `project.yaml`. Reject unknown future versions rather than guessing.
@@ -22,6 +22,19 @@ read-only and is never followed when disabled. Enabling the loop also enables
 the existing editorial-intent validation, not rendering or publishing permission.
 See [runtime-guide.md](ip-content-loop-v1/runtime-guide.md) for the four sidecars,
 unknown facts, source bindings, and offline learning.
+
+## Optional camera-first editorial motion (v15)
+
+`motion_editorial` is a closed mapping with defaults:
+`enabled: false`, `version: 1`, `direction: null`, `opening: propose_only`,
+`design_approval_path: null`, `hook_approval_path: null`.
+Enabled must be a boolean. Explicit opt-in requires project schema 15,
+Motion Quality enabled, old portrait_brand disabled, and current accepted design
+receipt. A direction is self/talking_head; B is screen_tutorial with existing
+rights policy. `propose_only` consumes the current EDL unchanged and rejects a
+hook approval path. `approved_duplicate` requires the exact review ledger and a
+request-bound newly initialized variant. See the
+[runtime contract](motion-editorial-v3-runtime.md); no new Director stage is added.
 
 ## Profile
 

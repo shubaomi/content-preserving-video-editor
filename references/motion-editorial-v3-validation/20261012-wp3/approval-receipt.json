@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "kind": "style_acceptance_and_WP3_authorization",
+  "candidate_id": "motion-editorial-v3-20261012",
+  "recorded_date": "2026-10-12",
+  "actor": "HongRun",
+  "authority": "explicit_user_message_in_current_conversation",
+  "message_verbatim": "真人和软件这两个方向都可以，整体比之前自然、清楚一些。批准进入 WP3 正式集成，按照已冻结设计实施和验证，暂不渲染完整视频。",
+  "frozen_candidate": {
+    "path": "E:/Projects/Skills/content-preserving-video-editor/references/motion-editorial-v3-design/design-freeze-candidate.json",
+    "sha256": "54b52c5614ccc1bb063f4e0ce28b0467522047d0f874d56d3e1c653d76e3668c",
+    "inventory_files_reverified": 11
+  },
+  "accepted_styles": [
+    {
+      "direction": "authentic_product_editorial",
+      "path": "E:/Projects/IP/HongRun/validation/content-preserving-video-editor-p0/canaries/portrait-product-intro-wp8/hongrun-physical-product-intro-p0-portrait/work/motion-editorial-v3/20261012-wp012/exports/candidate-captioned.mp4",
+      "sha256": "fc552607c57763e5466cf9888267502ecf0bcef105864f74229f45313bae0c6c"
+    },
+    {
+      "direction": "professional_software_demo",
+      "path": "E:/Projects/IP/HongRun/videos/data-report-current/work/motion-editorial-v3/20261012-wp012/revision-02/exports/landscape-candidate.mp4",
+      "sha256": "bba51d7586876cb0e05ed2bae173ab92e2d78aa38b3a205e1d2d9dcc32c2901b"
+    }
+  ],
+  "accepted_observation": "整体比之前自然、清楚一些",
+  "authorized_scope": "WP3_formal_integration_and_verification_under_frozen_design",
+  "not_implied": ["specific_hook_excerpt_approval", "WP4_opening_render", "full_video_render", "publication", "production_default", "all_T18_questions_answered", "complete_audio_listening_confirmed", "real_Jianying_editability"],
+  "historical_evidence_mutated": false,
+  "note": "This records the user's actual style acceptance and implementation authorization. Hashes detect drift, not identity authentication. It does not authorize a design-contract amendment."
+}

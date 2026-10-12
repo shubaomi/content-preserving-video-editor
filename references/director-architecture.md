@@ -4,6 +4,13 @@ Use this reference when executing or extending the single professional workflow.
 
 ## Ownership boundary
 
+The opt-in [editorial motion v3 integration](motion-editorial-v3-runtime.md)
+preserves the 19 stages and all owners below. Source semantic v3 remains immutable;
+Director derives output-instance v4 from the current video-use EDL. The explicit
+1.1 motion/target/audio/review schema adapter adds instance IDs without altering
+frozen 1.0 schemas. HyperFrames consumes the authored camera-first payload and
+must not reselect legacy generic decoration.
+
 | Stage | Owner | Required artifact |
 | --- | --- | --- |
 | Inspect and preservation policy | director | `workflow-contract.json` |

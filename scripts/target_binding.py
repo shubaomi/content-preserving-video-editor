@@ -71,6 +71,8 @@ def _schema_errors(binding: dict[str, Any]) -> list[str]:
     if not SCHEMA_PATH.is_file():
         return [f"target-binding schema is missing: {SCHEMA_PATH}"]
     schema = read_json(SCHEMA_PATH)
+    from editorial_schema import runtime_schema
+    schema = runtime_schema("target-binding", schema, binding)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     return [
         "target-binding schema "

@@ -5,15 +5,41 @@ import argparse,json,math
 from pathlib import Path
 from editorial_promise import validate_promise_bindings
 CUES=("今天","分享","介绍","关键","为什么","怎么","效果","问题","功能","结论")
+def speech_rows(transcript):
+    """Prefer real word timestamps; segment fallback is explicitly labelled."""
+    words = transcript.get("words")
+    source = words if words else transcript.get("segments", [])
+    rows = []
+    ids = set()
+    for index, item in enumerate(source):
+        if words and item.get("type", "word") != "word":
+            continue
+        start, end = item.get("start"), item.get("end")
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in (start, end)):
+            raise ValueError("speech timestamps must be finite numbers")
+        if start < 0 or end <= start:
+            raise ValueError("speech timestamp range is invalid")
+        identifier = str(item.get("id", index))
+        if identifier in ids:
+            raise ValueError("speech IDs must be unique")
+        ids.add(identifier)
+        text = str(item.get("text", item.get("word", ""))).strip()
+        if text:
+            rows.append({"start": start, "end": end, "text": text})
+    if any(a["start"] > b["start"] for a, b in zip(rows, rows[1:])):
+        raise ValueError("speech timestamps must preserve source order")
+    return rows
+
 def audit(transcript,visual=None,promise_ledger=None):
-    segs=transcript.get("segments",[]);duration=max((float(s.get("end",0)) for s in segs),default=0);first=next((s for s in segs if str(s.get("text","")).strip()),None);first_speech=float(first["start"]) if first else None
-    evidence=next((s for s in segs if any(c in str(s.get("text","")) for c in CUES)),first);first_value=float(evidence["start"]) if evidence else None
+    segs=speech_rows(transcript);duration=max((float(s.get("end",0)) for s in segs),default=0);first=next((s for s in segs if str(s.get("text","")).strip()),None);first_speech=float(first["start"]) if first else None
+    evidence=next((s for s in segs if any(c in str(s.get("text","")) for c in CUES)),None);first_value=float(evidence["start"]) if evidence else None
     opening=[s for s in segs if float(s.get("start",0))<15];opening_text="".join(str(s.get("text","")) for s in opening);clarity=min(5,sum(c in opening_text for c in CUES));dead=max(0,first_speech or 0);duplicate=sum(1 for i,s in enumerate(opening) for t in opening[:i] if str(s.get("text","")).strip()==str(t.get("text","")).strip() and str(s.get("text","")).strip())
     bins=max(1,math.ceil(duration/30));density=[]
     for i in range(bins):density.append({"start":i*30,"end":min(duration,(i+1)*30),"spoken_segments":sum(i*30<=float(s.get("start",0))<(i+1)*30 for s in segs)})
     monotony=((visual or {}).get("visual_analysis") or {}).get("monotony_candidates",[])
     measurements={"duration":round(duration,3),"first_speech":first_speech,"first_value":first_value,"opening_dead_time":round(dead,3),"duplicate_opening_segments":duplicate,"chapter_density":density,"visual_monotony_evidence":monotony}
-    judgments={"topic_clarity_score_0_5":clarity,"visible_evidence_score_0_5":min(5,2+int(first_value is not None and first_value<8)),"first_value_score_0_5":5 if first_value is not None and first_value<5 else 3 if first_value is not None and first_value<12 else 1,"heuristic_only":True}
+    measurements["speech_granularity"] = "words" if transcript.get("words") else "segments"
+    judgments={"topic_clarity_score_0_5":clarity,"visible_evidence_score_0_5":None,"visual_evidence_status":"unknown_requires_source_review","first_value_score_0_5":5 if first_value is not None and first_value<5 else 3 if first_value is not None and first_value<12 else 1 if first_value is not None else None,"heuristic_only":True}
     suggestions=[]
     if dead>1:suggestions.append({"timestamp":0,"suggestion":"review leading dead time","evidence":f"first speech at {dead:.2f}s","requires_semantic_deletion_approval":False})
     if first_value is not None and first_value>8:suggestions.append({"timestamp":first_value,"suggestion":"preview the first concrete value earlier with an overlay; do not delete setup automatically","evidence":f"first value cue at {first_value:.2f}s","requires_semantic_deletion_approval":True})

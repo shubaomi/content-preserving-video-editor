@@ -54,6 +54,15 @@ Profile or authorizes publishing. Do not enable the feature silently for old pro
 
 ## Start with one guided intake
 
+For the approved, opt-in camera-first A/B direction, read
+[motion-editorial-v3-runtime.md](references/motion-editorial-v3-runtime.md).
+Schema 15 keeps this route disabled for existing projects. ME-AMEND-01 separates
+unchanged `preserve_order` from precisely approved `approved_duplicate`: keeping
+the current EDL needs no hook approval; actual insertion still does. Never claim
+a middle-window style sample proves the opening. No full-render or production-default
+permission follows from WP3 integration. Source/quiet decisions are valid; do not
+add decoration to meet an event quota.
+
 Do not require the user to remember a long invocation prompt. When a user says
 they have a video to edit, reuse every answer already present in the request or
 current project, then ask once for only the missing items in one compact batch:
@@ -111,9 +120,9 @@ moving projects.
 
 Load legacy project YAML through the versioned in-memory migrator. Never rewrite
 an existing `project.yaml` merely to add defaults. New projects use project
-schema version 14; migrated v1-v13 projects receive disabled optional adapters,
+schema version 15; migrated v1-v14 projects receive disabled optional adapters,
 disabled manual finishing, disabled HongRun portrait-brand v2, and the current
-preview/render parity tolerances in memory.
+preview/render parity tolerances in memory. Camera-first editorial motion remains disabled.
 
 ## Use the single entry
 

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "scope": "design_structure_only",
+  "status": "pass",
+  "schema_meta_validation": "Draft202012Validator.check_schema pass",
+  "positive_examples": 4,
+  "negative_cases": {
+    "empty_proposed": "rejected",
+    "self_approval": "rejected",
+    "speed_change": "rejected",
+    "default_decoration": "rejected",
+    "wrong_direction": "rejected",
+    "full_render": "rejected",
+    "style_too_long": "rejected",
+    "opening_not_zero": "rejected",
+    "paid_call": "rejected",
+    "forged_review": "rejected"
+  },
+  "bindings": [
+    {
+      "path": "schemas/editorial-motion.schema.json",
+      "sha256": "0401a523bae16f72626168eb3267c7280f38849de5eb8bc81012d80c888ddcf7"
+    },
+    {
+      "path": "examples/contracts.json",
+      "sha256": "72640ab097f2da1aabe152d059c99eca007997f63133b809c9da5cf2c0514fba"
+    }
+  ],
+  "cross_file_runtime_validation": "specified_not_implemented",
+  "real_media_validation": "not_run",
+  "new_style_render": "not_run",
+  "user_aesthetic_review": "pending",
+  "code_regression_suite": "not_run_no_runtime_code_changes",
+  "review_type": "author_self_review_not_independent_review"
+}

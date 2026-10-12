@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "source": "explicit_user_message",
+  "date": "2026-10-12",
+  "message": "按真人产品编辑感＋专业软件演示方向进行设计冻结，加入真实高光前置方案，先验证短片，不渲染完整视频。",
+  "confirmed_directions": ["authentic_product_editorial", "professional_software_demo"],
+  "hook_method_in_design": "duplicate_real_excerpt_keep_body",
+  "design_preparation_authorized": true,
+  "exact_hook_ranges_approved": false,
+  "new_rendered_aesthetic_approved": false,
+  "this_freeze_candidate_approved": false,
+  "production_implementation_authorized": false,
+  "full_render_authorized": false,
+  "publication_authorized": false
+}

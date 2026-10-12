@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "scope": "unchanged_existing_configuration_timeline_caption_contracts",
+  "repository_head": "0af6aa20ef664a20ffa3b886d3834af06394e971",
+  "command": "python -m unittest tests.test_project_config_migration tests.test_video_use_bridge tests.test_caption_treatment tests.test_word_aligned_captions -q",
+  "exit_code": 0,
+  "tests_run": 63,
+  "failures": 0,
+  "errors": 0,
+  "elapsed_test_seconds": 0.145,
+  "verified_frozen_code_hashes": {
+    "scripts/video_use_bridge.py": "678244b192fa3effc632098c19ee7b980845f0e06569d94f2390eab856a4e607",
+    "scripts/audit_hook_pacing.py": "6c5c8febbdc3aae8f3471eefeb034a5c8165150b0dacec0a17ebe947f7125244",
+    "scripts/director_contracts.py": "857118686a22aad0d52a05bdb8a9875540401230d08f06a979768a339f69685b",
+    "scripts/project_config.py": "40df78ececf74b50583f15f0e7be26757bc34117160c3819d4bebab2af2abe7a"
+  },
+  "earlier_attempt": "pytest unavailable in existing Python; used repository-documented unittest without installing dependencies",
+  "not_proven": ["full_test_suite", "user_aesthetics", "real_media_result", "production_integration"]
+}

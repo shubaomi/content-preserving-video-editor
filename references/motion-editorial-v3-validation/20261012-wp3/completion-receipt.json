@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "kind": "motion_editorial_wp3_completion",
+  "candidate_id": "motion-editorial-v3-20261012",
+  "amendment_id": "ME-AMEND-01",
+  "status": "implementation_verified",
+  "base_commit": "0af6aa20ef664a20ffa3b886d3834af06394e971",
+  "branch": "main",
+  "frozen_candidate_sha256": "54b52c5614ccc1bb063f4e0ce28b0467522047d0f874d56d3e1c653d76e3668c",
+  "frozen_inventory_reverified": 11,
+  "source_inventory": [
+    {
+      "path": "scripts/editorial_projection.py",
+      "sha256": "426cdf3241570ffa65c5db2600bdd53e7f50669d4cc4f94e6d5f0eaeeefc2e92"
+    },
+    {
+      "path": "scripts/editorial_handoff.py",
+      "sha256": "bd787514bbea65f0393416de4f25f4987dbccd4ceb0c8eccc10efc9939c2bc46"
+    },
+    {
+      "path": "scripts/editorial_schema.py",
+      "sha256": "cc1991d3d1cffbe83408bb1a1c8b12d35122b13f29775c6d5afaf7a6d4bdfeff"
+    },
+    {
+      "path": "scripts/motion_editorial.py",
+      "sha256": "5a1b8d13b6237c783d11a309bd83368eb8d64ecf1769595366de2848c93e645b"
+    },
+    {
+      "path": "scripts/motion_editorial_review.py",
+      "sha256": "6f3cdc1c4b37dc8869fe41a7a3ffb302a2e7cc871f9360bdee6f040d357152ce"
+    },
+    {
+      "path": "scripts/motion_editorial_variant.py",
+      "sha256": "f53eee29660986f821acd0d7a1863a3700e03d738e3c2c883e354737edb46777"
+    },
+    {
+      "path": "scripts/director.py",
+      "sha256": "8aaf0b70f7755211ac4bed8384aa4f7feb8a30111001cb1f60e248ab4626f126"
+    },
+    {
+      "path": "scripts/director_contracts.py",
+      "sha256": "1580f66979521355e853c2d23f667f88f1f685e9511309f7a0e4fce2c877b0d9"
+    },
+    {
+      "path": "scripts/project_config.py",
+      "sha256": "9cbf4196485a0dadd73fa02f6fd76bb3513989f1ce0f5171a8f6930ee05c8e0c"
+    },
+    {
+      "path": "scripts/video_use_bridge.py",
+      "sha256": "e88a279c7cbf78fd9bcdc7d1d65301f96fb097926ae1c68a30378a1cce7538d4"
+    },
+    {
+      "path": "scripts/editable_delivery.py",
+      "sha256": "23b37c8806e3e84ee403fdff4f4ef4a95a939c12e328771c6692cecbc259c9e7"
+    },
+    {
+      "path": "scripts/audit_hook_pacing.py",
+      "sha256": "a39aafe4bd960a42bebac7daa31534ab0d857693e7e5b6039c63669d7758719e"
+    },
+    {
+      "path": "scripts/motion_quality_engine.py",
+      "sha256": "f90482b4e802f172f7fea93e967d8f126460e9e927e5d2b2000f823798eb85c7"
+    },
+    {
+      "path": "scripts/motion_contracts.py",
+      "sha256": "f608aa1ed654bb5ef615f66aa95265ab4de1db21eb68a4f876d6f141a2cef30f"
+    },
+    {
+      "path": "scripts/target_binding.py",
+      "sha256": "5c7fcdca93a65485cc2abc86425fe54fbfb54359926aff4671dc5e893944f26f"
+    },
+    {
+      "path": "scripts/audio_production.py",
+      "sha256": "0b659583dbdb68d7fd88aded1427898aca2ef0eccd7b6dde15e96761140ac7a6"
+    },
+    {
+      "path": "scripts/creative_review.py",
+      "sha256": "1be6a74ba6e46d57f642c4249646190838155eef8667809fd1c0b0c66dbfc57a"
+    },
+    {
+      "path": "scripts/build_keyframe_receipts.py",
+      "sha256": "8bfcd13d4fe0172e30944587c47ae9790a0a291b12cbd2e85aeea3e717745496"
+    },
+    {
+      "path": "assets/motion-editorial-v3/authentic-product-editorial.js",
+      "sha256": "fbc59e7a71cc2ef15097a78ba29490c74f92aa91303fc9a37f893f3b5196efa4"
+    },
+    {
+      "path": "assets/motion-editorial-v3/professional-software-demo.js",
+      "sha256": "e1d8aabcad17ccc16de813b591909bb940ba849eec83c06ffa6060bbf3764618"
+    }
+  ],
+  "validation": {
+    "full_suite": {
+      "command": "python -m unittest discover -s tests -q",
+      "tests_run": 1136,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "elapsed_seconds": 296.827,
+      "scope": "final production/test source bytes; synthetic test media only"
+    },
+    "isolated_contracts": {
+      "command": "python -m unittest discover -s experiments/motion-editorial-v3 -p test_contracts.py -q",
+      "tests_run": 38,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "browser": {
+      "evidence_tier": "synthetic_browser_real_gsap",
+      "recipes_passed": [
+        "A01",
+        "A02",
+        "A03",
+        "B01",
+        "B02",
+        "B03"
+      ],
+      "browser_version": "152.0.7977.30",
+      "gsap_sha256": "c174bfce53a729418d57a8ad8625e7247c793a22fef8e2851e3cfa3de9cd8280",
+      "new_hyperframes_media_render": false
+    },
+    "golden_current": "pass",
+    "git_diff_check": "pass",
+    "independent_review": "approve_no_remaining_blocking_findings",
+    "accepted_wp2_media_hashes": "reverified_unchanged",
+    "global_skill": {
+      "type": "junction",
+      "path": "C:/Users/hongr/.codex/skills/content-preserving-video-editor",
+      "target": "E:/Projects/Skills/content-preserving-video-editor"
+    }
+  },
+  "scope_guards": {
+    "new_user_video_renders": 0,
+    "full_video_rendered": false,
+    "wp4_started": false,
+    "specific_hook_approved": false,
+    "production_default_enabled": false,
+    "paid_calls": false,
+    "runtime_installs": false,
+    "jianying_app_mutated": false,
+    "publication": false
+  },
+  "limitations": [
+    "Real WP4 opening canary requires exact hook selection and execution approval",
+    "Existing legacy caption word linkage can be partial/unavailable; text and timing remain unchanged",
+    "Native Jianying editable acceptance remains pending human validation",
+    "Synthetic component runtime verification does not replace actual composition layout, font, audio or aesthetic QA",
+    "Caption-only settings preserve source/ASR/EDL but rebuild lightweight policy and downstream QA; arbitrary edits do not guarantee zero rendering"
+  ],
+  "next_gate": "Prepare exact hook candidate decision package only when requested; do not render without its separate approval"
+}

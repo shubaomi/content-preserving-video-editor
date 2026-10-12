@@ -196,7 +196,7 @@ def build_contract(
         )
     created_at = _now()
     contract: dict[str, Any] = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0" if read_json(motion_design_contract_path).get("schema_version") == "1.1.0" else "1.0.0",
         "review_id": f"creative-{_stable_hash([project_id, created_at, input_hashes])[:24]}",
         "project_id": project_id,
         "created_at": created_at,

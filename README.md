@@ -4,6 +4,12 @@ This repository is the source of the preservation-first Director Skill. It
 coordinates video-use, HyperFrames, FFmpeg, optional providers, human approvals,
 QA, and one Universal MP4; it does not vendor or replace upstream Skills.
 
+The approved [camera-first editorial motion v3](references/motion-editorial-v3-runtime.md)
+adds default-off schema-15 integration for real-product and professional-software
+directions. Keeping the EDL unchanged needs no hook approval; inserting a real
+excerpt still requires exact short-preview approval and an isolated variant.
+WP3 integration does not authorize full rendering, publishing, or production defaults.
+
 Reference-led creative direction and personal-IP editorial guidance are described
 in [`references/reference-led-ip-direction.md`](references/reference-led-ip-direction.md).
 The [2026-10-02 research](references/open-source-video-research-20261002.md)

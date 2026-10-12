@@ -582,7 +582,12 @@ def compile_motion_design(
     created_at: str,
 ) -> dict[str, Any]:
     """Compile all decisions and the exact render subset with deterministic fallbacks."""
-    if semantic_brief.get("schema_version") != 3 or (
+    if semantic_brief.get("schema_version") == 4:
+        from director_contracts import validate_semantic_brief
+        errors = validate_semantic_brief(semantic_brief)
+        if errors:
+            raise MotionCompilationError("; ".join(errors))
+    if semantic_brief.get("schema_version") not in {3, 4} or (
         semantic_brief.get("opportunity_model") != "decision_complete_v1"
     ):
         raise MotionCompilationError("Motion Quality Engine requires a decision-complete schema 3 brief")
@@ -676,7 +681,7 @@ def compile_motion_design(
         "created_at": created_at,
     }
     contract = {
-        "schema_version": "1.0.0",
+        "schema_version": "1.1.0" if semantic_brief.get("schema_version") == 4 else "1.0.0",
         "contract_id": f"motion-{_stable_hash(contract_seed)[:24]}",
         "project_id": project_id,
         "created_at": created_at,

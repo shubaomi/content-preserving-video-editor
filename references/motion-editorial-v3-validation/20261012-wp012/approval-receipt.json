@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "kind": "design_execution_scope",
+  "candidate_id": "motion-editorial-v3-20261012",
+  "candidate_path": "E:/Projects/Skills/content-preserving-video-editor/references/motion-editorial-v3-design/design-freeze-candidate.json",
+  "candidate_sha256": "54b52c5614ccc1bb063f4e0ce28b0467522047d0f874d56d3e1c653d76e3668c",
+  "actor": "HongRun",
+  "authority": "explicit_user_message_in_current_conversation",
+  "message_verbatim": "批准 motion-editorial-v3-20261012 design-freeze-candidate，执行 WP0–WP2 的隔离短片验证，不进入正式集成或完整视频渲染。",
+  "recorded_date": "2026-10-12",
+  "scope": ["WP0_isolated_contracts", "WP1_evidence_and_prototypes", "WP2_two_short_motion_style_candidates"],
+  "limits": {
+    "per_candidate_seconds": [10, 15],
+    "initial_new_motion_seconds": 30,
+    "total_new_motion_seconds_with_revisions": 60,
+    "attempts_per_direction": 2
+  },
+  "not_authorized": ["production_integration", "actual_hook_reorder", "full_video_render", "paid_or_cloud_calls", "new_runtime_installation", "publication", "shared_profile_mutation", "production_default", "Jianying_app_mutation"],
+  "aesthetic_approval": "pending",
+  "precise_hook_approval": "pending",
+  "note": "Scope record from the explicit user message, not a cryptographic identity assertion. Frozen candidate bytes remain unchanged. WP3 owns formal Git delivery."
+}

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "candidate_id": "motion-editorial-v3-20261012",
+  "scope": "WP0-WP2_isolated_short_validation",
+  "status": "short_candidates_available_human_review_pending",
+  "repo_head": "0af6aa20ef664a20ffa3b886d3834af06394e971",
+  "production_tracked_changes": false,
+  "tests": {
+    "isolated_contracts_passed": 38,
+    "existing_regressions_passed": 63,
+    "isolated_skips": 0,
+    "all_frozen_T01_T20_complete": false
+  },
+  "render_budget": {
+    "portrait_attempts": 1,
+    "landscape_attempts": 2,
+    "planned_new_motion_seconds": 24.48,
+    "actual_output_seconds": 35.0,
+    "initial_limit_seconds": 30,
+    "including_revision_limit_seconds": 60,
+    "aggregate_budget_enforcer": "main_agent_execution_ledger_not_a_cross_project_runtime_quota_service",
+    "mechanical_encodes_and_QA_included_in_motion_seconds": false,
+    "note": "Initial24.50s plus one authorized10.5s landscape timing revision. Mechanical processing runtimes are recorded separately, not zero cost. Portrait13.98s quantized to420 frames at30fps. Landscape v1 retained as superseded due to target transition overlap."
+  },
+  "artifacts": {
+    "portrait_candidate_sha256": "fc552607c57763e5466cf9888267502ecf0bcef105864f74229f45313bae0c6c",
+    "landscape_revision02_candidate_sha256": "bba51d7586876cb0e05ed2bae173ab92e2d78aa38b3a205e1d2d9dcc32c2901b",
+    "portrait_root": "E:/Projects/IP/HongRun/validation/content-preserving-video-editor-p0/canaries/portrait-product-intro-wp8/hongrun-physical-product-intro-p0-portrait/work/motion-editorial-v3/20261012-wp012",
+    "landscape_root": "E:/Projects/IP/HongRun/videos/data-report-current/work/motion-editorial-v3/20261012-wp012/revision-02",
+    "per_direction": ["captioned_candidate", "aligned_captioned_no_motion_baseline", "candidate_without_new_burned_captions", "SRT", "ASS", "HyperFrames_source_ZIP", "technical_QA", "delivery_manifest"]
+  },
+  "evidence_limits": [
+    "Complete listening pending human; objective audio measurements are not perception.",
+    "Visual frame review is assistant inspection, not user aesthetic acceptance or complete human playback.",
+    "These are middle-passage motion_style excerpts, not actual highlight-prepended openings.",
+    "Full render-input hash preflight was hardened after first renders; post-render checks are explicitly labelled, not retroactive preflight evidence.",
+    "Hook assessment covers reviewed excerpts, not an exhaustive whole-source highlight search.",
+    "No real Jianying editability validation was performed."
+  ],
+  "gates": {
+    "portrait_aesthetic": "pending_user",
+    "landscape_aesthetic": "pending_user",
+    "full_listening": "pending_human",
+    "exact_hook_approval": "not_granted",
+    "WP3": "not_authorized",
+    "WP4": "not_authorized"
+  },
+  "performed": {
+    "production_integration": false,
+    "full_video_render": false,
+    "actual_hook_reordering": false,
+    "new_ASR": false,
+    "new_runtime_install": false,
+    "cloud_or_paid_calls": false,
+    "Jianying_app_mutation": false,
+    "commit": false,
+    "push": false
+  },
+  "next_user_decision": "Review each candidate against its aligned baseline, listen completely, and state like/revise/reject with reasons. WP3 still requires explicit authorization."
+}

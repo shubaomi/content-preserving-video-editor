@@ -337,6 +337,13 @@ def selected_semantic_event_ids(brief: dict[str, Any]) -> list[str]:
 
 
 def validate_semantic_brief(brief: dict[str, Any], *, require_sample_variety: bool = False) -> list[str]:
+    if brief.get("schema_version") == 4:
+        from editorial_projection import validate_output_semantics
+        errors = validate_output_semantics(brief)
+        source = (brief.get("projection_binding") or {}).get("source_brief")
+        if not isinstance(source, dict) or source.get("schema_version") != 3:
+            return [*errors, "v4 requires an unchanged source schema 3 brief"]
+        return [*errors, *validate_semantic_brief(source, require_sample_variety=require_sample_variety)]
     errors: list[str] = []
     try:
         schema_version = int(brief.get("schema_version", 0))
@@ -1022,8 +1029,23 @@ def validate_storyboard_semantic_binding(
                 f"events[{index}] visible_copy_manifest must exactly match approved visible copy "
                 f"for semantic event {semantic_id!r}"
             )
+        visible_event = storyboard_event
+        if brief.get("schema_version") == 4:
+            # These exact typed linkage fields are metadata, not visible copy.
+            # The Director's separate editorial gate binds their actual plan hash.
+            metadata = ("editorial_instance_id", "editorial_plan_sha256", "editorial_recipe_id")
+            valid_linkage = (
+                storyboard_event.get("editorial_instance_id") == semantic_id
+                and isinstance(storyboard_event.get("editorial_plan_sha256"), str)
+                and re.fullmatch(r"[a-f0-9]{64}", storyboard_event["editorial_plan_sha256"]) is not None
+                and storyboard_event.get("editorial_recipe_id") in {"A01", "A02", "A03", "B01", "B02", "B03"}
+            )
+            if valid_linkage:
+                visible_event = {k: v for k, v in storyboard_event.items() if k not in metadata}
+            else:
+                errors.append(f"events[{index}] requires typed editorial instance linkage")
         for field_path, text in _event_visible_text_fields(
-            storyboard_event, approved_copy=tuple(manifest_copy),
+            visible_event, approved_copy=tuple(manifest_copy),
         ):
             if text not in manifest_copy:
                 errors.append(

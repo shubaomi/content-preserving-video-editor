@@ -8,7 +8,12 @@ import re
 from typing import Any
 
 
-CURRENT_PROJECT_SCHEMA_VERSION = 14
+CURRENT_PROJECT_SCHEMA_VERSION = 15
+MOTION_EDITORIAL_DEFAULTS = {
+    "enabled": False, "version": 1, "direction": None,
+    "opening": "propose_only", "design_approval_path": None,
+    "hook_approval_path": None,
+}
 IDENTITY_MODES = {"self", "third_party", "generic"}
 REQUIRED_ASSET_APPLICABILITY = {"required", "optional", "not_applicable"}
 DELIVERABLE_READINESS = {"ready", "asset_ready", "not_applicable"}
@@ -416,6 +421,40 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(
                 "motion_quality.portrait_brand.style_direction is required when enabled"
             )
+    motion_editorial = migrated.setdefault("motion_editorial", {})
+    if not isinstance(motion_editorial, dict) or set(motion_editorial) - set(MOTION_EDITORIAL_DEFAULTS):
+        raise ValueError("motion_editorial has unsupported fields or is not a mapping")
+    for key, value in MOTION_EDITORIAL_DEFAULTS.items():
+        motion_editorial.setdefault(key, deepcopy(value))
+    if not isinstance(motion_editorial["enabled"], bool):
+        raise ValueError("motion_editorial.enabled must be a boolean")
+    if source_version < 15 and motion_editorial["enabled"]:
+        raise ValueError("motion_editorial opt-in requires explicit project schema 15; legacy projects remain disabled")
+    if type(motion_editorial["version"]) is not int or motion_editorial["version"] != 1:
+        raise ValueError("motion_editorial.version must be 1")
+    if motion_editorial["direction"] not in {None, "authentic_product_editorial", "professional_software_demo"}:
+        raise ValueError("motion_editorial.direction is unsupported")
+    if motion_editorial["opening"] not in {"propose_only", "approved_duplicate"}:
+        raise ValueError("motion_editorial.opening is unsupported")
+    for field in ("design_approval_path", "hook_approval_path"):
+        value = motion_editorial[field]
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"motion_editorial.{field} must be a non-empty path or null")
+    if motion_editorial["enabled"]:
+        if not motion_quality["enabled"] or portrait_brand["enabled"]:
+            raise ValueError("motion_editorial requires Motion Quality and excludes portrait_brand")
+        if not motion_editorial["direction"] or not motion_editorial["design_approval_path"]:
+            raise ValueError("motion_editorial requires direction and design approval")
+        if motion_editorial["direction"] == "authentic_product_editorial" and (
+            identity_mode != "self" or source.get("content_type") != "talking_head"
+        ):
+            raise ValueError("authentic_product_editorial requires self talking_head and runtime product evidence")
+        if motion_editorial["direction"] == "professional_software_demo" and source.get("content_type") != "screen_tutorial":
+            raise ValueError("professional_software_demo requires screen_tutorial and runtime rights evidence")
+        if motion_editorial["opening"] == "approved_duplicate" and not motion_editorial["hook_approval_path"]:
+            raise ValueError("approved_duplicate requires exact hook approval")
+        if motion_editorial["opening"] == "propose_only" and motion_editorial["hook_approval_path"] is not None:
+            raise ValueError("preserve_order must not carry hook approval")
     required_assets = delivery.setdefault("required_assets", {})
     if not isinstance(required_assets, dict):
         raise ValueError("delivery.required_assets must be a mapping")

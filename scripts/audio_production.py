@@ -339,7 +339,7 @@ def materialize_motion_audio_decisions(
             "explain": "important", "mark": "supporting",
         }.get(semantic_role, "supporting")
         payload: dict[str, Any] = {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0" if "@" in event_id else "1.0.0",
             "decision_id": decision_id,
             "event_id": event_id,
             "created_at": datetime.now(timezone.utc).isoformat(),

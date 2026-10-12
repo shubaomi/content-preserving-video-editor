@@ -254,7 +254,7 @@ def build_receipts(
         if missing_bindings:
             raise RuntimeError(f"target bindings are missing for {event_id}: {missing_bindings}")
         receipt = {
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0" if "@" in event_id else "1.0.0",
             "receipt_id": f"receipt-{event_id}",
             "event_id": event_id,
             "recipe_id": recipe_id,

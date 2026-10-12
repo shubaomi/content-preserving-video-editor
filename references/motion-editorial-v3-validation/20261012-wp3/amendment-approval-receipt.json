@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "kind": "design_amendment_approval",
+  "amendment_id": "ME-AMEND-01",
+  "actor": "HongRun",
+  "authority": "explicit_user_message_in_current_conversation",
+  "message_verbatim": "批准 ME-AMEND-01：不前置高光时严格复用原时间轴，不要求高光批准；实际前置仍须精确批准。继续完成 WP3，不渲染完整视频。",
+  "proposal_sha256": "ab619b43d096d1e9b3729e4abf59ce10eaa71f69a938ef8bad175470939dbb6d",
+  "frozen_candidate_sha256": "54b52c5614ccc1bb063f4e0ce28b0467522047d0f874d56d3e1c653d76e3668c",
+  "scope": "WP3 preserve_order additive contract and integration",
+  "specific_hook_approved": false,
+  "WP4_authorized": false,
+  "full_render_authorized": false,
+  "historical_files_changed": false
+}

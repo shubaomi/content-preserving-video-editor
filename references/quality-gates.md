@@ -2,6 +2,19 @@
 
 Complete a video only when applicable gates pass.
 
+## Opt-in editorial motion v3
+
+Apply [motion-editorial-v3-runtime.md](motion-editorial-v3-runtime.md) when enabled.
+Unchanged EDL projection has no hook approval requirement; it cannot pass an
+opening-edit gate. Actual duplication requires exact current human receipt,
+canonical newly initialized variant, preserved body order/ranges/gaps/speed and
+complete word occurrences. Reject stale or unrelated semantic frames and target
+instances. Source-only camera events use an explicit v4 copy policy, not invented
+text. Sample purpose binds current storyboard/candidate hashes, explicit EDL-output
+window, measured duration and the existing renderer QA chain. Style samples are
+10–15 seconds; opening samples 45–60 seconds and start at output zero. Integration
+tests and deterministic browser seeks do not replace real-media/user acceptance.
+
 ## Source integrity
 
 - Preserve the original source.

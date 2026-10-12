@@ -131,7 +131,7 @@ class EditorialLoopTests(unittest.TestCase):
             original = {"schema_version": version}
             migrated = migrate_project_config(original)
             self.assertEqual(original, {"schema_version": version})
-            self.assertEqual(migrated["schema_version"], 14)
+            self.assertEqual(migrated["schema_version"], 15)
             self.assertEqual(migrated["editorial_loop"], {"enabled": False, "strategy_path": None})
         for cfg in ({"enabled": "yes"}, {"enabled": True, "command": "run"}, {"strategy_path": 1}):
             with self.assertRaises(ValueError):

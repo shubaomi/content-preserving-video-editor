@@ -71,6 +71,9 @@ from cover_reference_pack import (
 from conditional_extensions import route_extensions, run_extension_adapters
 from director_adapters import AdapterExecutionError, AdapterRunner
 import editorial_loop
+import motion_editorial
+from editorial_projection import project_semantics
+from editorial_handoff import build_handoff as build_editorial_handoff
 from director_contracts import (
     STAGES,
     DirectorContractError,
@@ -762,7 +765,31 @@ class Director:
                     if previous_inputs[name].get("sha256") != current_inputs[name].get("sha256")
                 ), None)
                 if changed_input:
-                    self._invalidate_from(state, "inspect", f"{changed_input} bytes changed")
+                    boundary = "inspect"
+                    previous_config = state.get("effective_project_config")
+                    if changed_input == "project_file" and isinstance(previous_config, dict) and (
+                        self.project.get("motion_editorial", {}).get("enabled")
+                        or previous_config.get("motion_editorial", {}).get("enabled")
+                    ) and previous_inputs["source_video"].get("sha256") == current_inputs["source_video"].get("sha256"):
+                        boundary = motion_editorial.config_invalidation_stage(previous_config, self.project)
+                        # Production policy hashes include caption settings. Refresh that
+                        # contract conservatively, but never repeat source inspection/ASR.
+                        if boundary == "sample_qa":
+                            boundary = "production_contract"
+                        governance = stages["provider_governance"]
+                        if boundary != "inspect" and governance.get("status") == "complete":
+                            if not _artifact_records_current(governance.get("artifact_records") or []):
+                                raise DirectorContractError("Editorial resume requires current prior provider evidence")
+                            try:
+                                rebound = motion_editorial.refresh_unchanged_governance(
+                                    self.root, self.project.get("provider_governance", {}),
+                                    previous_inputs["project_file"]["sha256"], current_inputs["project_file"]["sha256"],
+                                )
+                            except (OSError, ValueError) as error:
+                                raise DirectorContractError(str(error)) from error
+                            governance["artifacts"] = [str(path) for path in rebound]
+                            governance["artifact_records"] = _artifact_records(rebound)
+                    self._invalidate_from(state, boundary, f"{changed_input} bytes changed")
                 for name in STAGES:
                     row = stages[name]
                     if row.get("status") != "complete":
@@ -784,6 +811,7 @@ class Director:
             state["input_fingerprints"] = current_inputs
             state["schema_version"] = STATE_VERSION
             state["director_version"] = DIRECTOR_VERSION
+            state["effective_project_config"] = self.project
             self._invalidate_changed_manual_return(state)
             _reconcile_state(state)
             write_json(self.state_path, state)
@@ -791,6 +819,7 @@ class Director:
         state = {
             "schema_version": STATE_VERSION,
             "director_version": DIRECTOR_VERSION,
+            "effective_project_config": self.project,
             "project_file": str(self.context.project_file),
             "project_root": str(self.context.root),
             "input_mode": self.context.input_mode,
@@ -994,6 +1023,13 @@ class Director:
 
     @property
     def semantic_brief_path(self) -> Path:
+        if self.project.get("motion_editorial", {}).get("enabled") and (
+            getattr(self, "state", {}).get("current_stage") not in {
+                "inspect", "provider_governance", "video_use_timeline",
+                "evidence_acquisition", "semantic_brief",
+            }
+        ):
+            return self.root / "motion-editorial" / "sample-output-semantic-v4.json"
         return self.root / "semantic-brief.json"
 
     @property
@@ -1453,6 +1489,8 @@ class Director:
 
     @property
     def full_semantic_brief_path(self) -> Path:
+        if self.project.get("motion_editorial", {}).get("enabled"):
+            return self.root / "motion-editorial" / "full-output-semantic-v4.json"
         return self.root / "full-semantic-brief.json"
 
     @property
@@ -2162,6 +2200,22 @@ class Director:
             ),
             "video-use edit correctness preflight",
         )
+        editorial_timeline_artifacts = []
+        if self.project.get("motion_editorial", {}).get("enabled"):
+            try:
+                probe_result = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json",
+                                               str(self.context.source_video)],
+                                              capture_output=True, text=True, check=True, timeout=30)
+                streams = json.loads(probe_result.stdout).get("streams", [])
+                fps = next(s.get("avg_frame_rate") or s.get("r_frame_rate") for s in streams
+                           if s.get("codec_type") == "video")
+                _, editorial_timeline_artifacts = motion_editorial.prepare_projection(
+                    project=self.project, root=self.context.root, director_root=self.root,
+                    source=self.context.source_video, transcript=transcript_path, edl=edl_path, fps=fps)
+            except (OSError, ValueError, KeyError, TypeError, StopIteration, subprocess.SubprocessError) as error:
+                self._action_required("video_use_timeline", "Editorial timeline authority is unavailable: " + str(error),
+                    [{"owner": "video-use", "directory": str(self.root / "motion-editorial"),
+                      "exact_hook_approval_required_if_duplicated": True, "parent_readonly": True}])
         caption_segmentation = _caption_segmentation_options(self.project)
         plan = {
             "schema_version": 1,
@@ -2188,6 +2242,9 @@ class Director:
             ],
         }
         corrections = self.context.edit_dir / "transcripts" / "caption-corrections-v2.json"
+        if editorial_timeline_artifacts:
+            plan["caption_bridge_command"].extend([
+                "--projection", str(self.root / "motion-editorial" / "timeline-projection.json")])
         cursor = 0.0
         for row in (edl.get("ranges") or [])[:-1]:
             cursor += float(row["end"]) - float(row["start"])
@@ -2236,7 +2293,7 @@ class Director:
                                                self.video_use_dir / "mapped-words.json",
                                                self.video_use_dir / "captions.json",
                                                self.video_use_dir / "master.srt", sync_report,
-                                               *otio_artifacts, *asr_artifacts,
+                                               *otio_artifacts, *asr_artifacts, *editorial_timeline_artifacts,
                                                *([route_path] if route_path.is_file() else [])])
 
     def stage_evidence_acquisition(self) -> None:
@@ -2665,7 +2722,62 @@ class Director:
                         "publishing promise binding",
                     )
                 artifacts.append(publishing_path)
+        if self.project.get("motion_editorial", {}).get("enabled"):
+            artifacts.extend(self._prepare_editorial_projection("sample"))
         self._complete("semantic_brief", artifacts)
+
+    def _prepare_editorial_projection(self, scope: str) -> list[Path]:
+        """Read-only EDL projection. Missing facts hand off without making cuts."""
+        if not self.project.get("motion_editorial", {}).get("enabled"):
+            return []
+        source_brief = self.root / ("semantic-brief.json" if scope == "sample" else "full-semantic-brief.json")
+        directory = self.root / "motion-editorial"
+        try:
+            transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
+            evidence = read_json(self.evidence_bundle_path)
+            media = evidence.get("ffprobe") or evidence.get("probe") or {}
+            streams = media.get("streams") or []
+            fps = next((s.get("avg_frame_rate") or s.get("r_frame_rate") for s in streams
+                        if s.get("codec_type") == "video"), None)
+            if not fps:
+                # Reuse measured project media metadata; never assume an integer FPS.
+                result = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json",
+                                         str(self.context.source_video)], capture_output=True, text=True, timeout=30)
+                if result.returncode:
+                    raise ValueError("source frame-rate probe failed")
+                source_probe = json.loads(result.stdout)
+                fps = next((s.get("avg_frame_rate") or s.get("r_frame_rate")
+                            for s in source_probe.get("streams", []) if s.get("codec_type") == "video"), None)
+            if not fps:
+                raise ValueError("measured rational frame rate required")
+            projection, artifacts = motion_editorial.prepare_projection(
+                project=self.project, root=self.context.root, director_root=self.root,
+                source=self.context.source_video, transcript=transcript,
+                edl=self.video_use_dir / "edl.json", fps=fps,
+            )
+            source = read_json(source_brief)
+            assert_valid(validate_semantic_brief(source), "source semantic brief")
+            assert_valid(validate_semantic_evidence_binding(source, transcript_path=transcript,
+                         evidence_bundle_path=self.evidence_bundle_path), "source semantic evidence")
+            projected = project_semantics(source, projection)
+            path = directory / f"{scope}-output-semantic-v4.json"
+            write_json(path, projected)
+            captions_path = self.video_use_dir / "captions.json"
+            caption_file = read_json(captions_path)
+            captions = caption_file.get("captions") or caption_file.get("segments") or []
+            caption_instances = directory / "caption-instances.json"
+            write_json(caption_instances, {
+                "schema_version": 1, "projection_sha256": motion_editorial.digest(projection),
+                "caption_source": motion_editorial.ref(captions_path),
+                "captions": motion_editorial.project_caption_occurrences(captions, projection),
+            })
+            return [*artifacts, source_brief, path, caption_instances, captions_path]
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            self._action_required(self.state.get("current_stage") or "semantic_brief",
+                "Motion editorial projection requires current owner evidence: " + str(error),
+                [{"owner": "video-use" if self.project["motion_editorial"]["opening"] == "approved_duplicate" else "director_with_llm",
+                  "directory": str(directory), "source_semantic_brief": str(source_brief),
+                  "no_edl_mutation": True, "no_full_render": True}])
 
     def _optional_media_adapter_artifacts(self) -> list[Path]:
         adapters = (self.project.get("extensions") or {}).get(
@@ -2899,6 +3011,7 @@ class Director:
                                     "promise_ledger": str(ledger_path)}])
 
     def stage_production_contract(self) -> None:
+        editorial_artifacts = self._prepare_editorial_projection("sample")
         self._editorial_loop_gate("production_contract")
         transcript = self.video_use_dir / "transcripts" / f"{self.context.source_video.stem}.json"
         edl = self.video_use_dir / "edl.json"
@@ -2928,9 +3041,10 @@ class Director:
             semantic_brief_path=self.semantic_brief_path,
             input_mode=self.context.input_mode,
         ), "production contract")
-        self._complete("production_contract", [self.production_contract_path])
+        self._complete("production_contract", [self.production_contract_path, *editorial_artifacts])
 
     def _validate_current_production_contract(self) -> None:
+        self._prepare_editorial_projection("sample")
         self._editorial_loop_gate(self.state.get("current_stage") or "production_contract")
         if not self.production_contract_path.is_file():
             raise DirectorContractError("current production contract is missing")
@@ -3359,6 +3473,53 @@ class Director:
                 ],
                 *[Path(row["output"]["path"]) for row in component_manifest["outputs"]],
             ]
+        if self.project.get("motion_editorial", {}).get("enabled"):
+            editorial_dir = self.root / "motion-editorial"
+            plan_path = editorial_dir / f"{scope}-shot-motion-plan.json"
+            projection_path = editorial_dir / "timeline-projection.json"
+            current_brief = read_json(brief_path)
+            projection = read_json(projection_path)
+            if not plan_path.is_file():
+                request_path = editorial_dir / f"{scope}-shot-plan-request.json"
+                write_json(request_path, {
+                    "schema_version": 2, "owner": "director_with_llm",
+                    "direction": self.project["motion_editorial"]["direction"],
+                    "source_semantic_brief": str(brief_path),
+                    "projection": str(projection_path),
+                    "projection_sha256": motion_editorial.digest(projection),
+                    "semantic_sha256": motion_editorial.digest(current_brief),
+                    "expected_artifact": str(plan_path),
+                    "contract": str(Path(__file__).parents[1] / "references" / "motion-editorial-v3-runtime.md"),
+                    "default_decorations": False, "selection_by_quota": False,
+                })
+                self._action_required(self.state.get("current_stage") or "hyperframes_storyboard",
+                    "Evidence-bound shot plan required; generic motion fallback is not authorized",
+                    [{"owner": "director_with_llm", "request": str(request_path),
+                      "expected_artifact": str(plan_path)}])
+            try:
+                payload = motion_editorial.compile_shot_plan(
+                    motion_editorial.load(plan_path), projection=projection,
+                    output_brief=current_brief, direction=self.project["motion_editorial"]["direction"],
+                    roots=[self.context.root, Path(__file__).parents[1]],
+                    source_media=self._motion_source_media(),
+                    target_bindings=target_bindings,
+                )
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self._action_required(self.state.get("current_stage") or "hyperframes_storyboard",
+                    "Shot plan must be repaired: " + str(error),
+                    [{"owner": "director_with_llm", "expected_artifact": str(plan_path)}])
+            project_dir = self.sample_hyperframes_project if scope == "sample" else self.full_hyperframes_project
+            components = motion_editorial.materialize_components(project_dir, payload["direction"])
+            payload["component_assets"] = [motion_editorial.ref(path) for path in components]
+            payload_path = output_dir / "editorial-renderer-payload.json"
+            write_json(payload_path, payload)
+            choreography["motion_editorial"] = {
+                "payload": motion_editorial.ref(payload_path),
+                "owner": "hyperframes", "overrides_generic_visual_choreography": True,
+                "no_renderer_reselection": True, "default_decorations": False,
+            }
+            portrait_artifacts.extend([plan_path, projection_path, payload_path, *components,
+                                       *[Path(path) for path in payload["dependencies"]]])
         write_json(choreography_path, choreography)
         assert_valid(
             validate_motion_design_contract(
@@ -3417,6 +3578,10 @@ class Director:
                 "renderer-invented visible copy", "renderer-guessed target geometry",
             ],
         }
+        if self.project.get("motion_editorial", {}).get("enabled"):
+            request["motion_editorial_v3"] = choreography["motion_editorial"]
+            request["forbidden"].extend(["generic component fallback", "unapproved source reframing",
+                                         "hook insertion from style approval"])
         if self.portrait_brand_enabled:
             portrait_path = output_dir / "portrait-motion-contracts.json"
             component_manifest_path = output_dir / "portrait-component-assets.json"
@@ -3900,6 +4065,10 @@ class Director:
                 validate_storyboard_motion_binding(storyboard, motion_contract or {}),
                 "sample motion-design binding",
             )
+            if self.project.get("motion_editorial", {}).get("enabled"):
+                assert_valid(motion_editorial.validate_storyboard_binding(
+                    storyboard, read_json(self.motion_design_dir("sample") / "editorial-renderer-payload.json")),
+                    "sample editorial motion binding")
             assert_valid(
                 validate_storyboard_bindings(storyboard, self.sample_target_binding_dir),
                 "sample target bindings",
@@ -4322,6 +4491,7 @@ class Director:
             "validation_errors": validation_errors,
         })
         artifacts.extend([readiness_path, self.sample_candidate_raw_path, *audio_assets])
+        artifacts.extend(self._write_editorial_instance_handoff("sample"))
         self._complete(
             "audio", artifacts,
             readiness=readiness,
@@ -4413,6 +4583,31 @@ class Director:
         self._complete("cover", [path, *reference_artifacts, *artifacts], readiness="asset_ready")
 
     def stage_sample_qa(self) -> None:
+        editorial_sample_artifacts = []
+        if self.project.get("motion_editorial", {}).get("enabled"):
+            validation_path = self.root / "motion-editorial" / "sample-validation-plan.json"
+            try:
+                validation = motion_editorial.load(validation_path)
+                projection = motion_editorial.load(self.root / "motion-editorial" / "timeline-projection.json")
+                motion_editorial.validate_sample_purpose(validation["purpose"], validation["output_start"], projection["mode"])
+                if validation.get("full_render_authorized") is not False or validation.get("projection_sha256") != motion_editorial.digest(projection):
+                    raise ValueError("sample purpose is not bound to current projection")
+                storyboard_file = self.sample_hyperframes_project / "storyboard.json"
+                motion_editorial.current_ref(validation.get("storyboard"), [self.context.root])
+                motion_editorial.current_ref(validation.get("candidate_media"), [self.context.root])
+                if Path(validation["storyboard"]["path"]).resolve() != storyboard_file.resolve() or Path(validation["candidate_media"]["path"]).resolve() != self.sample_candidate_raw_path.resolve():
+                    raise ValueError("sample plan references different composition or candidate")
+                measured = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                    "-of", "json", str(self.sample_candidate_raw_path)], check=True,
+                    capture_output=True, text=True, timeout=30)
+                duration = float(json.loads(measured.stdout)["format"]["duration"])
+                motion_editorial.validate_sample_window(validation, projection, read_json(storyboard_file), duration)
+                editorial_sample_artifacts.extend([validation_path, storyboard_file, self.sample_candidate_raw_path])
+            except (OSError, ValueError, KeyError, TypeError) as error:
+                self._action_required("sample_qa", "Explicit hash-bound sample purpose required: " + str(error),
+                    [{"owner": "director", "expected_artifact": str(validation_path),
+                      "allowed_purposes": ["motion_style", "opening_edit", "delivery_sample"],
+                      "motion_style_is_not_opening_approval": True}])
         self._validate_current_production_contract()
         caption_review_artifacts = self._ensure_sample_caption_delivery()
         promise_closure = self._ensure_editorial_promise_closure()
@@ -4422,11 +4617,12 @@ class Director:
         storyboard = read_json(storyboard_path)
         motion_quality_enabled = self.project.get("motion_quality", {}).get("enabled") is True
         motion_errors: list[str] = []
-        motion_artifacts: list[Path] = []
+        motion_artifacts: list[Path] = list(editorial_sample_artifacts)
         if motion_quality_enabled:
-            motion_errors, motion_artifacts = self._validate_motion_render_evidence(
+            motion_errors, renderer_artifacts = self._validate_motion_render_evidence(
                 scope="sample", storyboard=storyboard,
             )
+            motion_artifacts.extend(renderer_artifacts)
         if not review_path.is_file() or not audio_plan_path.is_file() or motion_errors:
             packet = self.root / "sample-qa-request.json"
             write_json(packet, {
@@ -4769,6 +4965,20 @@ class Director:
     def stage_full_hyperframes_storyboard(self) -> None:
         project = self.full_hyperframes_project
         full_brief_path = self.full_semantic_brief_path
+        editorial_projection_artifacts = []
+        if self.project.get("motion_editorial", {}).get("enabled"):
+            if self.project["motion_editorial"]["opening"] == "approved_duplicate":
+                self._action_required("full_hyperframes_storyboard",
+                    "Hook approval is short_preview only; full timeline authorization is separate",
+                    [{"owner": "user", "full_render_authorized": False}])
+            original_full = self.root / "full-semantic-brief.json"
+            if original_full.is_file():
+                editorial_projection_artifacts = self._prepare_editorial_projection("full")
+            else:
+                self._action_required("full_hyperframes_storyboard",
+                    "Source-ordered full semantic brief is required before v4 projection",
+                    [{"owner": "director_with_llm", "expected_artifact": str(original_full),
+                      "schema_version": 3, "edl_unchanged": True}])
         motion_quality_enabled = self.project.get("motion_quality", {}).get("enabled") is True
         target_binding_contract = None
         motion_design_artifacts: list[Path] = []
@@ -4810,6 +5020,7 @@ class Director:
                 scope="full", brief_path=full_brief_path,
                 binding_dir=self.full_target_binding_dir,
             )
+            motion_design_artifacts.extend(editorial_projection_artifacts)
         motion_request = (
             self._motion_design_request("full", motion_contract)
             if motion_contract is not None else None
@@ -4912,6 +5123,10 @@ class Director:
                 validate_storyboard_motion_binding(storyboard, motion_contract or {}),
                 "full motion-design binding",
             )
+            if self.project.get("motion_editorial", {}).get("enabled"):
+                assert_valid(motion_editorial.validate_storyboard_binding(
+                    storyboard, read_json(self.motion_design_dir("full") / "editorial-renderer-payload.json")),
+                    "full editorial motion binding")
             assert_valid(
                 validate_storyboard_bindings(storyboard, self.full_target_binding_dir),
                 "full target bindings",
@@ -6210,6 +6425,25 @@ class Director:
                 return path
         return self.video_use_dir / "base-preview.mp4"
 
+    def _write_editorial_instance_handoff(self, scope: str) -> list[Path]:
+        if not self.project.get("motion_editorial", {}).get("enabled"):
+            return []
+        directory = self.root / "motion-editorial"
+        brief = directory / f"{scope}-output-semantic-v4.json"
+        project = self.sample_hyperframes_project if scope == "sample" else self.full_hyperframes_project
+        binding_dir = self.sample_target_binding_dir if scope == "sample" else self.full_target_binding_dir
+        bindings = sorted(binding_dir.glob("*.json")) if binding_dir.is_dir() else []
+        binding_index = directory / f"{scope}-target-instance-index.json"
+        write_json(binding_index, {"bindings": [read_json(path) for path in bindings]})
+        audio = project / "audio-plan.json"
+        projection, captions = directory / "timeline-projection.json", self.video_use_dir / "captions.json"
+        bundle = build_editorial_handoff(projection, brief, captions,
+            audio_plan=audio if audio.is_file() else None,
+            target_bindings=binding_index, promise_ledger=brief)
+        output = directory / f"{scope}-instance-handoff.json"
+        write_json(output, bundle)
+        return [output, projection, brief, captions, binding_index, *bindings, *([audio] if audio.is_file() else [])]
+
     def _write_standard_editable_delivery(self, motion: Path) -> tuple[Path, list[Path]]:
         """Write the always-on editor-neutral repair kit for a completed full render."""
         caption_srt = self.video_use_dir / "master.srt"
@@ -6250,6 +6484,7 @@ class Director:
                 ) from error
             generated_reference = [caption_ass, caption_plan]
         try:
+            instance_artifacts = self._write_editorial_instance_handoff("full")
             manifest = build_editable_delivery(
                 output_root=self.editable_delivery_root,
                 authorized_root=self.context.root,
@@ -6259,6 +6494,7 @@ class Director:
                 caption_ass=caption_ass,
                 caption_style_plan=caption_plan,
                 hyperframes_project=self.full_hyperframes_project,
+                instance_handoff=instance_artifacts[0] if instance_artifacts else None,
             )
         except (EditableDeliveryError, OSError, TypeError, ValueError) as error:
             raise DirectorContractError(
@@ -6270,7 +6506,7 @@ class Director:
                 "standard editable delivery is invalid: " + "; ".join(errors)
             )
         payload = read_json(manifest)
-        artifacts = [manifest, caption_srt, caption_ass, caption_plan, motion, *generated_reference]
+        artifacts = [manifest, caption_srt, caption_ass, caption_plan, motion, *generated_reference, *instance_artifacts]
         for path in self.editable_delivery_root.rglob("*"):
             if path.is_file():
                 artifacts.append(path.resolve())
