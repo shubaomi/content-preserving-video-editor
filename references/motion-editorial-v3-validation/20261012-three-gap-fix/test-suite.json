@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "passed": true,
+  "test_count": 1176,
+  "failed": 0,
+  "skipped": 0,
+  "exit_code": 0,
+  "command": [
+    "python",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "tests",
+    "-v"
+  ],
+  "required_test_ids": [
+    "test_all_six_acceptance_types_have_real_decodable_short_media_evidence",
+    "test_complete_hash_bound_fixture_passes_all_completion_criteria",
+    "test_old_state_migration_invalidates_all_unverifiable_completed_work",
+    "test_concurrent_identical_request_set_serializes_manifest_creation",
+    "test_platform_validation_rebuilds_reports_when_cover_bytes_change",
+    "test_wp4_install_creates_only_fixed_new_test_target_without_store_enumeration",
+    "test_wp4_install_cleans_staging_when_atomic_promotion_fails",
+    "test_wp4_install_cleans_identity_bound_partial_staging_on_copy_failure",
+    "test_wp4_receipt_validation_returns_error_on_target_identity_race",
+    "test_wp4_validation_and_rollback_reject_project_root_as_store",
+    "test_wp4_rollback_requires_exact_unchanged_generated_inventory"
+  ],
+  "required_test_cases": [
+    "test_technical_qa.TechnicalQaTests.test_all_six_acceptance_types_have_real_decodable_short_media_evidence",
+    "test_completion_audit.CompletionAuditTests.test_complete_hash_bound_fixture_passes_all_completion_criteria",
+    "test_director.DirectorTests.test_old_state_migration_invalidates_all_unverifiable_completed_work",
+    "test_media_catalog_adapter.MediaCatalogAdapterTests.test_concurrent_identical_request_set_serializes_manifest_creation",
+    "test_director.DirectorTests.test_platform_validation_rebuilds_reports_when_cover_bytes_change",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests.test_wp4_install_creates_only_fixed_new_test_target_without_store_enumeration",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests.test_wp4_install_cleans_staging_when_atomic_promotion_fails",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests.test_wp4_install_cleans_identity_bound_partial_staging_on_copy_failure",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests.test_wp4_receipt_validation_returns_error_on_target_identity_race",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests.test_wp4_validation_and_rollback_reject_project_root_as_store",
+    "test_jianying_native_draft.JianyingNativeDraftV1Tests.test_wp4_rollback_requires_exact_unchanged_generated_inventory"
+  ],
+  "source_tree_sha256": "89f305f2942b22af312ea9e4e80cb4e8173065746ba9ea94c0847558b537d523",
+  "runner_implementation": "scripts/test_acceptance_report.py",
+  "runner_implementation_sha256": "959f590ff52e3a07d1a5b8156cc77a019fabec532da8caa7e8e75a912f0508f8",
+  "log": "test-suite.log",
+  "log_sha256": "b5263d6e572ee3e94c766511d39a7b273ededcf3c33b357a46542f59483de1d8"
+}

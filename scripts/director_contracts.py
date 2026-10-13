@@ -548,10 +548,17 @@ def validate_semantic_evidence_binding(
         errors.append("evidence bundle transcript hash does not match the current transcript")
 
     frame_records: dict[str, dict[str, Any]] = {}
-    for row in bundle.get("representative_frames") or []:
+    for row in [*(bundle.get("representative_frames") or []),
+                *(bundle.get("supplemental_frames") or [])]:
         if not isinstance(row, dict) or not row.get("path"):
             continue
         path = Path(str(row["path"])).resolve()
+        previous = frame_records.get(str(path))
+        if previous is not None:
+            if any(previous.get(key) != row.get(key) for key in ("sha256", "timestamp_seconds")):
+                errors.append(f"evidence frame has conflicting hash or timestamp: {path}")
+            # Never replace representative coverage with a supplemental claim.
+            continue
         frame_records[str(path)] = row
         if not path.is_file() or row.get("sha256") != sha256_file(path):
             errors.append(f"evidence frame is missing or hash-drifted: {path}")

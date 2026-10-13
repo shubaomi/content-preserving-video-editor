@@ -395,6 +395,20 @@ def validate_keyframe_receipt(
             errors.append("renderer visible text differs from approved visible copy")
         exported_phases = [row for row in exported.get("phases") or [] if isinstance(row, dict)]
 
+    # A missing text measurement is not a low measured text contrast. This is
+    # deliberately opt-in and hash-bound to actual per-phase renderer text;
+    # graphical/source readability remains a separate visual review obligation.
+    text_contrast_not_applicable = (
+        opportunity.get("approved_visible_copy") == []
+        and exported is not None and exported.get("visible_text") == []
+        and exported.get("text_contrast_applicability") == {
+            "status": "not_applicable", "reason": "no_added_text",
+            "non_text_readability": "requires_separate_visual_review",
+        }
+        and len(exported_phases) == len(PHASES)
+        and all(row.get("visible_text") == [] for row in exported_phases)
+    )
+
     start, end, window_errors = _verified_render_window(opportunity, bindings)
     errors.extend(window_errors)
     observations = receipt["phase_observations"]
@@ -431,7 +445,8 @@ def validate_keyframe_receipt(
             if overlap is None or overlap > maximum_caption_overlap_ratio:
                 errors.append(f"{label} caption collision exceeds tolerance")
             contrast = _finite_number(phase.get("composite_contrast_ratio"))
-            if contrast is None or contrast < minimum_composite_contrast_ratio:
+            if contrast is None or (contrast < minimum_composite_contrast_ratio
+                    and not (text_contrast_not_applicable and contrast == 0.0)):
                 errors.append(f"{label} composite contrast is below tolerance")
             observed_ids = [row.get("target_id") for row in phase.get("target_observations") or []]
             if observed_ids != expected_target_ids:

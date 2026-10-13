@@ -2652,6 +2652,21 @@ class DirectorTests(unittest.TestCase):
         self.assertIn("亮度自然", asset.read_text(encoding="utf-8"))
         self.assertTrue(any(path.name == "caption-emphasis-plan.json" for path in artifacts))
 
+        # Sample output canvas may differ from the original source dimensions.
+        director.sample_hyperframes_project.mkdir(parents=True, exist_ok=True)
+        storyboard = director.sample_hyperframes_project / "storyboard.json"
+        storyboard.write_text(json.dumps({"composition": {
+            "width": 540, "height": 960, "source_start": 0, "source_end": 1,
+        }}), encoding="utf-8")
+        asset, _ = director._caption_delivery_asset(scope="sample")
+        self.assertIn("PlayResX: 540", asset.read_text(encoding="utf-8"))
+        self.assertIn("PlayResY: 960", asset.read_text(encoding="utf-8"))
+        storyboard.write_text(json.dumps({"composition": {
+            "width": True, "height": 960, "source_start": 0, "source_end": 1,
+        }}), encoding="utf-8")
+        with self.assertRaisesRegex(DirectorContractError, "canvas"):
+            director._caption_delivery_asset(scope="sample")
+
     def test_semantic_caption_treatment_requires_sample_delivery_without_motion_quality(self) -> None:
         config = yaml.safe_load(self.project.read_text(encoding="utf-8"))
         config["editing"] = {"caption_delivery": "auto", "caption_treatment": {

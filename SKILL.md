@@ -246,6 +246,14 @@ spoken wording; allow only audited spelling or terminology corrections with
 evidence. Never publish a summary or rewritten sentence as a subtitle. Group
 mapped words into natural phrases instead of one-character flashes.
 
+When pause-based grouping joins different meanings, author the optional video-use
+`caption-semantic-groups.json` sidecar with exact word-occurrence IDs, semantic
+group IDs and input hashes. This route enforces screen length/duration limits and
+preserves word timestamps; it never inserts punctuation through a long-text
+replacement. Use hash-bound `word_span_corrections` for audited short terminology
+repairs without interpolation. See the three-gap runtime notes in
+[motion-editorial-v3-runtime.md](references/motion-editorial-v3-runtime.md).
+
 Sentence punctuation wins over pause-based incomplete-tail heuristics: a token
 ending in `。！？.!?` closes that sentence even when its last spoken character is
 `的`, `和`, or another connector. Use punctuation internally for segmentation.
@@ -278,6 +286,12 @@ meet that distance is blocked until an event-specific supplemental frame is
 supplied; the built-in sampler does not yet capture that frame automatically and
 must never widen fictional ownership. Keep expensive scene, tracking, and OCR
 adapters optional.
+An explicitly enabled protected-region review may use schema2 time-bounded
+present/absent/unknown/lost observations with truthful manual or detector
+provenance. Validate every retained EDL window; missing or lost coverage remains
+action-required even when optional motion-quality mode is disabled. Never
+reinterpret manual geometry as detector output. The Director may reuse source
+frames only after checking the exact source, sampling policy and all frame hashes.
 PySceneDetect, MediaPipe, and PaddleOCR are optional command adapters and remain
 disabled for legacy projects unless explicitly enabled.
 

@@ -343,6 +343,45 @@ def extract_frames(media: Path, timestamps: list[float], output_dir: Path) -> li
     return frames
 
 
+def _cached_frames(
+    media: Path, output_dir: Path, probe: dict[str, Any], timestamps: list[float],
+) -> tuple[list[Path] | None, str]:
+    """Reuse only this acquisition directory's exact hash-bound frame set."""
+    manifest = output_dir / "evidence-bundle.json"
+    if not manifest.is_file():
+        return None, "no prior evidence bundle"
+    try:
+        prior = read_json(manifest)
+        duration = float(probe.get("format", {}).get("duration") or 0.0)
+        if prior.get("source") != {"path": str(media.resolve()), "sha256": sha256_file(media)}:
+            return None, "source changed"
+        if prior.get("duration_seconds") != duration or prior.get("display") != _display(probe):
+            return None, "duration or display changed"
+        policy = _sampling_policy(duration, timestamps, timestamps)
+        if prior.get("representative_frame_sampling") != policy:
+            return None, "sampling policy changed"
+        rows = prior.get("representative_frames", [])
+        coverage = _frame_coverages(timestamps, duration, full_duration=policy["coverage"]["status"] == "full_duration")
+        if len(rows) != len(timestamps):
+            return None, "frame count changed"
+        frames = []
+        for index, (row, timestamp) in enumerate(zip(rows, timestamps)):
+            expected = (output_dir / "frames" / f"frame-{index:02d}-{timestamp:08.3f}.png").resolve()
+            path = Path(row["path"])
+            if (not path.is_absolute() or path.resolve() != expected
+                    or not expected.is_relative_to(output_dir.resolve()) or not expected.is_file()
+                    or row.get("timestamp_seconds") != timestamp or row.get("coverage") != coverage[index]
+                    or row.get("sampling_policy") != REPRESENTATIVE_FRAME_SAMPLING_POLICY
+                    or row.get("sha256") != sha256_file(expected)):
+                return None, "frame path, timestamp, coverage or hash changed"
+            with Image.open(expected) as image:
+                image.load()
+            frames.append(expected)
+        return frames, "current source and exact local frame evidence verified"
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None, "prior frame cache invalid or undecodable"
+
+
 def acquire(
     *,
     media: Path,
@@ -350,11 +389,16 @@ def acquire(
     output_dir: Path,
     optional_adapters: dict[str, Any] | None = None,
     existing_assets: dict[str, Any] | None = None,
+    reuse_existing: bool = False,
 ) -> Path:
     probe = probe_media(media)
     duration = float(probe.get("format", {}).get("duration") or 0.0)
     requested_timestamps = representative_timestamps(duration)
-    frames = extract_frames(media, requested_timestamps, output_dir)
+    frames, cache_reason = (_cached_frames(media, output_dir, probe, requested_timestamps)
+                            if reuse_existing else (None, "frame reuse disabled"))
+    reused = frames is not None
+    if frames is None:
+        frames = extract_frames(media, requested_timestamps, output_dir)
     extracted_timestamps = [_managed_frame_timestamp(path) for path in frames]
     if any(value is None for value in extracted_timestamps):
         raise RuntimeError("managed evidence frame filename is missing its timestamp")
@@ -386,6 +430,7 @@ def acquire(
         ),
     )
     output = output_dir / "evidence-bundle.json"
+    bundle["frame_cache"] = {"source_frames_reused": reused, "reason": cache_reason}
     write_json(output, bundle)
     return output
 

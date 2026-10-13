@@ -87,7 +87,9 @@ def canonical_contract_evidence_refs(
     """Return schema-safe IDs while retaining exact frame hashes as authority."""
     bundle = read_json(evidence_bundle_path.resolve())
     known: dict[str, str] = {}
-    for record in bundle.get("representative_frames") or []:
+    timestamps: dict[str, Any] = {}
+    for record in [*(bundle.get("representative_frames") or []),
+                   *(bundle.get("supplemental_frames") or [])]:
         if not isinstance(record, dict) or not record.get("path"):
             continue
         path = Path(str(record["path"]))
@@ -95,7 +97,11 @@ def canonical_contract_evidence_refs(
             path = evidence_bundle_path.parent / path
         digest = str(record.get("sha256") or "").lower()
         if re.fullmatch(r"[a-f0-9]{64}", digest):
-            known[str(path.resolve())] = digest
+            key = str(path.resolve())
+            if key in known and (known[key] != digest or timestamps[key] != record.get("timestamp_seconds")):
+                raise ValueError(f"conflicting evidence frame hash or timestamp: {path}")
+            known[key] = digest
+            timestamps[key] = record.get("timestamp_seconds")
     result: list[str] = []
     values = event.get("target_frame_evidence") or event.get("evidence_refs") or []
     for value in values:

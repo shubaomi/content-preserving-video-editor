@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1] / 'scripts'))
 from motion_editorial_review import record_hook_decision
@@ -171,6 +172,25 @@ class VariantTests(unittest.TestCase):
             self.assertIn(target/mv.INITIALIZATION_NAME, dependencies)
             self.assertEqual((parent/'edl.json').read_bytes(), parent_bytes)
             self.assertEqual(edl.read_bytes(), candidate_bytes)
+
+    def test_unchanged_projection_preserves_receipt_identity_but_changed_fps_rewrites(self):
+        from motion_editorial import prepare_projection, write_json
+        with tempfile.TemporaryDirectory() as temp:
+            parent = Path(temp)
+            target, edl, transcript, project = self.projection_fixture(parent)
+            kwargs = dict(project=project, root=target, source=parent/'source.mp4',
+                          transcript=transcript, edl=edl)
+            _, paths = prepare_projection(**kwargs, fps='30/1')
+            output = paths[0]
+            before = (output.read_bytes(), output.stat().st_mtime_ns)
+            with patch('motion_editorial.write_json', wraps=write_json) as writer:
+                prepare_projection(**kwargs, fps='30/1')
+                writer.assert_not_called()
+            self.assertEqual((output.read_bytes(), output.stat().st_mtime_ns), before)
+            with patch('motion_editorial.write_json', wraps=write_json) as writer:
+                prepare_projection(**kwargs, fps='24/1')
+                writer.assert_called_once()
+            self.assertNotEqual(output.read_bytes(), before[0])
 
     def test_prepare_projection_rejects_wrong_root_and_approval_alias(self):
         from motion_editorial import prepare_projection

@@ -219,6 +219,18 @@ class ProjectConfigMigrationTests(unittest.TestCase):
             }},
         })
         self.assertTrue(migrated["editing"]["caption_treatment"]["enabled"])
+        layout = {"font_size_px": 28, "margin_x_px": 20,
+                  "margin_bottom_px": 24, "single_line": True}
+        explicit = migrate_project_config({
+            "schema_version": 15,
+            "editing": {"caption_treatment": {"layout": layout}},
+        })
+        self.assertEqual(explicit["editing"]["caption_treatment"]["layout"], layout)
+        with self.assertRaisesRegex(ValueError, "caption layout"):
+            migrate_project_config({
+                "schema_version": 15,
+                "editing": {"caption_treatment": {"layout": {**layout, "font_size_px": True}}},
+            })
         for override in (
             {"mode": "random_rainbow"},
             {"accent_colors": ["red"]},

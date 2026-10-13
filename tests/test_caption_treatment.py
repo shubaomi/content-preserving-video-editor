@@ -69,6 +69,47 @@ class CaptionTreatmentTests(unittest.TestCase):
         self.assertEqual(rendered, text)
         self.assertIn("\\N", dialogue)
 
+    def test_explicit_caption_lane_is_single_line_without_rewriting_authority(self) -> None:
+        options = {**self.options, "layout": {
+            "font_size_px": 28, "margin_x_px": 20, "margin_bottom_px": 24,
+            "single_line": True,
+        }}
+        text = "这是一条十四字的单行字幕测试"
+        plan = build_semantic_emphasis_plan(
+            [{"start": 0.0, "end": 4.0, "text": text}], {"events": []}, options,
+        )
+        ass = render_ass(plan, width=540, height=960)
+        self.assertIn("WrapStyle: 2", ass)
+        self.assertIn("Microsoft YaHei UI,28,", ass)
+        self.assertIn(",20,20,24,1", ass)
+        self.assertNotIn("\\N", ass)
+        self.assertIn(text, ass)
+        self.assertEqual(plan["captions"][0]["text"], text)
+
+    def test_explicit_single_line_rejects_overflow_and_authority_line_breaks(self) -> None:
+        options = {**self.options, "layout": {
+            "font_size_px": 28, "margin_x_px": 20, "margin_bottom_px": 24,
+            "single_line": True,
+        }}
+        for text in ("长" * 30, "第一句\n第二句"):
+            with self.subTest(text=text), self.assertRaises(CaptionTreatmentError):
+                plan = build_semantic_emphasis_plan(
+                    [{"start": 0.0, "end": 4.0, "text": text}], {"events": []}, options,
+                )
+                render_ass(plan, width=540, height=960)
+
+    def test_explicit_layout_rejects_malformed_fields(self) -> None:
+        layout = {"font_size_px": 28, "margin_x_px": 20,
+                  "margin_bottom_px": 24, "single_line": True}
+        for override in ({"font_size_px": True}, {"margin_x_px": -1},
+                         {"single_line": 1}, {"font_size_px": float("nan")},
+                         {"unexpected": 1}):
+            with self.subTest(override=override), self.assertRaises(CaptionTreatmentError):
+                build_semantic_emphasis_plan(
+                    self.captions, self.semantic,
+                    {**self.options, "layout": {**layout, **override}},
+                )
+
     def test_unapproved_or_non_matching_copy_cannot_create_highlight(self) -> None:
         semantic = {"events": [{
             **self.semantic["events"][0], "anchor": "百万销量",
@@ -76,6 +117,13 @@ class CaptionTreatmentTests(unittest.TestCase):
         }]}
         plan = build_semantic_emphasis_plan(self.captions, semantic, self.options)
         self.assertEqual(plan["captions"][0]["emphasis"], [])
+
+    def test_caption_only_decision_keeps_approved_emphasis_but_quiet_does_not(self) -> None:
+        for decision in ("caption_only", "quiet", "source"):
+            semantic = {"events": [{**self.semantic["events"][0], "decision": decision}]}
+            plan = build_semantic_emphasis_plan(self.captions, semantic, self.options)
+            terms = [item["text"] for item in plan["captions"][0]["emphasis"]]
+            self.assertEqual(terms, ["亮度很自然"] if decision == "caption_only" else [])
 
     def test_anchor_must_be_an_exact_approved_visible_copy(self) -> None:
         semantic = {"events": [{

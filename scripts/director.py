@@ -214,6 +214,7 @@ from rights_authorization_manifest import create_rights_authorization_report
 from release_delivery_pack import create_release_delivery_pack, verify_release_delivery_pack
 from validate_platform_export import validate_bound_report as validate_platform_report
 from video_use_bridge import render_command, render_helper_path, synchronization_report
+from protected_region_evidence import load_protected_region_evidence
 from visual_dynamics_qa import (
     build_report as build_visual_dynamics_report,
     validate_report as validate_visual_dynamics_report,
@@ -790,6 +791,10 @@ class Director:
                             governance["artifacts"] = [str(path) for path in rebound]
                             governance["artifact_records"] = _artifact_records(rebound)
                     self._invalidate_from(state, boundary, f"{changed_input} bytes changed")
+                timeline = stages["video_use_timeline"]
+                if timeline.get("status") == "complete" and self._caption_owner_inputs_changed():
+                    self._invalidate_from(state, "video_use_timeline",
+                                          "caption owner grouping/correction input changed")
                 for name in STAGES:
                     row = stages[name]
                     if row.get("status") != "complete":
@@ -841,6 +846,14 @@ class Director:
         }
         write_json(self.state_path, state)
         return state
+
+    def _caption_owner_inputs_changed(self) -> bool:
+        paths = (self.context.edit_dir / "transcripts" / "caption-corrections-v2.json",
+                 self.video_use_dir / "caption-semantic-groups.json")
+        current = {str(path.resolve()): sha256_file(path) if path.is_file() else None for path in paths}
+        plan_path = self.video_use_dir / "execution-plan.json"
+        recorded = read_json(plan_path).get("caption_owner_inputs") if plan_path.is_file() else None
+        return current != recorded if recorded is not None else any(current.values())
 
     def _invalidate_from(self, state: dict[str, Any], stage: str, reason: str) -> None:
         boundary = STAGES.index(stage)
@@ -1354,6 +1367,7 @@ class Director:
         caption_srt = source_srt
         caption_json = captions_json
         sample_authority_artifacts: list[Path] = []
+        composition: dict[str, Any] = {}
         if scope == "sample":
             source_start = 0.0
             source_end: float | None = None
@@ -1387,6 +1401,12 @@ class Director:
             )
             sample_authority_artifacts = [caption_json, caption_srt]
         media = self._motion_source_media()
+        if scope == "sample" and ("width" in composition or "height" in composition):
+            if any(isinstance(composition.get(key), bool)
+                   or not isinstance(composition.get(key), int) or composition[key] <= 0
+                   for key in ("width", "height")):
+                raise DirectorContractError("sample caption output canvas is invalid")
+            media = {**media, "width": composition["width"], "height": composition["height"]}
         output_ass = output_dir / "master.ass"
         output_plan = output_dir / "caption-emphasis-plan.json"
         materialize_caption_treatment(
@@ -2242,6 +2262,7 @@ class Director:
             ],
         }
         corrections = self.context.edit_dir / "transcripts" / "caption-corrections-v2.json"
+        semantic_groups = self.video_use_dir / "caption-semantic-groups.json"
         if editorial_timeline_artifacts:
             plan["caption_bridge_command"].extend([
                 "--projection", str(self.root / "motion-editorial" / "timeline-projection.json")])
@@ -2256,6 +2277,12 @@ class Director:
             plan["caption_bridge_command"].extend(["--terminology", str(term)])
         if corrections.is_file():
             plan["caption_bridge_command"].extend(["--corrections", str(corrections)])
+        if semantic_groups.is_file():
+            plan["caption_bridge_command"].extend(["--semantic-groups", str(semantic_groups)])
+        plan["caption_owner_inputs"] = {
+            str(path.resolve()): sha256_file(path) if path.is_file() else None
+            for path in (corrections, semantic_groups)
+        }
         plan_path = self.video_use_dir / "execution-plan.json"
         write_json(plan_path, plan)
         result = subprocess.run(plan["caption_bridge_command"], capture_output=True, text=True)
@@ -2294,6 +2321,8 @@ class Director:
                                                self.video_use_dir / "captions.json",
                                                self.video_use_dir / "master.srt", sync_report,
                                                *otio_artifacts, *asr_artifacts, *editorial_timeline_artifacts,
+                                               *([corrections] if corrections.is_file() else []),
+                                               *([semantic_groups] if semantic_groups.is_file() else []),
                                                *([route_path] if route_path.is_file() else [])])
 
     def stage_evidence_acquisition(self) -> None:
@@ -2307,6 +2336,7 @@ class Director:
             output_dir=output_dir,
             optional_adapters=self.project.get("analysis", {}).get("adapters", {}),
             existing_assets=self.project.get("source", {}).get("existing_assets"),
+            reuse_existing=True,
         )
         bundle = read_json(output)
         if bundle.get("source", {}).get("sha256") != sha256_file(self.context.source_video):
@@ -2403,19 +2433,56 @@ class Director:
                     "analysis.protected_region_review.manifest is required when enabled"
                 )
             review_path = self._project_path(str(configured_manifest))
-            observations, review_artifacts = _load_protected_region_review(
-                review_path,
-                project_root=self.context.root,
-                source_sha256=sha256_file(self.context.source_video),
-            )
             protected = bundle.setdefault("protected_regions", {})
-            protected.setdefault("observations", {}).update(observations)
+            review_document = read_json(review_path)
+            if review_document.get("schema_version") == 2:
+                content_type = str(self.project.get("source", {}).get("content_type") or (
+                    "talking_head" if display.get("orientation") == "portrait" else "screen_tutorial"))
+                required_types = set(build_adaptive_layout_constraints(bundle,
+                    content_type=content_type,
+                    identity_mode=str(self.project.get("identity", {}).get("mode") or "generic"))[
+                        "protected_region_types"]) - {"captions"}
+                if not required_types.issubset(set(review_document.get("required_region_types") or [])):
+                    raise DirectorContractError("protected evidence omits required content-format region types")
+                edl = read_json(self.video_use_dir / "edl.json")
+                ranges = edl.get("ranges", edl.get("segments", []))
+                if not ranges:
+                    raise DirectorContractError("protected evidence requires actual EDL windows")
+                reviews, review_artifacts = [], []
+                for segment in ranges:
+                    payload, paths = load_protected_region_evidence(review_path,
+                        project_root=self.context.root, source_path=self.context.source_video,
+                        display=display, required_window=(segment["start"], segment["end"]))
+                    reviews.append(payload)
+                    review_artifacts.extend(paths)
+                for region_type in required_types:
+                    protected[region_type] = [row for payload in reviews for row in payload[region_type]]
+                    summaries = [payload["observations"].get(region_type, {}) for payload in reviews]
+                    protected.setdefault("observations", {})[region_type] = {
+                        "status": "observed_absent" if all(row.get("status") == "observed_absent" for row in summaries)
+                                  else "observed_present" if all(row.get("status") in {"observed_absent", "observed_present"} for row in summaries)
+                                  else "unknown",
+                        "evidence_sha256": sorted({digest for row in summaries for digest in row.get("evidence_frame_sha256", [])}),
+                    }
+                protected["window_reviews"] = [payload["coverage"] for payload in reviews]
+                # Reuse validated review pixels as discrete semantic evidence, without
+                # changing the representative sampling policy or its cache identity.
+                bundle["supplemental_frames"] = list({row["path"]: row
+                    for payload in reviews for row in payload["verified_frames"]}.values())
+                protected["provenance"] = reviews[0]["provenance"]
+                protected["status"] = "time_bounded_review_evidence_available" if all(
+                    payload["status"] == "pass" for payload in reviews) else "action_required"
+            else:
+                observations, review_artifacts = _load_protected_region_review(
+                    review_path, project_root=self.context.root,
+                    source_sha256=sha256_file(self.context.source_video))
+                protected.setdefault("observations", {}).update(observations)
+                protected["status"] = "detector_and_review_evidence_available"
             protected.setdefault("sources", {})["review"] = {
                 "kind": "protected_region_review",
                 "path": str(review_path.resolve()),
                 "sha256": sha256_file(review_path),
             }
-            protected["status"] = "detector_and_review_evidence_available"
             artifacts.extend(review_artifacts)
         write_json(output, bundle)
         if self.project.get("motion_quality", {}).get("enabled") is True:
@@ -2433,6 +2500,12 @@ class Director:
             )
             write_json(self.adaptive_layout_path, layout_contract)
             artifacts.append(self.adaptive_layout_path)
+        if bundle.get("protected_regions", {}).get("status") == "action_required":
+            self._action_required("evidence_acquisition",
+                "Protected-region evidence has unknown/lost or uncovered EDL intervals",
+                [{"owner": "source visual review", "expected_artifact": str(review_path),
+                  "layout_contract": str(self.adaptive_layout_path) if self.project.get("motion_quality", {}).get("enabled") else None,
+                  "coverage": bundle["protected_regions"].get("window_reviews")}])
         design_tokens_path = self.context.edit_dir / "design-tokens.json"
         if isinstance(bundle.get("design_tokens"), dict):
             write_json(design_tokens_path, {
@@ -2497,7 +2570,8 @@ class Director:
                 "evidence_bundle": str(self.evidence_bundle_path),
                 "evidence_bundle_sha256": sha256_file(self.evidence_bundle_path)
                 if self.evidence_bundle_path.is_file() else None,
-                "evidence_frames": bundle.get("representative_frames") or [],
+                "evidence_frames": [*(bundle.get("representative_frames") or []),
+                                    *(bundle.get("supplemental_frames") or [])],
                 "output": str(self.semantic_brief_path),
                 "deterministic_rules_role": "reject low-information, repeats, overlap, overflow, duplication, and filler only",
                 "forbidden": ["keyword score as semantic author", "project script hardcoded events", "density quota filler"],

@@ -472,6 +472,7 @@ def capture_runtime_evidence(
                             "sha256": sha256_file(source_snapshot),
                         },
                         "visible": bool(measurement["visible"]),
+                        "visible_text": list(measurement.get("visible_text") or []),
                         "overlay_bbox": measurement["overlay_bbox"],
                         "animation_phase": phase,
                         "source_state_sha256": sha256_file(source_snapshot),
@@ -493,6 +494,10 @@ def capture_runtime_evidence(
                     "recipe_id": opportunity["recipe_id"],
                     "animation_targets": sorted(animation_targets),
                     "visible_text": visible_text,
+                    **({"text_contrast_applicability": {
+                        "status": "not_applicable", "reason": "no_added_text",
+                        "non_text_readability": "requires_separate_visual_review",
+                    }} if not visible_text and not approved_copy else {}),
                     "phases": phase_rows,
                 })
         finally:

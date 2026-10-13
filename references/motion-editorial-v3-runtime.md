@@ -115,3 +115,35 @@ sample/full-instance-handoff.json 绑定实际投影/语义/字幕/音频/目标
 回滚：关闭新开关并用原只读工程/配置；保留新候选，不删除历史或覆盖人工修改。
 代码回滚走经授权的聚焦反向提交，不 hard reset。
 技术集成、旧短片审美批准、新开场实际验收和 production_default 是独立证据层。
+
+## 三个实现接缝修正（显式输入，旧工程兼容）
+
+- **保护证据**：`analysis.protected_region_review` 的显式 manifest 支持 schema2
+  `protected_region_evidence`；绑定源 SHA、display/旋转、normalized_display_v1、真实
+  manual_visual_review/detector_observation 来源及首/中/末证据。按 EDL 每个源窗校验
+  faces/hands 或 critical_ui 的完整覆盖；unknown/lost/缺口均暂停，不能被其他有效框覆盖。
+  矩形是明确时间段的保守审核包络，不宣称连续自动跟踪。旧 schema1 absence 合同不变。
+  同目录源帧在源/采样/帧哈希完全有效时可复用；保护结论与词证据重新计算。
+  v2 已验证审阅帧可在 bundle.supplemental_frames 中提供离散语义证据；不改变
+  representative_frames 采样/缓存/覆盖。语义请求与验证均读取两类帧，同路径时间或
+  哈希冲突拒绝，相同重复帧保留原代表帧覆盖；补充帧自身不宣称连续覆盖。
+- **字幕分屏**：video-use owner 可提供 `<video_use_dir>/caption-semantic-groups.json`，
+  schema1 kind=semantic_caption_groups。每屏仅列词实例ID及语义组，不写第二份文本或时间。
+  input_hashes 绑定 edl、transcripts、corrections，mapped_words_sha256 绑定更正前映射词。
+  完整有序覆盖恰好一次；同语义组只能连续多屏；屏不得跨EDL段或拆开更正跨度。
+  max_chars/max_duration 在此路径为硬上限，超限要求 owner 按语义重新分屏。
+  更正文件仍位于 `<edit_dir>/transcripts/caption-corrections-v2.json`；新 schema2
+  word_span_corrections 按精确词实例和 from/to/evidence 最小修正，保留原跨度不插值。
+  分组路线拒绝旧插值式更正。sidecar新增/改动/删除使字幕及下游失效，ASR继续复用。
+  已批准的独立字幕区可显式配置 caption_treatment.layout（font_size_px、margin_x_px、
+  margin_bottom_px、single_line）；样片按实际 storyboard 画布生成，未配置保持旧默认。
+  单行溢出拒绝而不自动缩字，最终字体/位置仍以真实渲染帧核对。
+- **原区阅读动效**：B02 的可选 source_attention v1 是无文字的源区域明暗移交。
+  源图不变，只降低焦点外区域的竞争；必须绑定真实target、状态、帧和活动窗，退出后无残留。
+  仅有效该模式允许 B02 source_only；普通B02、v4投影权威与visible_copy一致性不放宽。
+  旧steps标签payload不变，不得以标签冒充新原区效果。
+  无新增文字时只将文字对比度标为显式不适用，须绑定实际四相位空文字测量；原 UI、
+  图形及字幕的可读性、保护与对位检查仍保留，不能填造 4.5 数值。
+
+具体合同与测试依据见 `motion-editorial-v3-validation/20261012-three-gap-fix/`。
+这些是实现合同；测试通过不代表新短样片的真实动态对位、听感、审美或发布意愿通过。

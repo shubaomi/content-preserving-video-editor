@@ -231,6 +231,37 @@ class KeyframeReceiptTests(unittest.TestCase):
     def test_real_four_phase_project_bound_receipt_passes(self) -> None:
         self.assertEqual(self._validate(), [])
 
+    def test_text_free_contrast_requires_explicit_measured_inapplicability(self) -> None:
+        contract = json.loads(self.motion_contract.read_text(encoding='utf-8'))
+        contract['opportunities'][0]['approved_visible_copy'] = []
+        self.motion_contract.write_text(json.dumps(contract), encoding='utf-8')
+        for phase in self.receipt['phase_observations']:
+            phase['composite_contrast_ratio'] = 0.0
+        self._write_renderer_export(visible_text=[])
+        payload = json.loads(self.renderer_export.read_text(encoding='utf-8'))
+        event = payload['events'][0]
+        event['text_contrast_applicability'] = {
+            'status': 'not_applicable', 'reason': 'no_added_text',
+            'non_text_readability': 'requires_separate_visual_review',
+        }
+        for phase in event['phases']:
+            phase['visible_text'] = []
+
+        def validate_current():
+            self.renderer_export.write_text(json.dumps(payload), encoding='utf-8')
+            self._write_tool_artifacts()
+            phases = self.receipt['phase_observations']
+            self.receipt = self._receipt()
+            self.receipt['phase_observations'] = phases
+            return self._validate()
+
+        self.assertEqual(validate_current(), [])
+        event['phases'][1]['visible_text'] = ['unexpected']
+        self.assertTrue(any('contrast' in error for error in validate_current()))
+        event['phases'][1]['visible_text'] = []
+        del event['text_contrast_applicability']
+        self.assertTrue(any('contrast' in error for error in validate_current()))
+
     def test_receipt_does_not_hash_bind_the_downstream_parity_gate(self) -> None:
         receipt = deepcopy(self.receipt)
         receipt.pop("preview_render_parity_receipt")

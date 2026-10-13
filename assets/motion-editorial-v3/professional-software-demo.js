@@ -30,6 +30,33 @@
   function copy(value) {
     if (typeof value !== 'string' || !value.trim() || /[<>\r\n]/.test(value)) fail('Single-line literal approved copy required');
   }
+  function keys(value, expected, name) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+      || Object.keys(value).sort().join('|') !== expected.slice().sort().join('|')) fail(name + ' fields invalid');
+  }
+  function attention(event) {
+    const a = event.source_attention;
+    keys(a, ['schema_version','mode','dim_opacity','steps'], 'source_attention');
+    if (a.schema_version !== 1 || a.mode !== 'dim_outside'
+      || finite(a.dim_opacity,'dim_opacity') <= 0 || a.dim_opacity > .24) fail('Invalid source attention mode/opacity');
+    if (event.source_crop !== null || event.overlay_box !== null || event.approved_visible_copy.length
+      || Object.prototype.hasOwnProperty.call(event,'steps')) fail('Source attention cannot add labels or crop');
+    keys(event.source_box,['x','y','width','height'],'source_box');
+    box(event.source_box,'source_box');
+    if (!Array.isArray(a.steps) || a.steps.length < 2) fail('Source attention requires sequential targets');
+    let previous = event.phases.entrance.start;
+    a.steps.forEach(step => {
+      keys(step,['start','end','binding_id','target_id','source_state_sha256','source_region','frame_ref'],'attention step');
+      if (finite(step.start,'step.start') < previous || finite(step.end,'step.end') <= step.start
+        || step.end > event.phases.exit.end) fail('Source attention steps overlap or leave event');
+      for (const k of ['binding_id','target_id']) if (typeof step[k] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:@-]{0,255}$/.test(step[k])) fail('Target identity required');
+      if (!/^[a-f0-9]{64}$/.test(step.source_state_sha256 || '')) fail('Source state hash required');
+      keys(step.source_region,['x','y','width','height'],'source_region');
+      box(step.source_region,'source_region',true);
+      keys(step.frame_ref,['path','sha256'],'frame_ref'); reference(step.frame_ref);
+      previous = step.end;
+    });
+  }
   function validate(event) {
     if (!event || !['B01', 'B02', 'B03'].includes(event.recipe_id)) fail('Unknown B recipe');
     const start = finite(event.output_start, 'output_start');
@@ -63,6 +90,10 @@
       if (!event.source_crop && !event.overlay_box) fail('B01 has no explicit visual action');
     }
     if (event.recipe_id === 'B02') {
+      if (Object.prototype.hasOwnProperty.call(event,'source_attention')) {
+        attention(event);
+        return {duration, active};
+      }
       if (event.source_crop !== null) fail('B02 retains original source container');
       if (!Array.isArray(event.steps) || event.steps.length < 2) fail('B02 requires explicit proof steps');
       let previous = event.phases.entrance.start;
@@ -74,6 +105,7 @@
       });
       if (JSON.stringify(event.steps.map(s => s.copy)) !== JSON.stringify(event.approved_visible_copy)) fail('Proof copy differs from approved list');
     }
+    if (Object.prototype.hasOwnProperty.call(event,'source_attention')) fail('Source attention belongs only to B02');
     if (event.recipe_id === 'B03') {
       if (event.comparison_mode !== 'sequential_source') fail('Parallel/wipe requires separately supplied real-state elements', 'unavailable_real_state_elements');
       if (event.source_crop !== null) fail('Sequential fallback cannot reframe or swap source');
@@ -136,7 +168,35 @@
       const el = node(root,event.overlay_box,event.approved_visible_copy[0] || '',!event.approved_visible_copy.length);
       visibility(tl,el,p.entrance.start,p.exit.end,p.entrance.end-p.entrance.start,p.exit.end-p.exit.start);
     }
-    if (event.recipe_id === 'B02' || event.recipe_id === 'B03') {
+    if (event.recipe_id === 'B02' && event.source_attention) {
+      const b = event.source_box, a = event.source_attention;
+      a.steps.forEach((step,index) => {
+        const r = step.source_region;
+        const hole = {x:b.x+r.x*b.width,y:b.y+r.y*b.height,width:r.width*b.width,height:r.height*b.height};
+        const container = root.ownerDocument.createElement('div');
+        container.setAttribute('data-source-attention-step',String(index));
+        container.setAttribute('data-target-binding-id',step.binding_id);
+        container.setAttribute('data-target-id',step.target_id);
+        Object.assign(container.style,{position:'absolute',inset:'0',pointerEvents:'none',opacity:'0'});
+        root.appendChild(container);
+        // Four non-overlapping rectangles preserve the real target pixels.
+        const masks = [
+          {x:b.x,y:b.y,width:b.width,height:hole.y-b.y},
+          {x:b.x,y:hole.y+hole.height,width:b.width,height:b.y+b.height-hole.y-hole.height},
+          {x:b.x,y:hole.y,width:hole.x-b.x,height:hole.height},
+          {x:hole.x+hole.width,y:hole.y,width:b.x+b.width-hole.x-hole.width,height:hole.height}];
+        masks.forEach((bounds,side) => {
+          if (bounds.width <= 0 || bounds.height <= 0) return;
+          const el = root.ownerDocument.createElement('div');
+          el.setAttribute('data-source-attention-mask',String(side));
+          Object.assign(el.style,{position:'absolute',left:bounds.x+'px',top:bounds.y+'px',
+            width:bounds.width+'px',height:bounds.height+'px',pointerEvents:'none',
+            backgroundColor:'rgba(0, 0, 0, '+a.dim_opacity+')'});
+          container.appendChild(el);
+        });
+        visibility(tl,container,step.start,step.end,p.entrance.end-p.entrance.start,p.exit.end-p.exit.start);
+      });
+    } else if (event.recipe_id === 'B02' || event.recipe_id === 'B03') {
       const container = root.ownerDocument.createElement('div');
       Object.assign(container.style,{position:'absolute',inset:'0',pointerEvents:'none'});
       root.appendChild(container);

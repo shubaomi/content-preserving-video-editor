@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FIX03 B02 source attention v1 (no generated copy or curves)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mode", "dim_opacity", "steps"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "mode": {"const": "dim_outside"},
+    "dim_opacity": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.24},
+    "steps": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/step"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@-]{0,255}$"},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "region": {
+      "type": "object", "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": {"type": "number", "minimum": 0, "maximum": 1},
+        "y": {"type": "number", "minimum": 0, "maximum": 1},
+        "width": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "height": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+      }
+    },
+    "step": {
+      "type": "object", "additionalProperties": false,
+      "required": ["start", "end", "binding_id", "target_id", "source_state_sha256", "source_region", "frame_ref"],
+      "properties": {
+        "start": {"type": "number", "minimum": 0},
+        "end": {"type": "number", "exclusiveMinimum": 0},
+        "binding_id": {"$ref": "#/$defs/id"},
+        "target_id": {"$ref": "#/$defs/id"},
+        "source_state_sha256": {"$ref": "#/$defs/sha256"},
+        "source_region": {"$ref": "#/$defs/region"},
+        "frame_ref": {
+          "type": "object", "additionalProperties": false, "required": ["path", "sha256"],
+          "properties": {"path": {"type": "string", "pattern": "^(?:[A-Za-z]:[\\\\/]|/)"}, "sha256": {"$ref": "#/$defs/sha256"}}
+        }
+      }
+    }
+  }
+}

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from director_contracts import sha256_file
+from project_config import validate_caption_layout
 from safe_generated_output import atomic_write_text, safe_generated_target
 
 
@@ -217,12 +218,18 @@ def _options(options: Mapping[str, Any]) -> dict[str, Any]:
     font = options.get("font_family")
     if not isinstance(font, str) or not font.strip() or any(char in font for char in "\r\n,;"):
         raise CaptionTreatmentError("font_family is invalid")
-    return {
+    result = {
         "font_family": font.strip(), "base_color": base.upper(),
         "accent_colors": [value.upper() for value in colors],
         "max_emphasis_terms_per_caption": maximum_terms,
         "max_scale_percent": scale,
     }
+    if "layout" in options:
+        try:
+            result["layout"] = validate_caption_layout(options["layout"])
+        except ValueError as exc:
+            raise CaptionTreatmentError(str(exc)) from exc
+    return result
 
 
 def _approved_anchors(semantic_brief: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -233,7 +240,7 @@ def _approved_anchors(semantic_brief: Mapping[str, Any]) -> list[dict[str, Any]]
         raise CaptionTreatmentError("semantic brief events must be a list")
     anchors: list[dict[str, Any]] = []
     for row in rows:
-        if not isinstance(row, Mapping) or row.get("decision") not in {None, "render"}:
+        if not isinstance(row, Mapping) or row.get("decision") not in {None, "render", "caption_only"}:
             continue
         anchor = str(row.get("anchor") or "").strip()
         word_ids = row.get("transcript_word_ids")
@@ -351,9 +358,9 @@ def _ass_escape_slice(text: str, start: int, end: int, line_breaks: set[int]) ->
     return "".join(output)
 
 
-def _styled_text(row: Mapping[str, Any], scale: int) -> str:
+def _styled_text(row: Mapping[str, Any], scale: int, *, single_line: bool = False) -> str:
     text = str(row["text"])
-    line_breaks = _display_line_break_positions(text)
+    line_breaks = set() if single_line else _display_line_break_positions(text)
     output: list[str] = []
     cursor = 0
     for emphasis in row.get("emphasis") or []:
@@ -407,15 +414,33 @@ def render_ass(plan: Mapping[str, Any], *, width: int, height: int) -> str:
             previous_end = end
     font_size = max(38, round(height * 0.044))
     margin_v = max(52, round(height * 0.075))
+    margin_x = 70
+    single_line = False
+    layout = treatment.get("layout")
+    if layout is not None:
+        font_size = layout["font_size_px"]
+        margin_x = layout["margin_x_px"]
+        margin_v = layout["margin_bottom_px"]
+        single_line = layout["single_line"]
+        maximum_scale = min(treatment["max_scale_percent"] + 4, 120) / 100
+        if margin_x * 2 >= width or margin_v + font_size * maximum_scale + 10 > height:
+            raise CaptionTreatmentError("caption layout does not fit the output canvas")
+        if single_line:
+            for row in validated_rows:
+                # Conservative em-width guard, including emphasis growth and border.
+                # Real font pixels still require final-frame visual QA.
+                if ("\n" in row["text"] or "\r" in row["text"]
+                        or len(row["text"]) * font_size * maximum_scale + 10 > width - 2 * margin_x):
+                    raise CaptionTreatmentError("single-line caption exceeds layout; revise semantic groups or approved layout")
     style = (
         "Style: CaptionBase," + treatment["font_family"] + f",{font_size},"
         + _ass_color(treatment["base_color"])
         + ",&H000000FF,&H00111111,&H99000000,-1,0,0,0,100,100,0,0,1,"
-        "3.2,1.4,2,70,70," + str(margin_v) + ",1"
+        f"3.2,1.4,2,{margin_x},{margin_x}," + str(margin_v) + ",1"
     )
     lines = [
         "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {width}", f"PlayResY: {height}",
-        "ScaledBorderAndShadow: yes", "WrapStyle: 0", "", "[V4+ Styles]",
+        "ScaledBorderAndShadow: yes", f"WrapStyle: {2 if single_line else 0}", "", "[V4+ Styles]",
         "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,"
         "Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,"
         "Alignment,MarginL,MarginR,MarginV,Encoding", style, "", "[Events]",
@@ -424,7 +449,7 @@ def render_ass(plan: Mapping[str, Any], *, width: int, height: int) -> str:
     for row in captions:
         lines.append(
             f"Dialogue: 0,{_ass_time(float(row['start']))},{_ass_time(float(row['end']))},"
-            f"CaptionBase,,0,0,0,,{_styled_text(row, treatment['max_scale_percent'])}"
+            f"CaptionBase,,0,0,0,,{_styled_text(row, treatment['max_scale_percent'], single_line=single_line)}"
         )
     return "\n".join(lines) + "\n"
 

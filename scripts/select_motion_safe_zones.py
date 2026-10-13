@@ -114,6 +114,10 @@ def build_adaptive_layout_constraints(
     observations = protected.get("observations")
     observations = observations if isinstance(observations, dict) else {}
     invalid_types: list[str] = []
+    for review in protected.get("window_reviews") or []:
+        for unresolved in review.get("unresolved") or []:
+            if unresolved.get("region_type") in required_types:
+                invalid_types.append(unresolved["region_type"])
     for region_type in required_types:
         values = protected.get(region_type)
         values = values if isinstance(values, list) else []
@@ -160,7 +164,7 @@ def build_adaptive_layout_constraints(
             "constraints": constraints,
             "status": "action_required",
             "fallback": "caption_only",
-            "missing_evidence": invalid_types,
+            "missing_evidence": list(dict.fromkeys(invalid_types)),
             "guessed_coordinates_allowed": False,
         }
     return {

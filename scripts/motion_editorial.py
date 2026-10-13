@@ -222,7 +222,10 @@ def prepare_projection(*, project: dict, root: Path, source: Path, transcript: P
                                   transcript=load(transcript), fps=fps, mode=mode,
                                   input_hashes=inputs, **kwargs)
     output = directory / 'timeline-projection.json'
-    write_json(output, projection)
+    # The timeline and storyboard stages share this authority. Rewriting equal
+    # content changes mtime and invalidates the upstream stage's strict receipt.
+    if not output.is_file() or load(output) != projection:
+        write_json(output, projection)
     return projection, [output, *dependencies]
 
 
@@ -275,6 +278,25 @@ def validate_recipe_event(event: dict) -> None:
     elif recipe == 'B01':
         need((crop is not None or box(overlay)) and len(copy) <= 1 and (not copy or box(overlay)), 'B01 needs a real locator or camera focus')
     elif recipe == 'B02':
+        if 'source_attention' in event:
+            from jsonschema import Draft202012Validator
+            schema = load(ROOT / 'references/motion-editorial-v3-validation/20261012-three-gap-fix/source-attention.schema.json')
+            errors = list(Draft202012Validator(schema).iter_errors(event['source_attention']))
+            need(not errors, 'invalid B02 source_attention contract')
+            need(crop is None and overlay is None and not copy and 'steps' not in event
+                 and box(event.get('source_box')), 'B02 source attention requires unchanged source and no copy/labels')
+            attention = event['source_attention']
+            need(number(attention['dim_opacity']), 'source attention opacity must be finite')
+            previous = phases['entrance']['start']
+            for step in attention['steps']:
+                region = step['source_region']
+                need(number(step['start']) and number(step['end'])
+                     and previous <= step['start'] < step['end'] <= phases['exit']['end'],
+                     'source attention steps overlap or leave event')
+                need(box(region) and region['x'] + region['width'] <= 1
+                     and region['y'] + region['height'] <= 1, 'source attention region exceeds source')
+                previous = step['end']
+            return
         steps = event.get('steps')
         need(crop is None and isinstance(steps, list) and len(steps) >= 2, 'B02 requires explicit progressive steps')
         previous = phases['entrance']['start']
@@ -293,6 +315,54 @@ def validate_recipe_event(event: dict) -> None:
         need([s.get('label') for s in states] == copy, 'B03 state labels differ from semantics')
         at = event.get('after_at')
         need(number(at) and phases['entrance']['end'] < at < phases['exit']['start'], 'B03 state handoff outside event')
+
+
+def _validate_source_attention_bindings(event: dict, bindings: dict, roots: list[Path]) -> list[str]:
+    """Resolve authored source holes against current observed targets, not guesses."""
+    from target_binding import validate_binding
+    dependencies = []
+    for step in event['source_attention']['steps']:
+        binding = bindings.get(step['binding_id'])
+        if (step['binding_id'] not in event.get('target_binding_ids', [])
+                or not isinstance(binding, dict)
+                or binding.get('binding_id') != step['binding_id']
+                or binding.get('semantic_event_id') != event['instance_id']):
+            raise ValueError('source attention requires current instance target binding')
+        errors = validate_binding(binding, require_resolved=True)
+        if errors:
+            raise ValueError('source attention binding invalid: ' + '; '.join(errors))
+        window = binding['output_window']
+        if window != {'start_seconds': event['output_start'], 'end_seconds': event['output_end']}:
+            raise ValueError('source attention binding window differs from semantic instance')
+        policy = binding['invalidation_policy']
+        if policy['on_state_change'] != 'exit' or policy['on_target_lost'] != 'exit':
+            raise ValueError('source attention must exit on state change or target loss')
+        start, end = (event['output_start'] + step[key] for key in ('start', 'end'))
+        if not any(w['start_seconds'] <= start < end <= w['end_seconds'] for w in binding['active_windows']):
+            raise ValueError('source attention step exceeds target active window')
+        source = binding['source_window']
+        ratio = (source['end_seconds'] - source['start_seconds']) / (window['end_seconds'] - window['start_seconds'])
+        source_start = source['start_seconds'] + step['start'] * ratio
+        source_end = source['start_seconds'] + step['end'] * ratio
+        rows = [row for row in binding['observations'] if row['target_id'] == step['target_id']]
+        before = [row for row in rows if row['timestamp_seconds'] <= source_start]
+        after = [row for row in rows if row['timestamp_seconds'] >= source_end]
+        if not before or not after:
+            raise ValueError('source attention lacks bracketed source observations')
+        bracket_start, bracket_end = before[-1]['timestamp_seconds'], after[0]['timestamp_seconds']
+        relevant = [row for row in rows if bracket_start <= row['timestamp_seconds'] <= bracket_end]
+        for row in relevant:
+            if (not row['visible'] or row['source_state_sha256'] != step['source_state_sha256']
+                    or row.get('bbox') != step['source_region']):
+                raise ValueError('source attention state or geometry is not constant in its step')
+            dependencies.append(str(current_ref({key: row['evidence'][key] for key in ('path', 'sha256')}, roots)))
+        if any(bracket_start < state['timestamp_seconds'] < bracket_end for state in binding.get('state_events', [])):
+            raise ValueError('source attention cannot bridge a source state boundary')
+        reference = step['frame_ref']
+        if not any(Path(row['evidence']['path']).resolve() == Path(reference['path']).resolve()
+                   and row['evidence']['sha256'] == reference['sha256'] for row in relevant):
+            raise ValueError('source attention frame must be an observed current target')
+    return dependencies
 
 
 def compile_shot_plan(plan: dict, *, projection: dict, output_brief: dict,
@@ -318,7 +388,7 @@ def compile_shot_plan(plan: dict, *, projection: dict, output_brief: dict,
                     'primary_focus', 'rationale', 'source_crop', 'approved_visible_copy',
                     'phases', 'evidence', 'sound', 'output_start', 'output_end'}
         optional = {'source_box', 'overlay_box', 'active_end', 'target_window', 'after_at',
-                    'comparison_mode', 'steps', 'target_binding_ids'}
+                    'comparison_mode', 'steps', 'target_binding_ids', 'source_attention'}
         if required - set(event) or set(event) - required - optional:
             raise ValueError('shot event fields are incomplete or unsupported')
         for field in ('viewer_task', 'information_gain', 'primary_focus', 'rationale'):
@@ -347,6 +417,7 @@ def compile_shot_plan(plan: dict, *, projection: dict, output_brief: dict,
         if len(dependencies) == before_refs:
             raise ValueError('shot evidence requires file references')
         check_refs(event.get('steps', []))
+        check_refs(event.get('source_attention', {}))
         allowed_frames = {str(Path(value['path'] if isinstance(value, dict) else value).resolve())
                           for value in semantic.get('target_frame_evidence', [])}
         if not allowed_frames or any(path not in allowed_frames for path in dependencies[before_refs:]):
@@ -361,13 +432,16 @@ def compile_shot_plan(plan: dict, *, projection: dict, output_brief: dict,
         selected = semantic.get('decision') == 'render'
         if selected != (event['decision'] in {'shot', 'overlay'}):
             raise ValueError('shot render decisions must equal semantic render subset')
+        if 'source_attention' in event and (not selected or event['recipe_id'] != 'B02'):
+            raise ValueError('source_attention belongs only to rendered B02')
         if not selected:
             if event['decision'] not in {'source', 'quiet', 'caption_only'} or event['recipe_id'] is not None or event['source_crop'] is not None or event['phases']:
                 raise ValueError('non-render decisions cannot carry crop/recipe/phases')
             continue
         if event['recipe_id'] not in RECIPES[direction]:
             raise ValueError('recipe does not belong to direction')
-        if semantic.get('editorial_copy_policy') == 'source_only' and event['recipe_id'] not in {'A01', 'B01'}:
+        attention_mode = event['recipe_id'] == 'B02' and 'source_attention' in event
+        if semantic.get('editorial_copy_policy') == 'source_only' and event['recipe_id'] not in {'A01', 'B01'} and not attention_mode:
             raise ValueError('source_only copy policy is limited to A01 or text-free B01')
         declared_targets = event.get('target_binding_ids', [])
         if declared_targets != semantic.get('target_binding_ids', []):
@@ -421,6 +495,11 @@ def compile_shot_plan(plan: dict, *, projection: dict, output_brief: dict,
         item['active_end'] = active_end
         item.setdefault('overlay_box', None)
         validate_recipe_event(item)
+        if attention_mode:
+            extra = _validate_source_attention_bindings(item, target_bindings or {}, roots)
+            if any(path not in allowed_frames for path in extra):
+                raise ValueError('source attention observations must belong to current semantic frames')
+            dependencies.extend(extra)
         compiled.append(item)
     return {'schema_version': 1, 'direction': direction, 'events': compiled,
             'plan_sha256': digest(plan), 'projection_sha256': digest(projection),

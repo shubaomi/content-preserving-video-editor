@@ -521,6 +521,7 @@ def main() -> int:
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--projection", help="current validated editorial timeline projection; grants no edit authority")
     parser.add_argument("--corrections", help="audited terminology/spelling replacements with evidence")
+    parser.add_argument("--semantic-groups", help="hash-bound video-use word-instance caption screens")
     parser.add_argument("--max-chars", type=int, default=24)
     parser.add_argument("--max-duration", type=float, default=6.5)
     parser.add_argument("--pause-break", type=float, default=0.5)
@@ -531,21 +532,16 @@ def main() -> int:
     args = parser.parse_args()
     edl_path = Path(args.edl).resolve()
     current_inputs = {}
-    if args.projection:
-        edl, current_inputs[edl_path] = _read_projection_input(edl_path)
-    else:
-        edl = json.loads(edl_path.read_text(encoding="utf-8"))
+    edl, current_inputs[edl_path] = _read_projection_input(edl_path)
     transcripts: dict[str, dict[str, Any]] = {}
     provenance: dict[str, str] = {}
     for item in args.transcript:
         source, path_value = item.split("=", 1)
         path = Path(path_value).resolve()
-        if args.projection:
-            transcripts[source], provenance[source] = _read_projection_input(path)
-            current_inputs[path] = provenance[source]
-        else:
-            transcripts[source] = json.loads(path.read_text(encoding="utf-8"))
-            provenance[source] = sha256_file(path)
+        if source in transcripts:
+            raise ValueError("duplicate transcript source")
+        transcripts[source], provenance[source] = _read_projection_input(path)
+        current_inputs[path] = provenance[source]
     if args.projection:
         from editorial_projection import validate_projection
         projection_path = Path(args.projection).resolve()
@@ -559,11 +555,34 @@ def main() -> int:
         mapped = map_projection_words(projection, edl, transcripts)
     else:
         mapped = map_words_to_output(edl, transcripts)
-    corrections = json.loads(Path(args.corrections).read_text(encoding="utf-8")) if args.corrections else None
-    corrected, applied = apply_audited_corrections(mapped, corrections)
-    captions = build_captions(corrected, max_chars=args.max_chars,
-                              max_duration=args.max_duration, pause_break=args.pause_break,
-                              punctuation_style=args.punctuation_style)
+    corrections = None
+    correction_hash = None
+    if args.corrections:
+        correction_path = Path(args.corrections).resolve()
+        corrections, correction_hash = _read_projection_input(correction_path)
+        current_inputs[correction_path] = correction_hash
+    bindings = {"edl": current_inputs[edl_path], "transcripts": provenance,
+                "corrections": correction_hash}
+    if corrections and corrections.get("kind") == "word_span_corrections":
+        from caption_semantic_groups import apply_span_corrections
+        corrected, applied = apply_span_corrections(mapped, corrections, bindings)
+    elif args.semantic_groups and corrections:
+        raise ValueError("semantic groups require span corrections without interpolated word timing")
+    else:
+        corrected, applied = apply_audited_corrections(mapped, corrections)
+    grouping_hash = None
+    if args.semantic_groups:
+        from caption_semantic_groups import build_grouped_captions
+        grouping_path = Path(args.semantic_groups).resolve()
+        grouping, grouping_hash = _read_projection_input(grouping_path)
+        current_inputs[grouping_path] = grouping_hash
+        captions = build_grouped_captions(corrected, grouping, raw_words=mapped,
+            input_hashes=bindings, max_chars=args.max_chars, max_duration=args.max_duration,
+            punctuation_style=args.punctuation_style)
+    else:
+        captions = build_captions(corrected, max_chars=args.max_chars,
+                                  max_duration=args.max_duration, pause_break=args.pause_break,
+                                  punctuation_style=args.punctuation_style)
     report = synchronization_report(
         corrected, captions, cut_boundaries=args.cut_boundary, terminology=args.terminology,
     )
@@ -572,12 +591,14 @@ def main() -> int:
     report["punctuation_style"] = args.punctuation_style
     report["edl_sha256"] = sha256_file(edl_path)
     report["transcript_sha256"] = provenance
+    report["corrections_sha256"] = correction_hash
+    report["semantic_groups_sha256"] = grouping_hash
     report["video_use_helper"] = str(render_helper_path())
     if args.projection:
         report["projection_sha256"] = current_inputs[projection_path]
         report["projection_authority"] = "read_only_current_edl_mapping_not_hook_authorization"
-        if any(sha256_file(path) != digest for path, digest in current_inputs.items()):
-            raise ValueError("projection input changed during caption compilation")
+    if any(sha256_file(path) != digest for path, digest in current_inputs.items()):
+        raise ValueError("caption input changed during compilation")
     out = Path(args.out_dir).resolve()
     write_json(out / "mapped-words.json", {"words": corrected})
     write_json(out / "captions.json", {"version": 2, "segments": captions})

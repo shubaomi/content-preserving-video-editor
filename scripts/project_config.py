@@ -172,6 +172,21 @@ CAPTION_TREATMENT_DEFAULTS: dict[str, Any] = {
 }
 
 
+def validate_caption_layout(value: Any) -> dict[str, Any]:
+    """Validate opt-in pixel layout; omitted layouts retain legacy defaults."""
+    fields = {"font_size_px", "margin_x_px", "margin_bottom_px", "single_line"}
+    if not isinstance(value, dict) or set(value) != fields:
+        raise ValueError("caption layout must specify exactly font size, margins and single_line")
+    for field in fields - {"single_line"}:
+        number = value[field]
+        minimum = 1 if field == "font_size_px" else 0
+        if isinstance(number, bool) or not isinstance(number, int) or not minimum <= number <= 8192:
+            raise ValueError(f"caption layout {field} must be an integer in [{minimum}, 8192]")
+    if not isinstance(value["single_line"], bool):
+        raise ValueError("caption layout single_line must be a boolean")
+    return dict(value)
+
+
 def _required_asset_defaults(caption_delivery: str) -> dict[str, dict[str, str]]:
     captions = {
         "stage": "video_use_timeline",
@@ -272,9 +287,11 @@ def migrate_project_config(project: dict[str, Any]) -> dict[str, Any]:
     caption_treatment = editing.setdefault("caption_treatment", {})
     if not isinstance(caption_treatment, dict):
         raise ValueError("editing.caption_treatment must be a mapping")
-    unknown_treatment = set(caption_treatment) - set(CAPTION_TREATMENT_DEFAULTS)
+    unknown_treatment = set(caption_treatment) - (set(CAPTION_TREATMENT_DEFAULTS) | {"layout"})
     if unknown_treatment:
         raise ValueError("editing.caption_treatment has unsupported fields")
+    if "layout" in caption_treatment:
+        validate_caption_layout(caption_treatment["layout"])
     for key, value in CAPTION_TREATMENT_DEFAULTS.items():
         caption_treatment.setdefault(key, deepcopy(value))
     if not isinstance(caption_treatment.get("enabled"), bool):
