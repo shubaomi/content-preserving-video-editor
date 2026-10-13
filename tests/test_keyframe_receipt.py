@@ -92,6 +92,19 @@ class KeyframeReceiptTests(unittest.TestCase):
         self.assertEqual(result, (0, "{}", ""))
         self.assertEqual(run.call_args.args[0][0], "C:/tools/npx.CMD")
 
+    def test_fabricated_second_source_and_shared_clock_refs_fail_closed(self):
+        for path,key in ((self.animation_artifact,'runtime_animation_evidence'),
+                         (self.strict_artifact,'shared_clock_adaptation')):
+            original=path.read_text(encoding='utf-8')
+            value=json.loads(original)
+            value[key]={'path':str(self.root/'not-real.json'),'sha256':'0'*64}
+            path.write_text(json.dumps(value),encoding='utf-8')
+            receipt=self._receipt()
+            errors=validate_keyframe_receipt(receipt,motion_design_contract_path=self.motion_contract,
+                renderer_export_path=self.renderer_export)
+            self.assertTrue(errors)
+            path.write_text(original,encoding='utf-8')
+
     def _phase(self, phase: str, timestamp: float, *, visible: bool) -> dict:
         return {
             "phase": phase,
@@ -463,6 +476,16 @@ class KeyframeReceiptTests(unittest.TestCase):
             Path(receipt["animation_map"]["artifact"]["path"]).read_text(encoding="utf-8")
         )
         self.assertEqual(animation_artifact["event_coverage"]["event-1"], ["event-1-motion"])
+        pinned = ["node", "C:/pinned/hyperframes/bin/hyperframes.mjs"]
+        receipts = build_receipts(
+            project=self.project_dir, motion_design_contract_path=self.motion_contract,
+            renderer_project_manifest_path=self.project, renderer_export_path=self.renderer_export,
+            target_binding_dir=self.root / "target-bindings", output_dir=self.root / "pinned-receipts",
+            runner=runner, command_prefix=pinned,
+        )
+        receipt = json.loads(receipts[0].read_text(encoding="utf-8"))
+        self.assertEqual(receipt["animation_map"]["command"], [*pinned, "keyframes", ".", "--json"])
+        self.assertEqual(receipt["strict_check"]["command"], [*pinned, "check", ".", "--strict", "--json"])
 
     def test_builder_rejects_keyframes_that_do_not_cover_render_event(self) -> None:
         (self.project_dir / "index.html").write_text(

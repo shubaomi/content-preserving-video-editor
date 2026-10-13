@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "suite_version": "2026.08-p0p1p2",
-  "generated_at": "2026-10-13T10:16:15.338401+00:00",
+  "generated_at": "2026-10-13T12:43:17.521234+00:00",
   "status": "pass",
   "automated_evidence_boundary": "The suite verifies deterministic semantics, captions, technical frames, audio, geometry, and parity contracts. It does not approve aesthetics, identity likeness, or platform results.",
   "source": {
@@ -31,7 +31,7 @@
       "scripts/fixture_acceptance.py": "de36fdd4b468d739c7ef0be06d945f8ca1ca69de71075aca73d49e2ecbe532f5",
       "scripts/asr_router.py": "ce9bcc7bbfb12e985dbd9d45ac5f0ac7239dc11be69feed791f7c52704060fde",
       "scripts/semantic_confidence.py": "12f0126b6fa44e9821e930a1aa46f5c7644c5d36ec5a8761daa14657a1b49027",
-      "scripts/preview_render_parity.py": "c4d3ee482f7d6de84f3d19a28398aea76eebc1b0341987d66c9fd4d873cf9cd2",
+      "scripts/preview_render_parity.py": "1611c52cfa8fb474130702e162372242df60b91bd14e3698c9df99db381db031",
       "scripts/audio_qa.py": "327a3b2e3a4949a588024b15269bf4448ed3e60ee3cd0c83ad8496c771ffafcb",
       "scripts/ip_production.py": "2591753b2ab6fabf511639a2f570b501810bf1ad25c6dcd97038805f70f86e54",
       "scripts/cover_quality.py": "d2e411dacd7fb13659a3d5e01d43ff3aaffff53a2a0ad48d0cec6a3b7e36dd7b",
@@ -50,12 +50,12 @@
       "scripts/representative_short_media.py": "b88769ed4aa32cb435b112b0b1771a4cab45fd9c28c6461532ab2517ab911309",
       "scripts/motion_contracts.py": "35ad4ceed25913357af64f4ad741614513bfb9ae3515a110fe9fa2f87a7465e0",
       "scripts/motion_quality_engine.py": "f90482b4e802f172f7fea93e967d8f126460e9e927e5d2b2000f823798eb85c7",
-      "scripts/keyframe_receipt.py": "fa0e94e3631aed10ac4e74fc3888cbd23dab974f3aea2a945ad33870d1d465ea",
-      "scripts/renderer_project_manifest.py": "6b69c8905f9a0309a4fd6ef77fc2d35161de2de4da4f6c92195f42d365b8ea7d",
+      "scripts/keyframe_receipt.py": "5e2775210674ab3dc01a80a578d617a89e39582965d2be428fb1eb5006245912",
+      "scripts/renderer_project_manifest.py": "80e777eb4627bdc2b89da94496a1dc81f7da99f108ab57885fc50527a1bfaac8",
       "scripts/build_motion_snapshot_plan.py": "14c7b3e627b98e8d99ac64d7af17c3c20323f45bceba8061112b3247d8fe9e3a",
       "references/motion-recipes-v1.json": "e0cc533c44db17824aca3c889154659e91d8729126b6470815b3fde381e45b44"
     },
-    "fixture_suite_sha256": "d903bffc9b1c7a6558c3033fd5550c8c9e9c385b9fbc9b9dce44261058d886d3"
+    "fixture_suite_sha256": "06dbe755248ce2b2ec9fde60adb2b87713a11b64a3329627c9eecdf9dd1885ba"
   },
   "cases": [
     {
@@ -551,5 +551,5 @@
       }
     }
   ],
-  "report_integrity_sha256": "331f809ea0ba45e3d29b6b8de2b04bc5fa9779a5553015e7ad37ea5c23351ea9"
+  "report_integrity_sha256": "2863c269d967237c11a5cf3bb5f4359d7136951a736f5c475c73c063b18fe8cc"
 }

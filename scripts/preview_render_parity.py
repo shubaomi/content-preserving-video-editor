@@ -30,6 +30,12 @@ def validate(
     expected_bindings: Mapping[str, Path] | None = None,
     keyframe_receipt_paths: Mapping[str, Path] | None = None,
 ) -> list[str]:
+    if report.get("measurement_method") == "same_frame_pixels_v1":
+        from rendered_phase_parity import validate_pixel_parity
+
+        return validate_pixel_parity(report, storyboard, expected_bindings, keyframe_receipt_paths)
+    if report.get("measurement_method") not in (None, "dom_geometry_v1"):
+        return ["preview/render parity measurement method is unsupported"]
     errors: list[str] = []
     expected_schema = 2 if expected_bindings is not None else 1
     if report.get("schema_version") != expected_schema:

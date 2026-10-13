@@ -9,7 +9,7 @@ from PIL import Image
 
 from director_contracts import read_json, sha256_file
 
-REGION_TYPES = {'faces', 'hands', 'poses', 'cursor', 'critical_ui', 'captions', 'platform_safe_zones'}
+REGION_TYPES = {'faces', 'hands', 'products', 'poses', 'cursor', 'critical_ui', 'captions', 'platform_safe_zones'}
 
 
 def _number(value: Any, name: str) -> float:

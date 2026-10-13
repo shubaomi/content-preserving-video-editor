@@ -260,12 +260,12 @@ def _tool_receipt_errors(
     receipt: Any, label: str, *, command_token: str, artifact_kind: str,
     project_sha256: str,
     motion_contract_sha256: str, renderer_export_sha256: str,
+    project_path: Path | None = None, motion_contract_path: Path | None = None,
+    renderer_export_path: Path | None = None,
 ) -> list[str]:
     if not isinstance(receipt, dict):
         return [f"{label} receipt is missing"]
     errors = _artifact_errors(receipt.get("artifact"), label)
-    if receipt.get("exit_code") != 0:
-        errors.append(f"{label} exit_code must be zero")
     command = receipt.get("command")
     if not isinstance(command, list) or not any(
         str(value) == command_token for value in command
@@ -274,6 +274,46 @@ def _tool_receipt_errors(
     artifact_path = Path(str((receipt.get("artifact") or {}).get("path") or ""))
     artifact, load_errors = _load_mapping(artifact_path, f"{label} artifact")
     errors.extend(load_errors)
+    adapted_strict = False
+    if artifact.get('shared_clock_adaptation') is not None:
+        try:
+            if artifact_kind != 'strict_check' or project_path is None:
+                raise ValueError('shared clock adaptation belongs only to strict check')
+            ref = artifact['shared_clock_adaptation']
+            errors.extend(_artifact_errors(ref, 'shared clock adaptation'))
+            path = Path(ref['path'])
+            adaptation = read_json(path)
+            from shared_media_clock import validate_shared_clock_adaptation
+            found = validate_shared_clock_adaptation(path,
+                project_root=Path(read_json(project_path)['project_root']),
+                intent_path=Path(adaptation['intent']['path']),
+                raw_strict_path=Path(adaptation['raw_strict']['path']),
+                runtime_path=Path(adaptation['runtime']['path']))
+            errors.extend(found)
+            raw = read_json(Path(adaptation['raw_strict']['path']))
+            if (receipt.get('command') != raw['command'] or receipt.get('exit_code') != raw['exit_code']
+                    or artifact.get('raw_output') != read_json(Path(raw['stdout']['path']))):
+                raise ValueError('adapted strict receipt differs from original CLI result')
+            adapted_strict = not found
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            errors.append(f'shared clock adaptation invalid: {exc}')
+    if receipt.get('exit_code') != 0 and not adapted_strict:
+        errors.append(f"{label} exit_code must be zero")
+    if artifact.get('runtime_animation_evidence') is not None:
+        try:
+            if artifact_kind != 'animation_map' or any(p is None for p in
+                    (project_path,motion_contract_path,renderer_export_path)):
+                raise ValueError('runtime animation evidence needs current input paths')
+            ref = artifact['runtime_animation_evidence']
+            errors.extend(_artifact_errors(ref, 'runtime animation evidence'))
+            from runtime_animation_evidence import validate_runtime_animation_evidence, runtime_event_coverage
+            runtime = read_json(Path(ref['path']))
+            errors.extend(validate_runtime_animation_evidence(runtime,project_artifact=project_path,
+                motion_contract_path=motion_contract_path,renderer_export_path=renderer_export_path))
+            if artifact.get('event_coverage') != runtime_event_coverage(runtime):
+                errors.append('runtime animation coverage differs from measured tree')
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            errors.append(f'runtime animation evidence invalid: {exc}')
     if artifact:
         if artifact.get("kind") != artifact_kind:
             errors.append(f"{label} artifact kind is invalid")
@@ -440,7 +480,14 @@ def validate_keyframe_receipt(
             if phase.get("visible") is not True:
                 errors.append(f"{label} must be visible")
             if phase.get("crop_status") == "clipped":
-                errors.append(f"{label} is clipped")
+                from source_reframe_evidence import validate_source_reframe_phase
+                observed_phase = exported_phases[index] if index < len(exported_phases) else {}
+                reframe_errors = validate_source_reframe_phase(
+                    renderer_export.get('source_reframe_intent'), phase=observed_phase,
+                    event_id=event_id, project_artifact=project_path,
+                    motion_contract_path=motion_contract_path)
+                if reframe_errors:
+                    errors.extend([f"{label} is clipped", *reframe_errors])
             overlap = _finite_number(phase.get("caption_overlap_ratio"))
             if overlap is None or overlap > maximum_caption_overlap_ratio:
                 errors.append(f"{label} caption collision exceeds tolerance")
@@ -486,12 +533,16 @@ def validate_keyframe_receipt(
         artifact_kind="strict_check",
         project_sha256=project_sha, motion_contract_sha256=contract_sha,
         renderer_export_sha256=renderer_export_sha,
+        project_path=project_path, motion_contract_path=motion_contract_path,
+        renderer_export_path=renderer_export_path,
     ))
     errors.extend(_tool_receipt_errors(
         receipt.get("animation_map"), "animation_map", command_token="keyframes",
         artifact_kind="animation_map",
         project_sha256=project_sha, motion_contract_sha256=contract_sha,
         renderer_export_sha256=renderer_export_sha,
+        project_path=project_path, motion_contract_path=motion_contract_path,
+        renderer_export_path=renderer_export_path,
     ))
     # Preview/render parity is the downstream gate that hash-binds these
     # receipts. Requiring a receipt to bind that same report would create a

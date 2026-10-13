@@ -148,7 +148,13 @@ async ({time}) => {
   const media = [...document.querySelectorAll('video')];
   await Promise.all(media.map(async (element) => {
     const start = Number(element.dataset.start || 0);
-    const desired = Math.max(0, time - start);
+    const duration = Number(element.dataset.duration || element.duration);
+    const mediaStart = Number(element.dataset.mediaStart || 0);
+    const fps = Number(root.dataset.fps || 30);
+    if (![start,duration,mediaStart,fps].every(Number.isFinite) || duration <= 0 || fps <= 0)
+      throw new Error('invalid media clock');
+    const lastFrameTime = Math.max(0, Math.ceil(duration*fps)-1)/fps;
+    const desired = mediaStart + Math.min(lastFrameTime, Math.max(0, time - start)) + 0.00001;
     if (element.readyState === 0) {
       await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('video metadata timeout')), 10000);
@@ -157,7 +163,7 @@ async ({time}) => {
         element.load();
       });
     }
-    if (Math.abs((element.currentTime || 0) - desired) >= 0.02 || element.readyState < 2) {
+    if (Math.abs((element.currentTime || 0) - desired) >= 0.000001 || element.readyState < 2) {
       element.currentTime = desired;
       await new Promise((resolve, reject) => {
         const started = performance.now();
@@ -197,7 +203,9 @@ async ({time}) => {
 MEASURE_SCRIPT = r"""
 ({eventId, captionLaneStart, captionLaneEnd}) => {
   const root = document.querySelector('[data-composition-id]');
-  const eventRoot = document.getElementById(eventId);
+  const candidates = [...document.querySelectorAll('[data-semantic-event-id]')]
+    .filter(el => el.dataset.semanticEventId === eventId);
+  const eventRoot = candidates.length === 1 ? candidates[0] : document.getElementById(eventId);
   if (!root || !eventRoot) throw new Error(`event root missing: ${eventId}`);
   const rootRect = root.getBoundingClientRect();
   const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
@@ -246,6 +254,7 @@ MEASURE_SCRIPT = r"""
     return ['Top', 'Right', 'Bottom', 'Left'].some((side) => Number.parseFloat(style[`border${side}Width`] || '0') > 0);
   };
   const painted = [];
+  const paintedElements = [];
   const textRows = [];
   const ratios = [];
   [...eventRoot.querySelectorAll('*')].forEach((element) => {
@@ -255,6 +264,8 @@ MEASURE_SCRIPT = r"""
     const text = ownText(element);
     if (opacity <= 0.02 || rect.width <= 0.5 || rect.height <= 0.5 || !hasPaint(element, style, text)) return;
     painted.push(rect);
+    paintedElements.push({id:element.id, tag:element.tagName.toLowerCase(),
+      x:rect.x-rootRect.x,y:rect.y-rootRect.y,width:rect.width,height:rect.height});
     if (text) {
       textRows.push(text);
       let background = [255, 255, 255, 1];
@@ -309,9 +320,27 @@ MEASURE_SCRIPT = r"""
     visible_text: textRows,
     connectors,
     crop_status: cropStatus,
+    painted_elements: paintedElements,
     caption_overlap_ratio: Number(captionOverlapRatio.toFixed(6)),
     composite_contrast_ratio: ratios.length ? Number(Math.min(...ratios).toFixed(3)) : 0,
   };
+}
+"""
+
+
+SOURCE_REFRAME_SCRIPT = r"""
+({selector}) => {
+ const matches=[...document.querySelectorAll(selector)];
+ if(matches.length!==1 || matches[0].tagName!=='VIDEO') throw new Error('unique source video required');
+ const el=matches[0],root=document.querySelector('[data-composition-id]');
+ const r=el.getBoundingClientRect(),c=root.getBoundingClientRect(),p=el.parentElement;
+ const style=getComputedStyle(p),m=new DOMMatrixReadOnly(style.transform);
+ if(!m.is2D) throw new Error('only observed 2D camera supported');
+ let opacity=1,visible=true;
+ for(let n=el;n;n=n.parentElement){const s=getComputedStyle(n);opacity*=Number(s.opacity);if(s.visibility==='hidden'||s.display==='none')visible=false;if(n===root)break;}
+ return {selector,src:el.currentSrc||el.src,canvas:{width:c.width,height:c.height},source_rect:{x:r.x-c.x,y:r.y-c.y,width:r.width,height:r.height},
+   matrix:[m.a,m.b,m.c,m.d,m.e,m.f],transform_origin:style.transformOrigin.split(' ').slice(0,2).map(Number.parseFloat),
+   visible:visible&&opacity>.02};
 }
 """
 
@@ -344,7 +373,7 @@ def capture_runtime_evidence(
     project_artifact: Path, binding_dir: Path, output_path: Path,
     snapshot_dir: Path, browser_path: Path | None = None,
     timeout_ms: int = 10_000, caption_lane_start: float = 0.78,
-    caption_lane_end: float = 0.94,
+    caption_lane_end: float = 0.94, source_reframe_intent_path: Path | None = None,
 ) -> dict[str, Any]:
     """Capture actual seeked browser state for every compiler-selected event."""
     try:
@@ -369,6 +398,7 @@ def capture_runtime_evidence(
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     storyboard = read_json(storyboard_path)
     contract = read_json(motion_contract_path)
+    reframe_intent = read_json(source_reframe_intent_path) if source_reframe_intent_path else None
     binding_by_id = _load_bindings(binding_dir)
     opportunities = {
         str(row.get("semantic_event_id")): row
@@ -410,7 +440,7 @@ def capture_runtime_evidence(
                 timeout=timeout_ms,
             )
             dimensions = page.locator("[data-composition-id]").evaluate(
-                "el => ({width:Number(el.dataset.width||el.getBoundingClientRect().width), height:Number(el.dataset.height||el.getBoundingClientRect().height)})"
+                "el => ({width:Number(el.dataset.width||el.getBoundingClientRect().width), height:Number(el.dataset.height||el.getBoundingClientRect().height), fps:Number(el.dataset.fps||30)})"
             )
             width = int(dimensions["width"])
             height = int(dimensions["height"])
@@ -419,7 +449,9 @@ def capture_runtime_evidence(
             for event_id, opportunity in opportunities.items():
                 event = storyboard_events[event_id]
                 bindings = _event_bindings(opportunity, binding_by_id)
-                phases = compute_phase_times(opportunity, bindings, fps=30)
+                fps = float(dimensions['fps'])
+                phases = {name: math.ceil(time*fps-1e-8)/fps for name,time in
+                          compute_phase_times(opportunity, bindings, fps=fps).items()}
                 phase_rows: list[dict[str, Any]] = []
                 phase_texts: list[list[str]] = []
                 animation_targets: set[str] = set()
@@ -482,6 +514,21 @@ def capture_runtime_evidence(
                         "caption_overlap_ratio": measurement["caption_overlap_ratio"],
                         "composite_contrast_ratio": measurement["composite_contrast_ratio"],
                     })
+                    if reframe_intent and event_id in reframe_intent.get('event_sources', {}):
+                        selector = reframe_intent['event_sources'][event_id]
+                        observed = page.evaluate(SOURCE_REFRAME_SCRIPT, {'selector':selector})
+                        observed['caption_top'] = caption_lane_start*height
+                        asset = Path(reframe_intent['inputs']['media_asset']['path']).resolve()
+                        # Resolve the actual DOM resource, not an asserted source label.
+                        from urllib.parse import unquote, urlparse
+                        from urllib.request import url2pathname
+                        parsed = urlparse(observed.pop('src'))
+                        actual_asset = Path(url2pathname(unquote(parsed.path))).resolve()
+                        if parsed.scheme != 'file' or not actual_asset.is_file() or not actual_asset.samefile(asset):
+                            raise ValueError('reframe observed source does not match current local asset')
+                        observed['source_asset'] = {'path':str(asset), 'sha256':sha256_file(asset)}
+                        observed['added_paint'] = [r for r in measurement['painted_elements'] if '#'+r['id'] != selector]
+                        phase_rows[-1]['source_reframe_observation'] = observed
                 visible_text = normalize_event_visible_text(phase_texts)
                 approved_copy = list(opportunity.get("approved_visible_copy") or [])
                 if visible_text != approved_copy:
@@ -514,6 +561,9 @@ def capture_runtime_evidence(
         "source_media_sha256": (contract.get("source_media") or {}).get("sha256"),
         "events": rendered_events,
     }
+    if source_reframe_intent_path:
+        payload['source_reframe_intent'] = {'path':str(source_reframe_intent_path.resolve()),
+                                           'sha256':sha256_file(source_reframe_intent_path)}
     write_json(output_path, payload)
     return payload
 
@@ -533,6 +583,7 @@ def main() -> int:
     parser.add_argument("--timeout-ms", type=int, default=10_000)
     parser.add_argument("--caption-lane-start", type=float, default=0.78)
     parser.add_argument("--caption-lane-end", type=float, default=0.94)
+    parser.add_argument("--source-reframe-intent", type=Path)
     args = parser.parse_args()
     capture_runtime_evidence(
         project_root=args.project,
@@ -546,6 +597,7 @@ def main() -> int:
         timeout_ms=args.timeout_ms,
         caption_lane_start=args.caption_lane_start,
         caption_lane_end=args.caption_lane_end,
+        source_reframe_intent_path=args.source_reframe_intent,
     )
     print(str(args.output.resolve()))
     return 0

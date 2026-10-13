@@ -13,6 +13,22 @@ from renderer_project_manifest import build_manifest, validate_manifest  # noqa:
 
 
 class RendererProjectManifestTests(unittest.TestCase):
+    def test_only_known_hyperframes_generated_state_is_excluded(self):
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            (project/'index.html').write_text('<main/>', encoding='utf-8')
+            (project/'storyboard.json').write_text('{}', encoding='utf-8')
+            output = project/'renderer-project-manifest.json'
+            manifest = build_manifest(project, output)
+            for name in ('.hyperframes/history-id', '.hyperframes/video-state.json',
+                         '.hyperframes/render-outputs.json', '.hyperframes/artifacts/checks/test.json'):
+                path = project/name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('{}', encoding='utf-8')
+            self.assertEqual(validate_manifest(manifest, output), [])
+            (project/'.hyperframes/author.js').write_text('source', encoding='utf-8')
+            self.assertTrue(validate_manifest(manifest, output))
+
     def test_manifest_binds_complete_project_source_and_detects_drift(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             project = Path(folder) / "hyperframes"

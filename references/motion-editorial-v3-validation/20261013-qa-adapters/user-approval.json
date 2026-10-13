@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "kind": "explicit_user_minimal_qa_adaptation_authorization",
+  "approved_by": "HongRun",
+  "recorded_date": "2026-10-13",
+  "user_message": "批准 QA-A、QA-B、QA-C 最小适配，保持原方案；允许必要的真人短样片技术重渲染，补齐真实验收，不渲染完整视频。",
+  "decision_package": {
+    "path": "E:/Projects/Skills/content-preserving-video-editor/references/motion-editorial-v3-validation/20261012-three-gap-fix/remaining-qa-decision.md",
+    "sha256": "1fe92ce3f6c499aa9577cbe48a4f011d4b128735b1ee785ad2bc1a5d1f85b932"
+  },
+  "authorized_adapters": [
+    "QA-A",
+    "QA-B",
+    "QA-C"
+  ],
+  "portrait_original_window_rerender_authorized": true,
+  "full_render_authorized": false,
+  "plan_changes_authorized": false,
+  "publication_authorized": false,
+  "not_aesthetic_approval": true
+}

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "passed": true,
-  "test_count": 1176,
+  "test_count": 1253,
   "failed": 0,
   "skipped": 0,
   "exit_code": 0,
@@ -40,9 +40,9 @@
     "test_jianying_native_draft.JianyingNativeDraftV1Tests.test_wp4_validation_and_rollback_reject_project_root_as_store",
     "test_jianying_native_draft.JianyingNativeDraftV1Tests.test_wp4_rollback_requires_exact_unchanged_generated_inventory"
   ],
-  "source_tree_sha256": "89f305f2942b22af312ea9e4e80cb4e8173065746ba9ea94c0847558b537d523",
+  "source_tree_sha256": "1929d07ea0293e4d4805bce40530b752d8b9f55862c681ec0507e0673bc48e3e",
   "runner_implementation": "scripts/test_acceptance_report.py",
   "runner_implementation_sha256": "959f590ff52e3a07d1a5b8156cc77a019fabec532da8caa7e8e75a912f0508f8",
   "log": "test-suite.log",
-  "log_sha256": "b5263d6e572ee3e94c766511d39a7b273ededcf3c33b357a46542f59483de1d8"
+  "log_sha256": "556fcf4ce0ffbb58fb24e901e4c99a0988cb690f733d9269a63745f4e6c2bfb0"
 }

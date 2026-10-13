@@ -147,3 +147,32 @@ sample/full-instance-handoff.json 绑定实际投影/语义/字幕/音频/目标
 
 具体合同与测试依据见 `motion-editorial-v3-validation/20261012-three-gap-fix/`。
 这些是实现合同；测试通过不代表新短样片的真实动态对位、听感、审美或发布意愿通过。
+
+## 显式短样片验收适配 QA-A QA-B QA-C
+
+授权与回滚依据：`motion-editorial-v3-validation/20261013-qa-adapters/`。
+仅补验收接缝；保留旧默认、原 EDL/镜头/字幕/音频，不授权全片或生产默认升级。
+
+- QA-A：`source_reframe_evidence.py` 重新编译当前 A01 计划，绑定批准、源文件、
+  投影、语义、真实 DOM 资源/矩阵、画布、字幕方案和保护证据。原 `crop_status=clipped`
+  不改；只有批准源画背景取景通过专用检查。新增图形越界仍拒绝。保护证据 v2 可显式
+  加入 `products`，默认必需类型不变；真实审核包络不冒充连续跟踪。
+- QA-B：`runtime_animation_evidence.py` 在当前浏览器里采集真实 GSAP 动画树；
+  要求事件独占 DOM、嵌套全局时间、正反 seek、实际动态属性挑战、四相位及工具哈希。
+  `build_keyframe_receipts.py --runtime-animation-evidence` 显式消费；空的 CLI keyframes
+  原文保留，运行时结果标为第二来源，不替写 CLI。`--hyperframes-cli` 可指定已安装固定
+  Node CLI，回执记录实际命令，不下载、不更新依赖。
+- QA-C：`shared_media_clock.py` 只处理已批准的同源静音多实例共享时钟。
+  每次 seek 检查媒体身份、时钟、显隐与单路原音；只接受唯一已知重复发现警告。
+  原 strict exit=1 和 warning 保留；独立 adaptation 通过不等于原 CLI strict 通过。
+  动态依赖、外部样式/模块等不在此窄适配支持范围，不能当作通用依赖安全沙箱。
+  `--shared-clock-adaptation` 重验所有引用；任何其他警告、失效证据或媒体变化均阻断。
+
+顺序：实际四相位采集 → canonical keyframe receipts → 实际成片同帧 parity。
+`rendered_phase_parity.py` 的显式 `same_frame_pixels_v1` 路线从指定 raw candidate
+重新解码相同帧号，不以最佳偏移补偿，不将 Studio DOM 复制成成片测量。
+软件保留原 ROI MAE≤3、任一通道差值>20的像素比例≤0.035；真人保留原 FFmpeg
+RGB PNG SSIM All≥0.95。阈值方向须来自当前合同，不能由待验报告自行选择。
+原几何、对位、保护和裁切验证继续由四相位回执执行；像素法不冒充渲染后 DOM。
+消费者须提供当前工程/合同/源及确切 raw render 绑定；旧 Director 未提供该绑定时仍拒绝，
+不得手改阶段完成。当前适配证据只证明此次短 canary 的技术结果，人工听审/审美仍待用户。

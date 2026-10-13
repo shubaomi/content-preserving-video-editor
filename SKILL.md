@@ -461,13 +461,22 @@ video at frame zero. Missing Playwright or browser binaries produce
 `animation_map` field is backed by the real
 `npx hyperframes keyframes <project> --json` operation; do not invent an
 `animation-map` CLI command.
-After Studio/render parity exists, execute the companion
+After the four-phase runtime export exists, execute the companion
 `scripts/build_keyframe_receipts.py` request. It runs strict check and keyframe
 diagnostics itself, proves each render event owns at least one real motion
 interval whose HyperFrames target selector was observed inside that event's
 painted DOM root, and writes schema-valid hash-bound receipts. A simultaneous
 global or other-event tween does not count. Hand-authored tool JSON or a
 keyframe dump that does not cover the event cannot satisfy the gate.
+
+For the explicitly approved QA-A/B/C short-canary adapters, load
+`references/motion-editorial-v3-runtime.md#显式短样片验收适配-qa-a-qa-b-qa-c`.
+Preserve raw CLI findings and crop observations; never relabel them as passes.
+Current hash-bound source-reframe, browser-runtime animation, and shared-clock
+evidence may satisfy only their narrowly defined checks. Build keyframe receipts
+before downstream same-frame pixel parity; bind the exact raw candidate and
+original threshold profile. Missing bindings remain blocking, including in
+legacy Director consumers; this is not a production-default promotion.
 
 Each receipt binds the exact project manifest, motion-design contract, recipe,
 source media, target bindings, strict-check result, animation-map result,

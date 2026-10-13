@@ -160,6 +160,9 @@ def build_receipts(
     recipe_registry_path: Path = DEFAULT_RECIPE_REGISTRY,
     npx_command: str = "npx", timeout_seconds: int = 120,
     runner: CommandRunner = _default_runner,
+    runtime_animation_path: Path | None = None,
+    shared_clock_adaptation_path: Path | None = None,
+    command_prefix: Sequence[str] | None = None,
 ) -> list[Path]:
     project = project.resolve()
     index_path = project / "index.html"
@@ -188,13 +191,28 @@ def build_receipts(
     if not opportunities:
         raise RuntimeError("motion-design contract has no render opportunities")
 
-    strict_command = [npx_command, "hyperframes", "check", ".", "--strict", "--json"]
-    keyframes_command = [npx_command, "hyperframes", "keyframes", ".", "--json"]
-    strict_output, strict_exit, _ = _run_json_tool(
-        strict_command, cwd=project, timeout_seconds=timeout_seconds, runner=runner,
-    )
-    if strict_output.get("ok") is not True:
-        raise RuntimeError("HyperFrames strict check did not pass")
+    prefix = list(command_prefix) if command_prefix is not None else [npx_command, "hyperframes"]
+    if not prefix or any(not isinstance(token, str) or not token.strip() for token in prefix):
+        raise ValueError("HyperFrames command prefix must contain non-empty command tokens")
+    strict_command = [*prefix, "check", ".", "--strict", "--json"]
+    keyframes_command = [*prefix, "keyframes", ".", "--json"]
+    if shared_clock_adaptation_path is None:
+        strict_output, strict_exit, _ = _run_json_tool(
+            strict_command, cwd=project, timeout_seconds=timeout_seconds, runner=runner,
+        )
+        if strict_output.get("ok") is not True:
+            raise RuntimeError("HyperFrames strict check did not pass")
+    else:
+        from shared_media_clock import validate_shared_clock_adaptation
+        adaptation = read_json(shared_clock_adaptation_path)
+        errors = validate_shared_clock_adaptation(shared_clock_adaptation_path, project_root=project,
+            intent_path=Path(adaptation['intent']['path']), raw_strict_path=Path(adaptation['raw_strict']['path']),
+            runtime_path=Path(adaptation['runtime']['path']))
+        if errors:
+            raise RuntimeError('; '.join(errors))
+        raw = read_json(Path(adaptation['raw_strict']['path']))
+        strict_output = read_json(Path(raw['stdout']['path']))
+        strict_exit, strict_command = raw['exit_code'], raw['command']
     keyframes_output, keyframes_exit, _ = _run_json_tool(
         keyframes_command, cwd=project, timeout_seconds=timeout_seconds, runner=runner,
     )
@@ -202,9 +220,17 @@ def build_receipts(
         str(row.get("event_id") or ""): row
         for row in renderer_export.get("events") or [] if isinstance(row, Mapping)
     }
-    event_coverage = _animation_coverage(
-        keyframes_output, opportunities, exported,
-    )
+    if runtime_animation_path is None:
+        event_coverage = _animation_coverage(keyframes_output, opportunities, exported)
+    else:
+        from runtime_animation_evidence import validate_runtime_animation_evidence, runtime_event_coverage
+        runtime = read_json(runtime_animation_path)
+        errors = validate_runtime_animation_evidence(runtime,
+            project_artifact=renderer_project_manifest_path,
+            motion_contract_path=motion_design_contract_path, renderer_export_path=renderer_export_path)
+        if errors:
+            raise RuntimeError('; '.join(errors))
+        event_coverage = runtime_event_coverage(runtime)
 
     project_sha = sha256_file(renderer_project_manifest_path.resolve())
     contract_sha = sha256_file(motion_design_contract_path.resolve())
@@ -212,16 +238,27 @@ def build_receipts(
     tool_dir = output_dir.resolve() / "tool-evidence"
     strict_artifact_path = tool_dir / "strict-check.json"
     animation_artifact_path = tool_dir / "animation-map.json"
-    write_json(strict_artifact_path, _tool_artifact(
+    strict_artifact = _tool_artifact(
         kind="strict_check", raw_output=strict_output,
         project_sha256=project_sha, motion_contract_sha256=contract_sha,
         renderer_export_sha256=export_sha,
-    ))
-    write_json(animation_artifact_path, _tool_artifact(
+    )
+    if shared_clock_adaptation_path:
+        strict_artifact['shared_clock_adaptation'] = {
+            'path':str(shared_clock_adaptation_path.resolve()), 'sha256':sha256_file(shared_clock_adaptation_path)}
+        strict_artifact['raw_exit_code'] = strict_exit
+        strict_artifact['status_basis'] = 'validated_shared_clock_adaptation_not_raw_cli_pass'
+    write_json(strict_artifact_path, strict_artifact)
+    animation_artifact = _tool_artifact(
         kind="animation_map", raw_output=keyframes_output,
         project_sha256=project_sha, motion_contract_sha256=contract_sha,
         renderer_export_sha256=export_sha, event_coverage=event_coverage,
-    ))
+    )
+    if runtime_animation_path:
+        animation_artifact['runtime_animation_evidence'] = {
+            'path':str(runtime_animation_path.resolve()), 'sha256':sha256_file(runtime_animation_path)}
+        animation_artifact['coverage_source'] = 'runtime_gsap_second_source'
+    write_json(animation_artifact_path, animation_artifact)
 
     registry = load_recipe_registry(recipe_registry_path.resolve())
     recipes = {
@@ -323,6 +360,9 @@ def main() -> int:
     parser.add_argument("--recipe-registry", type=Path, default=DEFAULT_RECIPE_REGISTRY)
     parser.add_argument("--npx-command", default="npx")
     parser.add_argument("--timeout-seconds", type=int, default=120)
+    parser.add_argument("--runtime-animation-evidence", type=Path)
+    parser.add_argument("--shared-clock-adaptation", type=Path)
+    parser.add_argument("--hyperframes-cli", type=Path, help="Use an existing pinned HyperFrames Node CLI without npx resolution.")
     args = parser.parse_args()
     written = build_receipts(
         project=args.project, motion_design_contract_path=args.motion_design_contract,
@@ -331,6 +371,9 @@ def main() -> int:
         target_binding_dir=args.target_binding_dir, parity_path=args.parity,
         output_dir=args.output_dir, recipe_registry_path=args.recipe_registry,
         npx_command=args.npx_command, timeout_seconds=args.timeout_seconds,
+        runtime_animation_path=args.runtime_animation_evidence,
+        shared_clock_adaptation_path=args.shared_clock_adaptation,
+        command_prefix=["node", str(args.hyperframes_cli.resolve())] if args.hyperframes_cli else None,
     )
     print(json.dumps({"status": "pass", "receipts": [str(path) for path in written]}))
     return 0

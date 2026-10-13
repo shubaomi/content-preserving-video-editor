@@ -34,6 +34,14 @@ EXCLUDED_DIRECTORY_NAMES = {
 EXCLUDED_RELATIVE_PREFIXES = {
     ("assets", "sfx"),
     ("review-audio",),
+    (".hyperframes", "artifacts", "checks"),
+    (".hyperframes", "render-outputs-lock"),
+    (".hyperframes", "video-state-lock"),
+}
+EXCLUDED_RELATIVE_FILES = {
+    (".hyperframes", "history-id"),
+    (".hyperframes", "render-outputs.json"),
+    (".hyperframes", "video-state.json"),
 }
 
 
@@ -50,6 +58,8 @@ def _included_files(project_root: Path, output: Path) -> list[Path]:
         if not path.is_file() or path.resolve() == output.resolve():
             continue
         relative = path.relative_to(project_root)
+        if relative.parts in EXCLUDED_RELATIVE_FILES:
+            continue
         if path.name in EXCLUDED_FILE_NAMES:
             continue
         if any(part in EXCLUDED_DIRECTORY_NAMES for part in relative.parts[:-1]):
@@ -88,6 +98,7 @@ def build_manifest(project_root: Path, output: Path) -> dict[str, Any]:
             EXCLUDED_FILE_NAMES
             | EXCLUDED_DIRECTORY_NAMES
             | {"/".join(prefix) for prefix in EXCLUDED_RELATIVE_PREFIXES}
+            | {"/".join(parts) for parts in EXCLUDED_RELATIVE_FILES}
         ),
     }
     payload["integrity_sha256"] = _stable_hash(payload)

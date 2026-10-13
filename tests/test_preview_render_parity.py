@@ -5,6 +5,7 @@ import tempfile
 import unittest
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -14,6 +15,17 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from director_contracts import sha256_file  # noqa: E402
 from preview_render_parity import validate  # noqa: E402
+
+
+class PixelMethodRoutingTests(unittest.TestCase):
+    def test_pixel_method_dispatches_only_explicitly(self):
+        report = {"measurement_method": "same_frame_pixels_v1"}
+        with patch("rendered_phase_parity.validate_pixel_parity", return_value=["real pixel failure"]) as gate:
+            self.assertEqual(validate(report, {}, expected_bindings={}, keyframe_receipt_paths={}), ["real pixel failure"])
+            gate.assert_called_once_with(report, {}, {}, {})
+
+    def test_unknown_method_does_not_fall_back_to_geometry(self):
+        self.assertIn("unsupported", validate({"measurement_method": "invented"}, {})[0])
 
 
 def parity_report(root: Path) -> dict:

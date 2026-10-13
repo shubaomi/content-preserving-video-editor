@@ -1,5 +1,6 @@
 numpy>=2.0,<2.3
 Pillow>=11
+scikit-image==0.26.0
 PyYAML>=6
 opencv-python-headless==4.12.0.88
 onnxruntime>=1.20

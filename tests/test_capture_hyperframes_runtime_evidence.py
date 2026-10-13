@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import sys
 import unittest
+import subprocess
+import shutil
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -20,6 +23,16 @@ from capture_hyperframes_runtime_evidence import (  # noqa: E402
 
 
 class RuntimeScriptContractTests(unittest.TestCase):
+    def test_media_clock_preserves_fractional_duration_last_frame(self):
+        from capture_hyperframes_runtime_evidence import SEEK_SCRIPT
+        start=SEEK_SCRIPT.index('    const lastFrameTime =')
+        end=SEEK_SCRIPT.index('    if (element.readyState', start)
+        expression=SEEK_SCRIPT[start:end]
+        # Execute the actual JS clock expression, not a copied Python formula.
+        program="const duration=55.45,fps=30,mediaStart=10,start=13.49,time=start+1663/30;"+expression+"console.log(JSON.stringify(desired));"
+        result=subprocess.run([shutil.which('node') or 'node','-e',program],capture_output=True,text=True,check=True)
+        self.assertAlmostEqual(json.loads(result.stdout),10+1663/30+.00001,places=9)
+
     def test_measurement_uses_get_element_by_id_for_colon_event_ids(self) -> None:
         from capture_hyperframes_runtime_evidence import MEASURE_SCRIPT
         self.assertIn("document.getElementById(eventId)", MEASURE_SCRIPT)
