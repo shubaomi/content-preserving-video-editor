@@ -1,6 +1,6 @@
 ---
 name: content-preserving-video-editor
-description: Orchestrate preservation-first editing or nondestructive polishing of talking-head, screen-recording, tutorial, interview, product-demo, and already-published videos. Use when the user asks to intelligently edit while keeping most source content, add accurate natural captions, enrich footage with relevant HyperFrames motion/IP visuals/SFX/BGM, create a personal cinematic cover and publish package, or run a reusable one-shot workflow that defaults to one universal video for Douyin and WeChat Channels. This Skill owns policy, orchestration, personal IP, cover, platform adaptation, QA, and delivery; it must delegate transcription/edit timing to video-use and creative motion design/rendering to HyperFrames.
+description: Orchestrate preservation-first editing or nondestructive polishing of talking-head, screen-recording, tutorial, interview, product-demo, and already-published videos. Use when the user asks to intelligently edit while keeping most source content, add accurate natural captions, enrich footage with relevant HyperFrames motion/IP visuals/SFX/BGM, create a personal cinematic cover and publish package, or run a reusable one-shot workflow that defaults to one universal video for Douyin and WeChat Channels. Also prepare a real-interface software demo preview when there is no recording. This Skill owns policy, orchestration, personal IP, cover, platform adaptation, QA, and delivery; it must delegate transcription/edit timing to video-use and creative motion design/rendering to HyperFrames.
 ---
 
 # Content-Preserving Video Director
@@ -53,6 +53,8 @@ Readiness is advice, not approval. Offline post-publish learning never changes t
 Profile or authorizes publishing. Do not enable the feature silently for old projects.
 
 ## Start with one guided intake
+
+If the request is to **create a software product introduction without a source recording**, do not ask for a nonexistent MP4 or initialize a preservation project. Use the opt-in [real-interface product demo pilot](references/software-product-demo-pilot.md) to turn one authorized local demo task into a claim/step/result scenario, verify actual UI states, and produce a short silent proof video with editable descriptions. This is an isolated preparation tool, not a new Director stage or a full launch-film renderer. Existing demo recordings continue through the normal path below. A description alone supports a script/shot list, not proof of a working product.
 
 For the approved, opt-in camera-first A/B direction, read
 [motion-editorial-v3-runtime.md](references/motion-editorial-v3-runtime.md).
