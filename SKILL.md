@@ -58,6 +58,8 @@ For a software product introduction without a recording, do not ask for a nonexi
 
 For creative product promos (not silent operation proofs), resolve overview versus feature spotlight and map the in-scope user tasks with the [shot and voice cards](assets/product-promo/shot-and-voice-cards.md) before locking choreography. Select, adapt, or skip a card according to the actual product, available evidence and voice; verify scope coverage against the exported sample under the product acceptance guide. Cards are editorial templates, not runtime recipes.
 
+For **every creative edit or generation route**, including a promo without a source recording, apply the [whole-film and section direction](references/section-direction.md) after inspecting the available evidence and **before** creative capture, asset generation or shot design. Write the film outline first, then choose how each section serves its viewer question. For a local revision reuse the outline and revisit the affected sections and joins. Do not turn one approved treatment into a whole-film default.
+
 For the approved, opt-in camera-first A/B direction, read
 [motion-editorial-v3-runtime.md](references/motion-editorial-v3-runtime.md).
 Schema 15 keeps this route disabled for existing projects. ME-AMEND-01 separates
@@ -551,6 +553,8 @@ duration, and carry a ten-category `visual-vocabulary-audit.json`. Every categor
 must be selected with event evidence or rejected with a content-specific reason.
 
 ## Gate a sample before a full render
+
+Review the exported sequence, not just individual effects: compare planned and observed section treatments using the [section direction acceptance criteria](references/section-direction.md#验收看连续段落而不只看漂亮单帧). A sample proves only its own windows; repeat the editorial review across the actual full cut before delivery.
 
 For product introductions and targeted revisions to spatial or physical transitions, also apply [product motion and audio acceptance](references/product-motion-acceptance.md) to the affected shots. It supplements the active route’s sample and approval gates; it does not change their duration or turn a specific effect into a default.
 

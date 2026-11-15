@@ -136,6 +136,8 @@ tests and deterministic browser seeks do not replace real-media/user acceptance.
 
 ## Visuals
 
+Apply the [whole-film section review](section-direction.md) to edits and generated films: compare the planned viewer task with the picture actually shown, including adjacent sections at normal speed. Record misses at their output times in the editorial review; neither motion-family counts nor passing individual shot checks establish that the sequence works.
+
 - Give every overlay a content purpose.
 - Vary motion appropriately.
 - Match confirmed IP anchors.
