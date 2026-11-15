@@ -54,7 +54,7 @@ Profile or authorizes publishing. Do not enable the feature silently for old pro
 
 ## Start with one guided intake
 
-If the request is to **create a software product introduction without a source recording**, do not ask for a nonexistent MP4 or initialize a preservation project. Use the opt-in [real-interface product demo pilot](references/software-product-demo-pilot.md) to turn one authorized local demo task into a claim/step/result scenario, verify actual UI states, and produce a short silent proof video with editable descriptions. This is an isolated preparation tool, not a new Director stage or a full launch-film renderer. Existing demo recordings continue through the normal path below. A description alone supports a script/shot list, not proof of a working product.
+For a software product introduction without a recording, do not ask for a nonexistent MP4. The opt-in [real-interface pilot](references/software-product-demo-pilot.md) captures an authorized task and verifies its visible result. Its silent output is an **operation proof**, not a narrated promo. For a creative product sample, reuse that proof or authorized footage and follow [product motion and audio acceptance](references/product-motion-acceptance.md) with HyperFrames. Neither route adds a Director stage or authorizes a full render. A description alone supports a script/shot list, not proof of a working product. Existing recordings still go through the intake below.
 
 For the approved, opt-in camera-first A/B direction, read
 [motion-editorial-v3-runtime.md](references/motion-editorial-v3-runtime.md).
@@ -549,6 +549,8 @@ duration, and carry a ten-category `visual-vocabulary-audit.json`. Every categor
 must be selected with event evidence or rejected with a content-specific reason.
 
 ## Gate a sample before a full render
+
+For product introductions and targeted revisions to spatial or physical transitions, also apply [product motion and audio acceptance](references/product-motion-acceptance.md) to the affected shots. It supplements the active route’s sample and approval gates; it does not change their duration or turn a specific effect into a default.
 
 Create a 60–90 second sample covering the highest-risk selected structures and
 representative quiet footage. Do not manufacture four events or structures when

@@ -2,6 +2,8 @@
 
 Complete a video only when applicable gates pass.
 
+For a product promo or a revision to a spatial/physical transition, use the [product motion and audio checklist](product-motion-acceptance.md) alongside the gates below. A silent operation proof, a playable creative preview, an encoded sample and human approval are distinct evidence.
+
 ## Opt-in editorial motion v3
 
 Apply [motion-editorial-v3-runtime.md](motion-editorial-v3-runtime.md) when enabled.
