@@ -372,7 +372,8 @@ Apply the [whole-film section review](section-direction.md) to edits and generat
 
 - Verify duration, dimensions, frame rate, video, and audio with FFprobe.
 - Complete a full FFmpeg decode.
-- Sample first, middle, and final segments.
+- Sample first, middle, and final segments. On the **exported file**, inspect the first and last displayed frames and their immediate neighbors in playback order. Compare them with the intended opening and ending: a stray matte, stale layer or clipped last result can survive a clean decode and midpoint checks. An intentional fade, black frame or hold is valid when it matches the plan; do not reject it on brightness alone.
+- When a sample was approved, map its timestamps onto the full edit and compare corresponding action, result and transition frames with the approved sample. Separately review the sections outside that window against the full preview or storyboard; sample approval is not evidence for those sections. Note the output times and observed differences in the existing editorial QA record. After a repair, recheck the affected boundaries on the actual deliverable, not just in the editor.
 - Report duration and content coverage.
 - Never claim completeness when unexplained content is missing.
 - Default to one universal final media file. Validate it separately for each
