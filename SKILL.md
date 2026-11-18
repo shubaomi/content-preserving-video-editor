@@ -60,6 +60,8 @@ For creative product promos (not silent operation proofs), resolve overview vers
 
 For **every creative edit or generation route**, including a promo without a source recording, apply the [whole-film and section direction](references/section-direction.md) after inspecting the available evidence and **before** creative capture, asset generation or shot design. Write the film outline first, then choose how each section serves its viewer question. For a local revision reuse the outline and revisit the affected sections and joins. Do not turn one approved treatment into a whole-film default.
 
+For interview/podcast edits or added dialogue in recorded material, use [interview context and speaker continuity](references/interview-context-and-voice.md) when choosing scope, writing an opening, and reviewing its return to the original conversation.
+
 For the approved, opt-in camera-first A/B direction, read
 [motion-editorial-v3-runtime.md](references/motion-editorial-v3-runtime.md).
 Schema 15 keeps this route disabled for existing projects. ME-AMEND-01 separates

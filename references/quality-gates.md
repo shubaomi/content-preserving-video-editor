@@ -2,6 +2,8 @@
 
 Complete a video only when applicable gates pass.
 
+For interviews or dialogue pickups, apply the [first-time listener and same-speaker checks](interview-context-and-voice.md#验收听哪几处) to the actual edit, including the next retained turn by that speaker. An opening that stops at the guest's answer cannot prove the host still sounds continuous later in the episode.
+
 For a product promo or a revision to a spatial/physical transition, use the [product motion and audio checklist](product-motion-acceptance.md) alongside the gates below. A silent operation proof, a playable creative preview, an encoded sample and human approval are distinct evidence.
 
 ## Opt-in editorial motion v3
