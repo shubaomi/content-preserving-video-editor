@@ -69,3 +69,5 @@ winner without publishing data. For Douyin and WeChat Channels, prefer a native
 title inside a center-safe region that survives list/grid crops.
 
 Store per-video covers under the video's `covers/` directory. Promote a reusable series cover to shared assets only after approval.
+
+For an **explicitly requested series**, keep recognition cues stable (such as the series name, byline or issue number), but choose a question and an authorized image that this episode actually answers. Track issue and chapter separately when they differ. At the smallest intended thumbnail size, inspect each delivered crop: can the viewer read the hook and see the action it refers to? Recompose rather than cutting that action off. An editorial question is not a character's quotation; do not format it as one unless the source supports it.

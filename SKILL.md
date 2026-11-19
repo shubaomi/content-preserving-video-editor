@@ -62,6 +62,8 @@ For **every creative edit or generation route**, including a promo without a sou
 
 For interview/podcast edits or added dialogue in recorded material, use [interview context and speaker continuity](references/interview-context-and-voice.md) when choosing scope, writing an opening, and reviewing its return to the original conversation.
 
+For a requested series cover, use the [cover variants guide](references/autonomous-delivery-and-cover.md#cover-variants) to check episode-specific copy and crops.
+
 For the approved, opt-in camera-first A/B direction, read
 [motion-editorial-v3-runtime.md](references/motion-editorial-v3-runtime.md).
 Schema 15 keeps this route disabled for existing projects. ME-AMEND-01 separates
