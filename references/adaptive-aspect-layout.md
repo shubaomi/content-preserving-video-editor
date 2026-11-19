@@ -27,8 +27,16 @@ Generate topic images, diagrams, intro/outro art, callouts, and HyperFrames comp
 
 Use face-, pointer-, and UI-aware safe zones from sampled frames. Captions normally occupy the lower safe band but move when they would cover a face, keyboard action, or critical control. Validate at the beginning, middle, and end of every layout family.
 
+## Mobile playback review
+
+For a shared mobile master, design for the usable area common to the target players, not just the encoded 9:16 frame. Map the visible video edges separately from UI drawn over the picture. In Douyin inspect the top search bar, right action rail, lower description and collection entry; in WeChat Channels inspect playback controls, author notice, collection card, description and bottom actions. These are examples of variable UI, not fixed pixel masks. Owner and viewer views may differ even on the same device.
+
+Keep full caption glyphs, essential labels, faces in speaking shots and the action the audience must see inside the usable area. Full-bleed scenery can stay full-bleed. Move the caption band or split at a semantic boundary before shrinking type; recheck it does not now cover the action. Reposition or omit a repeated decorative byline before shrinking all artwork. Cover edits cannot repair playback occlusion.
+
+At sample review and before delivery, compare the actual encoded frame with controls visible at phone size: include the longest caption, an edge title and a key action. Use the same output time when comparing scenes. For each target log device/viewport, viewer or owner view, visible UI (including collection when relevant), affected element and result. If two device captures exist, inspect both; do not transfer one phone's pass to the other. A clipped word or obscured key action fails that view; a footer collision is a warning unless that text is required. Different timestamps can establish a fixed-label collision but not a missing scene element. Report simulated overlay checks separately from observed device checks; missing captures remain unverified, not an instruction to upload. Try a short layout-only proof before a full rerender; prefer one common layout unless conflicting verified constraints require variants.
+
 ## Platform covers
 
-Cover ratio is a publishing decision separate from video ratio. For Douyin and WeChat Channels, default to a 9:16 cover, including for horizontal videos. Keep the face and title in a center-safe region so platform list/grid crops remain useful. Generate a separate 16:9 cover only when the platform or user specifically needs it.
+Cover ratio is separate from video ratio. Use the actual upload slots over a 9:16 fallback: when Douyin asks for portrait 3:4 and landscape 4:3, recompose the same approved design for each; do not stretch a square cover. Check the title and subject/action at thumbnail size.
 
 For a personal creator, prefer an authorized real photo and a topic-specific cinematic poster. Preserve identity and verify the 9:16 thumbnail; do not stretch or center-crop a horizontal cover as a substitute.

@@ -8,7 +8,7 @@ In autonomous mode, produce one complete pre-publish package before asking for a
 - platform cover;
 - editable project and source plans;
 - QA and source-coverage report;
-- concise title, description, and platform-copy suggestions;
+- concise title, description, and platform-copy suggestions; in the WeChat Channels **short-title field only**, replace Chinese or ASCII commas with a space (or rephrase). A question mark need not be removed if the current field accepts it; do not strip punctuation from body or cover copy;
 - asset and model provenance.
 
 Do not pause for routine choices such as card side, animation family, SFX family, visual density within profile limits, or which approved photo best fits a cover. Make the choice, validate it, and continue.
@@ -64,8 +64,7 @@ Deliver one promoted cover. When enhanced editorial production is enabled,
 generate two internally reviewed candidates with different communication
 strategies and template families, then promote only the editorial recommendation.
 Do not deliver both as platform duplicates or claim an expected performance
-winner without publishing data. For Douyin and WeChat Channels, prefer a native
-9:16 cover regardless of whether the video is 16:9 or 9:16. Keep the face and
+winner without publishing data. Deliver the same selected design in the [requested upload-slot ratios](adaptive-aspect-layout.md#platform-covers); 9:16 is a fallback, not a substitute for a required horizontal slot. Keep the face and
 title inside a center-safe region that survives list/grid crops.
 
 Store per-video covers under the video's `covers/` directory. Promote a reusable series cover to shared assets only after approval.

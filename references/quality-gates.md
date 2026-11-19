@@ -163,6 +163,7 @@ Apply the [whole-film section review](section-direction.md) to edits and generat
 - Confirm source rotation and effective display ratio were detected before layout.
 - Confirm every generated visual matches the chosen canvas rather than relying on blind cropping.
 - Sample portrait, landscape, or square safe zones for face, pointer, UI, and caption collisions.
+- For mobile distribution apply the [mobile playback review](adaptive-aspect-layout.md#mobile-playback-review) to the actual sample and final export. Technical platform reports alone do not establish on-device readability.
 - Confirm every selected render beat has one primary explanatory visual; an
   evidenced non-render decision does not require an overlay.
 - Reject anchors that are only discourse/UI verbs, repeat an exact anchor more than twice, recur inside the configured cooldown, or reproduce a subtitle-length clause.
