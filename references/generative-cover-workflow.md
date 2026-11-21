@@ -21,6 +21,12 @@ keyword frequency author the headline or visual concept.
 
 ## Route selection
 
+For a creator-led experiment or learning diary, identify the creator's intended action and one evidenced result before choosing a prop. When a themed generation is requested, compose the creator doing that action and reacting to the result; neither a prop-only advertisement, a video still nor a fixed corner portrait substitutes for it. Series recognition can come from the byline, headline hierarchy and palette without repeating the pose. Treat example creators as composition inspiration only, never as identity inputs.
+
+Resolve identity from the current owner's private profile, not from the shared Skill or another project's default. Before sending references, match the person, exact approved images, provider, purpose and reuse scope to current unrevoked consent. A reusable grant covers matching future covers only; missing, revoked or out-of-scope consent blocks transmission. Keep images, identifying paths and personal grants out of shared source control. Permission to generate is not approval of likeness, publication, training or a different provider.
+
+At master review, compare the generated frontal/three-quarter geometry with the original photos, not a prior generated face: width-to-length, cheek volume, jaw taper and chin height. Correct reference drift rather than prescribing a thinner or rounder face. Check eyes, lips, gaze and hand contact for a believable response to the action. Use saturated color on scene and props without tinting skin. Check the exact approved headline including meaning-changing qualifiers, and inspect the title, face and action at thumbnail size. Present the master for the owner's likeness/expression decision before promoting it or producing the requested platform variants; do not treat technical QA as approval.
+
 | Route | Use when | Identity behavior |
 | --- | --- | --- |
 | `reference_regenerated` | A topic-specific cinematic or tutorial scene is needed | Regenerate from at least two identity references plus an expression reference; user likeness approval remains blocking |
