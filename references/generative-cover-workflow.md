@@ -40,6 +40,12 @@ use reference-guided regeneration.
 
 ## Inputs
 
+Before requesting artwork, write one source-grounded visual sentence: who does what, to which control or object, to reach which observable result? Lock the control's interaction (press, turn, drag, etc.) and every meaning-bearing target, unit and precision. An attractive substitute that implies a different mechanism fails. Put the visible action and its result on a readable sightline; distinguish a conceptual scene from real product evidence.
+
+Use the creator's chosen, authorized reference period for facial geometry. Hair, styling and expression may change with the episode when permitted; do not conflate these with identity or apply a universal beauty filter. Match expressive intensity to a specific reaction. Name where the eyes should land. If a rich scene is requested, give foreground, subject and background distinct jobs with motivated light and contrasting accents; neither a flat color field nor unrelated clutter satisfies that brief.
+
+Acceptance: inspect the **typeset** master at phone thumbnail size, first with the headline hidden. Can a reviewer point to the hand, the correct control, the gaze target and the intended readout when the story depends on them? Then check the exact copy, readable digits/unit, and that no glyph covers eyes, action or result. Repair failed invariants before asking for subjective likeness and taste approval. Do not hardcode a particular creator, prop, value, hairstyle or palette as the default.
+
 - one clear frontal face reference;
 - one three-quarter or side reference;
 - one body/proportion or natural-action reference;
