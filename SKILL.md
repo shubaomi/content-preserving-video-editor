@@ -62,7 +62,7 @@ For **every creative edit or generation route**, including a promo without a sou
 
 For interview/podcast edits or added dialogue in recorded material, use [interview context and speaker continuity](references/interview-context-and-voice.md) when choosing scope, writing an opening, and reviewing its return to the original conversation.
 
-For mobile delivery, plan the [playback safe area](references/adaptive-aspect-layout.md#mobile-playback-review) before positioning captions and verify it on the exported sample and final master. Cover crops are separate: use the [cover variants guide](references/autonomous-delivery-and-cover.md#cover-variants) for series copy and the actual upload slots.
+For mobile delivery, plan the [playback safe area](references/adaptive-aspect-layout.md#mobile-playback-review) before placing persistent headers, speaker panels, teaching graphics or captions. Check the exported sample and final master with feed navigation visible; for stacked interviews also review reading order at thumbnail and phone size. Cover crops are separate: use the [cover variants guide](references/autonomous-delivery-and-cover.md#cover-variants) for series copy and the actual upload slots.
 
 For the approved, opt-in camera-first A/B direction, read
 [motion-editorial-v3-runtime.md](references/motion-editorial-v3-runtime.md).
