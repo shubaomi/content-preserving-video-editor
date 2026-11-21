@@ -79,6 +79,10 @@ For software/tutorial topics, show the human doing a believable task and use res
 
 ## Identity and scene gate
 
+For an expression revision, edit the latest composition against an authorized original identity reference rather than starting again. Name the precise story beat, intended emotional intensity and visible cues (for example brow, lips, gaze or shoulder tension). Hold identity, action, props, readout, approved wording and layout steady. Compare the old and new typeset thumbnails at equal size: can the intended reaction be distinguished from its nearest misleading reading without a caption explaining it? If the reaction is too faint or reads as a different emotion, change the performance, not the person's features. Only the owner selects the release version; a one-episode choice is not a standing preference or publication authorization.
+
+After selection, use that same artwork across upload slots without regenerating the face. Inspect each recomposition at feed size. Before handoff reconcile platform copy and provenance with the selected cover, not a superseded draft; keep identity references, rejected candidates and private review evidence outside the upload folder.
+
 Review in this order:
 
 1. face shape, eyes, nose, mouth, jaw, skin tone, age, hairline;
