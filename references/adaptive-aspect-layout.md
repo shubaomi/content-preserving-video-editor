@@ -43,6 +43,6 @@ At sample review and before delivery, compare the actual encoded frame with cont
 
 ## Platform covers
 
-Cover ratio is separate from video ratio. Use the actual upload slots over a 9:16 fallback: when Douyin asks for portrait 3:4 and landscape 4:3, recompose the same approved design for each; do not stretch a square cover. Check the title and subject/action at thumbnail size.
+For a normal single-episode handoff targeting **WeChat Channels and Douyin**, deliver two cover files for three slots: one **3:4 portrait** shared by WeChat Channels and Douyin, and one **4:3 landscape** for Douyin. Point both portrait entries in the posting guide to the same file. Do not generate a spare 1:1 or 9:16 cover unless explicitly requested or required by an actual upload slot. This is a delivery default, not a platform restriction; honor different project or slot requirements. It does not change the video canvas or replace a collection cover.
 
-For a personal creator, prefer an authorized real photo and a topic-specific cinematic poster. Preserve identity and verify the 9:16 thumbnail; do not stretch or center-crop a horizontal cover as a substitute.
+Recompose the selected design for each delivered ratio; check the title and key action at thumbnail size. When using an authorized personal portrait, preserve identity in both layouts. Do not stretch one export to fill the other.

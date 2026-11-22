@@ -858,7 +858,7 @@ For a real-person cinematic cover, use multiple authorized photos as identity
 references to regenerate a topic-specific scene, pose, wardrobe, expression,
 lighting, and depth. Do not paste a cutout onto a generic gradient. Prefer
 natural eye contact, a credible slight smile, open posture, and visible energy.
-Default social covers to 9:16 even for a horizontal video.
+Choose cover exports by [publishing slot](references/adaptive-aspect-layout.md#platform-covers), independently of the video canvas. For the usual WeChat Channels + Douyin episode handoff, use the shared portrait and Douyin landscape pair described there.
 
 Let the enhanced cover planner choose among `reference_regenerated`,
 `authentic_frame_editorial`, and `real_person_ip_hybrid` from explicit semantic
