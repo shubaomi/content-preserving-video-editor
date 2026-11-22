@@ -89,6 +89,8 @@ current project, then ask once for only the missing items in one compact batch:
    automatic delivery already includes the standard editor-neutral repair kit;
    do not ask the user to opt in to SRT/ASS/caption-free-candidate delivery.
 
+For series publishing copy, read the project's series and platform conventions first. If the author has fixed an opening sentence, start the **body** with it verbatim (not the short title); nothing, including a hook, precedes it. Follow the agreed paragraph order with scenes and questions from this episode. Verify the saved copy against the exact opener and approved topics before handoff. Keep the literal wording in the project's instructions, not in the shared Skill; do not transfer it to another platform or series without direction.
+
 Default title, `video_id`, publishing copy, cover copy, content-type detection,
 platform target, and technical settings to automatic generation unless the
 user overrides them. Do not ask the user to classify the video as talking head,
