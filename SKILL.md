@@ -91,6 +91,8 @@ current project, then ask once for only the missing items in one compact batch:
 
 For series publishing copy, read the project's series and platform conventions first. If the author has fixed an opening sentence, start the **body** with it verbatim (not the short title); nothing, including a hook, precedes it. Follow the agreed paragraph order with scenes and questions from this episode. Verify the saved copy against the exact opener and approved topics before handoff. Keep the literal wording in the project's instructions, not in the shared Skill; do not transfer it to another platform or series without direction.
 
+For a Douyin series interview using this format, let the title carry this episode's concrete tension. Follow the series opener with one scene, the host's actual question and the author's perspective; a reader question should grow out of that scene. Close with the series byline, verified episode number and chapter title, then the agreed hashtags on their own line. Read title and opening together as one list preview: the second should add context, not repeat the hook. Do not substitute the WeChat Channels template.
+
 Default title, `video_id`, publishing copy, cover copy, content-type detection,
 platform target, and technical settings to automatic generation unless the
 user overrides them. Do not ask the user to classify the video as talking head,
