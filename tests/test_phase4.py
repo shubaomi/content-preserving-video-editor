@@ -66,12 +66,31 @@ class Phase4Tests(unittest.TestCase):
         ]}
         result = COPY.build("TabOut 浏览器插件", transcript, ["TabOut"])
         self.assertNotEqual(result["douyin"]["adaptation"], result["wechat_channels"]["adaptation"])
-        self.assertLessEqual(len(result["douyin"]["recommended"]["title"]), 32)
+        self.assertLessEqual(len(result["douyin"]["recommended"]["title"]), 20)
         for platform in (result["douyin"], result["wechat_channels"]):
             self.assertGreaterEqual(len(platform["alternatives"]), 2)
             self.assertEqual(platform["external_action_gate"], "Publishing/upload requires explicit user action.")
             self.assertTrue(all(claim["evidence"]["type"] == "transcript" for claim in platform["claims"]))
             self.assertIn("no performance", platform["claim_policy"].lower())
+
+    def test_douyin_title_budget_applies_only_to_the_title_field(self):
+        exact = "甲" * 14 + " AI11？"
+        self.assertEqual(len(exact), 20)
+        source = exact + "乙"
+        with self.assertRaisesRegex(ValueError, "20"):
+            COPY.build(source, {}, [])
+        for override in ("", source):
+            with self.assertRaises(ValueError):
+                COPY.build(source, {}, [], douyin_title=override)
+        result = COPY.build(source, {}, [source], douyin_title=exact)
+        self.assertEqual(result["douyin"]["recommended"]["title"], exact)
+        self.assertEqual(result["wechat_channels"]["recommended"]["title"], source)
+        self.assertIn(source, result["douyin"]["recommended"]["description"])
+        for item in result["douyin"]["alternatives"]:
+            self.assertLessEqual(len(item["title"]), 20)
+        result = COPY.build("短标题", {}, [source])
+        for item in result["douyin"]["alternatives"]:
+            self.assertLessEqual(len(item["title"]), 20)
 
     def test_publishing_copy_binds_to_promise_without_forcing_identical_wording(self):
         transcript = {"segments": [

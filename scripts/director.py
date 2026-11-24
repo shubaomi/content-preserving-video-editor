@@ -2771,10 +2771,13 @@ class Director:
                 artifacts.append(hook_path)
             publishing_path = self.root / "publish-metadata.json"
             title = str(self.project.get("content", {}).get("title") or self.project.get("video_id", "video"))
+            douyin_title = self.project.get("content", {}).get("douyin_title")
             publishing_command = [
                 sys.executable, str(Path(__file__).with_name("generate_publishing_copy.py")),
                 "--title", title, "--transcript", str(transcript), "--out", str(publishing_path),
             ]
+            if douyin_title is not None:
+                publishing_command.extend(["--douyin-title", str(douyin_title)])
             if promise_ledger_path.is_file():
                 publishing_command.extend(["--promise-ledger", str(promise_ledger_path)])
             publishing_result = self._run_capability(
@@ -2783,7 +2786,7 @@ class Director:
                 inputs=[transcript, self.semantic_brief_path, *(
                     [promise_ledger_path] if promise_ledger_path.is_file() else []
                 )], outputs=[publishing_path],
-                settings={"title": title},
+                settings={"title": title, "douyin_title": douyin_title, "title_policy": "douyin-20-v1"},
             )
             if publishing_result.get("status") in {"complete", "reused"}:
                 if promise_ledger_path.is_file():
